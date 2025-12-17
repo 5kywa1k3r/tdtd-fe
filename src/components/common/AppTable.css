@@ -1,0 +1,186 @@
+/* ================== WRAPPER & SCROLL ================== */
+
+.app-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  background-color: var(--app-table-bg);
+  border: 1px solid var(--app-table-border-color);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  border-radius: 12px;
+}
+
+.app-table-wrapper table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.app-table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+.app-table-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+  border-radius: 999px;
+}
+.app-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.9);
+}
+
+/* ================== HEADER ================== */
+
+.app-table-wrapper thead .MuiTableRow-root {
+  background: var(--app-table-header-bg);
+}
+
+.app-table-wrapper thead .MuiTableCell-root {
+  font-size: 1rem;                /* cho to lên như bệ hạ muốn */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--app-table-header-text);   /* màu từ wrapperStyle */
+  border-bottom: 1px solid var(--app-table-border-color);
+  padding-top: 6px;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+
+.app-table-wrapper .MuiTableSortLabel-root {
+  font-weight: inherit;
+}
+.app-table-wrapper .MuiTableSortLabel-root.Mui-active {
+  color: inherit;
+}
+.app-table-wrapper .MuiTableSortLabel-icon {
+  opacity: 0.9 !important;
+}
+
+/* ================== BODY & ROWS ================== */
+
+.app-table-wrapper tbody .MuiTableCell-root {
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--app-table-body-border);
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* so le màu cho dễ đọc */
+/* .app-table-wrapper tbody .MuiTableRow-root:nth-of-type(even) {
+  background-color: var(--app-table-row-alt-bg);
+} */
+
+.app-table-row {
+  transition:
+    background-color 120ms ease-out,
+    box-shadow 120ms ease-out,
+    transform 80ms ease-out;
+}
+
+/* Hover mạnh hơn, ăn theo primary */
+.app-table-row:hover {
+  background-color: var(--app-table-row-hover-bg);
+}
+
+.app-table-row--clickable {
+  cursor: pointer;
+}
+.app-table-row--clickable:hover {
+  box-shadow: inset 3px 0 0
+    var(--app-table-action-view-hover-color, #2563eb);
+}
+
+/* ================== SELECTION COLUMN ================== */
+
+.app-table-selection-cell {
+  width: 42px;
+  padding-left: 10px !important;
+  padding-right: 4px !important;
+}
+
+.app-table-selection-cell .MuiCheckbox-root.Mui-focusVisible {
+  outline: 2px solid rgba(59, 130, 246, 0.7);
+  outline-offset: 2px;
+}
+
+/* ================== ACTION ICONS ================== */
+
+.app-table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-table-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px;
+  margin-left: 2px;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    transform 80ms ease-out;
+  cursor: pointer;
+}
+.app-table-action-icon:active {
+  transform: scale(0.95);
+}
+
+.app-table-action-icon--view:hover {
+  color: var(--app-table-action-view-hover-color);
+  background-color: rgba(37, 99, 235, 0.06);
+}
+.app-table-action-icon--edit:hover {
+  color: var(--app-table-action-edit-hover-color);
+  background-color: rgba(217, 119, 6, 0.06);
+}
+.app-table-action-icon--delete:hover {
+  color: var(--app-table-action-delete-hover-color);
+  background-color: rgba(220, 38, 38, 0.06);
+}
+
+/* ================== PAGINATION ================== */
+
+.app-table-wrapper .MuiTablePagination-root {
+  border-top: 1px solid var(--app-table-border-color);
+  font-size: 0.8rem;
+}
+
+.app-table-wrapper .MuiTablePagination-selectLabel,
+.app-table-wrapper .MuiTablePagination-displayedRows {
+  font-size: 0.78rem;
+}
+
+/* ================== RESPONSIVE ================== */
+
+@media (max-width: 768px) {
+  .app-table-wrapper {
+    border-radius: 10px;
+  }
+
+  .app-table-wrapper thead .MuiTableCell-root {
+    font-size: 0.78rem;
+  }
+
+  .app-table-wrapper tbody .MuiTableCell-root {
+    font-size: 0.86rem;
+  }
+}
+
+/* ================== TRIM TEXT & ALIGN ================== */
+
+/* Nếu cần ellipsis cho text dài, có thể gán class này cho cell qua render */
+.app-table-cell--ellipsis {
+  max-width: 0; /* để table-layout auto, dùng flex-width */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Căn giữa chữ trong cell hẹp (VD: cột trạng thái thuần icon) */
+.app-table-cell--center {
+  text-align: center;
+}
