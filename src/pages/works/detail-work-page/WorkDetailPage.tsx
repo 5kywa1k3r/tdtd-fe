@@ -48,7 +48,7 @@ const WorkDetailPage = ({ type }: WorkDetailPageProps) => {
         <Stack spacing={1.5}>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             {title}
-          </Typography>
+          </Typography>``
           <Typography variant="body2" sx={{ opacity: 0.75 }}>
             Không tìm thấy dữ liệu (mock) với id: {id}
           </Typography>

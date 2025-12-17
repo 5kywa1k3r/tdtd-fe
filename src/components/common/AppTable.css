@@ -36,7 +36,7 @@
 }
 
 .app-table-wrapper thead .MuiTableCell-root {
-  font-size: 1rem;                /* cho to lên như bệ hạ muốn */
+  font-size: 1rem;               
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
