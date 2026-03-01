@@ -12,6 +12,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@fontsource/inter": "^5.2.8",
     "@fortune-sheet/core": "^1.0.4",
     "@fortune-sheet/react": "^1.0.4",
     "@mantine/core": "^8.3.9",
@@ -19,6 +20,7 @@
     "@mantine/hooks": "^8.3.9",
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
+    "@mui/x-tree-view": "^8.27.2",
     "@tabler/icons-react": "^3.35.0",
     "axios": "^1.13.2",
     "dayjs": "^1.11.19",
@@ -28,7 +30,9 @@
     "react-date-range": "^2.0.1",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6",
-    "recharts": "^3.5.0"
+    "reactflow": "^11.11.4",
+    "recharts": "^3.5.0",
+    "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -36,6 +40,7 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "baseline-browser-mapping": "^2.10.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

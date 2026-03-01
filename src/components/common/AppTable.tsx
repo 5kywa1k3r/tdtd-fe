@@ -15,16 +15,20 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 export type SortDirection = 'asc' | 'desc';
+export type SelectScope = 'page' | 'all';
 
+/**
+ * - field: key của row hoặc string custom (dùng cho sort/server sort)
+ * - render: custom cell
+ * - getSortValue: giá trị sort client (string/number/Date). Nên trả ISO hoặc Date nếu là ngày.
+ */
 export interface AppTableColumn<T> {
   field: keyof T | string;
   header: string;
   width?: string | number;
   align?: 'left' | 'right' | 'center';
   sortable?: boolean;
-  /** Nếu cần custom cell */
   render?: (row: T) => ReactNode;
-  /** Giá trị dùng để sort (nếu cần khác field hiển thị) */
   getSortValue?: (row: T) => string | number | Date;
 }
 
@@ -36,16 +40,23 @@ interface AppTableProps<T> {
   // selection
   selectable?: boolean;
   selectionMode?: 'single' | 'multiple';
-  selectedRowIds?: string[]; // nếu muốn control
+  /**
+   * page: tick header chỉ chọn trong trang hiện tại (pagedRows)
+   * all:  tick header chọn allRowIds (sortedRows) — chỉ thật sự hợp lý cho client pagination
+   */
+  selectScope?: SelectScope;
+
+  selectedRowIds?: string[]; // controlled
   onSelectedRowIdsChange?: (ids: string[]) => void;
 
   // sort
-  /** 'client' = sort trong AppTable, 'server' = chỉ phát sự kiện ra ngoài */
   sortMode?: 'client' | 'server';
-  /** client-mode: sort ban đầu */
+
+  // client-mode: sort ban đầu
   initialSortField?: string;
   initialSortDirection?: SortDirection;
-  /** server-mode: sort control từ bên ngoài */
+
+  // server-mode: controlled từ bên ngoài
   sortField?: string;
   sortDirection?: SortDirection;
   onSortChange?: (field: string, direction: SortDirection) => void;
@@ -53,12 +64,12 @@ interface AppTableProps<T> {
   // pagination
   enablePagination?: boolean;
 
-  /** client-mode: page/pageSize ban đầu */
+  // client-mode: page/pageSize ban đầu
   initialPage?: number;
   initialPageSize?: number;
   rowsPerPageOptions?: number[];
 
-  /** server-mode: control từ bên ngoài */
+  // server-mode: controlled
   paginationMode?: 'client' | 'server';
   page?: number;
   pageSize?: number;
@@ -70,44 +81,76 @@ interface AppTableProps<T> {
   onRowDoubleClick?: (row: T) => void;
 }
 
-export function AppTable<T>({
-  rows,
-  columns,
-  rowKey,
-  // selection
-  selectable = false,
-  selectionMode = 'multiple',
-  selectedRowIds,
-  onSelectedRowIdsChange,
-  // sort
-  sortMode = 'client',
-  initialSortField,
-  initialSortDirection = 'asc',
-  sortField,
-  sortDirection,
-  onSortChange,
-  // pagination
-  enablePagination = true,
-  initialPage = 0,
-  initialPageSize = 10,
-  rowsPerPageOptions = [10, 25, 50],
-  paginationMode = 'client',
-  page,
-  pageSize,
-  totalRows,
-  onPageChange,
-  onPageSizeChange,
-  // events
-  onRowDoubleClick,
-}: AppTableProps<T>) {
+function assertServerPaginationProps<T>(props: AppTableProps<T>) {
+  if (props.paginationMode !== 'server') return;
+  // server-mode nên truyền đủ để tránh UI tự “đoán”
+  if (props.page == null || props.pageSize == null || props.totalRows == null) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[AppTable] paginationMode="server" requires page, pageSize, totalRows to be provided.',
+    );
+  }
+}
+
+function assertServerSortProps<T>(props: AppTableProps<T>) {
+  if (props.sortMode !== 'server') return;
+  if (props.sortField == null || props.sortDirection == null) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[AppTable] sortMode="server" requires sortField and sortDirection to be provided.',
+    );
+  }
+}
+
+export function AppTable<T>(props: AppTableProps<T>) {
+  const {
+    rows,
+    columns,
+    rowKey,
+
+    // selection
+    selectable = false,
+    selectionMode = 'multiple',
+    selectScope = 'page',
+    selectedRowIds,
+    onSelectedRowIdsChange,
+
+    // sort
+    sortMode = 'client',
+    initialSortField,
+    initialSortDirection = 'asc',
+    sortField,
+    sortDirection,
+    onSortChange,
+
+    // pagination
+    enablePagination = true,
+    initialPage = 0,
+    initialPageSize = 10,
+    rowsPerPageOptions = [10, 25, 50],
+    paginationMode = 'client',
+    page,
+    pageSize,
+    totalRows,
+    onPageChange,
+    onPageSizeChange,
+
+    // events
+    onRowDoubleClick,
+  } = props;
+
+  assertServerPaginationProps(props);
+  assertServerSortProps(props);
+
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   // ================== SELECTION STATE ==================
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const effectiveSelectedIds = selectedRowIds ?? internalSelectedIds;
 
   const setSelected = (ids: string[]) => {
-    if (onSelectedRowIdsChange) onSelectedRowIdsChange(ids);
+    onSelectedRowIdsChange?.(ids);
     if (!selectedRowIds) setInternalSelectedIds(ids);
   };
 
@@ -121,7 +164,7 @@ export function AppTable<T>({
   const effectiveSortField = sortMode === 'server' ? sortField : internalSortField;
   const effectiveSortDirection: SortDirection =
     sortMode === 'server'
-      ? sortDirection ?? 'asc'
+      ? (sortDirection ?? 'asc')
       : internalSortDirection;
 
   const handleSortClick = (field: string) => {
@@ -129,21 +172,18 @@ export function AppTable<T>({
     const currentDirection = effectiveSortDirection ?? 'asc';
 
     let direction: SortDirection = 'asc';
-    if (currentField === field && currentDirection === 'asc') {
-      direction = 'desc';
-    }
+    if (currentField === field && currentDirection === 'asc') direction = 'desc';
 
     if (sortMode === 'client') {
       setInternalSortField(field);
       setInternalSortDirection(direction);
     }
 
-    onSortChange && onSortChange(field, direction);
+    onSortChange?.(field, direction);
   };
 
-  // ================== SORT (CLIENT / SERVER) ==================
+  // ================== SORTED ROWS (CLIENT) ==================
   const sortedRows = useMemo(() => {
-    // server-mode: không sort trong bảng
     if (sortMode === 'server' || !effectiveSortField) return rows;
 
     const col = columns.find((c) => String(c.field) === effectiveSortField);
@@ -151,7 +191,7 @@ export function AppTable<T>({
 
     const getVal = (row: T) => {
       if (col.getSortValue) return col.getSortValue(row);
-      return (row as any)[col.field];
+      return (row as any)[col.field as any];
     };
 
     const copied = [...rows];
@@ -163,10 +203,15 @@ export function AppTable<T>({
       if (va == null) return -1;
       if (vb == null) return 1;
 
-      if (va < vb) return effectiveSortDirection === 'asc' ? -1 : 1;
-      if (va > vb) return effectiveSortDirection === 'asc' ? 1 : -1;
+      // Chuẩn hoá Date về number để tránh so sánh lắt nhắt
+      const na = va instanceof Date ? va.getTime() : (va as any);
+      const nb = vb instanceof Date ? vb.getTime() : (vb as any);
+
+      if (na < nb) return effectiveSortDirection === 'asc' ? -1 : 1;
+      if (na > nb) return effectiveSortDirection === 'asc' ? 1 : -1;
       return 0;
     });
+
     return copied;
   }, [rows, columns, effectiveSortField, effectiveSortDirection, sortMode]);
 
@@ -176,16 +221,21 @@ export function AppTable<T>({
 
   const effectivePage =
     paginationMode === 'server'
-      ? page ?? 0
+      ? (page ?? 0)
       : internalPage;
 
+  /**
+   * PATCH: server-mode không còn lấy internalPageSize để “đoán”.
+   * - Nếu không truyền pageSize: fallback initialPageSize (ổn định, không phụ thuộc state runtime)
+   */
   const effectivePageSize =
     paginationMode === 'server'
-      ? pageSize ?? internalPageSize
+      ? (pageSize ?? initialPageSize)
       : internalPageSize;
 
   const pagedRows = useMemo(() => {
     if (!enablePagination) return sortedRows;
+
     // server-mode: rows đã là dữ liệu đúng trang
     if (paginationMode === 'server') return sortedRows;
 
@@ -195,51 +245,73 @@ export function AppTable<T>({
 
   const handleChangePage = (_: unknown, newPage: number) => {
     if (paginationMode === 'server') {
-      onPageChange && onPageChange(newPage);
-    } else {
-      setInternalPage(newPage);
-      onPageChange && onPageChange(newPage);
+      onPageChange?.(newPage);
+      return;
     }
+    setInternalPage(newPage);
+    onPageChange?.(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newSize = parseInt(event.target.value, 10);
 
     if (paginationMode === 'server') {
-      onPageSizeChange && onPageSizeChange(newSize);
-      onPageChange && onPageChange(0);
-    } else {
-      setInternalPageSize(newSize);
-      setInternalPage(0);
-      onPageSizeChange && onPageSizeChange(newSize);
+      onPageSizeChange?.(newSize);
+      onPageChange?.(0);
+      return;
     }
+
+    setInternalPageSize(newSize);
+    setInternalPage(0);
+    onPageSizeChange?.(newSize);
+    onPageChange?.(0);
   };
 
   // ================== SELECTION HELPERS ==================
-  const allRowIds = sortedRows.map((r) => rowKey(r));
+  const allRowIds = useMemo(() => sortedRows.map((r) => rowKey(r)), [sortedRows, rowKey]);
+  const pageRowIds = useMemo(() => pagedRows.map((r) => rowKey(r)), [pagedRows, rowKey]);
+
+  /**
+   * PATCH: default selectScope='page' để tránh “tick một phát chọn cả dataset”
+   * - Nếu selectScope='all': chỉ hợp lý khi client pagination + client rows full dataset
+   */
+  const scopeIds = selectScope === 'all' ? allRowIds : pageRowIds;
+
   const isAllSelected =
     selectable &&
     selectionMode === 'multiple' &&
-    allRowIds.length > 0 &&
-    allRowIds.every((id) => effectiveSelectedIds.includes(id));
+    scopeIds.length > 0 &&
+    scopeIds.every((id) => effectiveSelectedIds.includes(id));
+
+  const isIndeterminate =
+    selectable &&
+    selectionMode === 'multiple' &&
+    scopeIds.length > 0 &&
+    scopeIds.some((id) => effectiveSelectedIds.includes(id)) &&
+    !isAllSelected;
 
   const handleToggleAll = () => {
     if (!selectable || selectionMode !== 'multiple') return;
+
     if (isAllSelected) {
-      setSelected([]);
+      // bỏ chọn trong scope
+      const remaining = effectiveSelectedIds.filter((id) => !scopeIds.includes(id));
+      setSelected(remaining);
     } else {
-      setSelected(allRowIds);
+      // chọn thêm tất cả trong scope (không xoá cái đã chọn trước đó ngoài scope)
+      const merged = Array.from(new Set([...effectiveSelectedIds, ...scopeIds]));
+      setSelected(merged);
     }
   };
 
   const handleToggleOne = (id: string) => {
     if (!selectable) return;
+
     if (selectionMode === 'single') {
       setSelected([id]);
       return;
     }
+
     if (effectiveSelectedIds.includes(id)) {
       setSelected(effectiveSelectedIds.filter((x) => x !== id));
     } else {
@@ -248,31 +320,24 @@ export function AppTable<T>({
   };
 
   // ================== THEME → CSS VARIABLES ==================
-  const isDark = theme.palette.mode === 'dark';
-
   const wrapperStyle: React.CSSProperties = {
     // @ts-ignore – dùng CSS variables
     '--app-table-bg': theme.palette.background.paper,
 
-    // Viền ngoài của bảng
     '--app-table-border-color': isDark
       ? alpha(theme.palette.primary.light, 0.8)
       : alpha(theme.palette.primary.main, 0.8),
 
-    // Header: gradient theo primary (gần giống thanh trên cùng)
     '--app-table-header-bg': isDark
       ? alpha(theme.palette.primary.light, 1)
       : alpha(theme.palette.primary.main, 1),
 
-    // Chữ header: luôn là contrastText để rõ
     '--app-table-header-text': theme.palette.primary.contrastText,
 
-    // Viền body
     '--app-table-body-border': isDark
       ? alpha(theme.palette.primary.light, 0.5)
       : alpha(theme.palette.primary.main, 0.16),
 
-    // Nền so le + hover
     '--app-table-row-alt-bg': isDark
       ? alpha(theme.palette.primary.main, 0.24)
       : alpha(theme.palette.primary.main, 0.06),
@@ -281,7 +346,6 @@ export function AppTable<T>({
       ? alpha(theme.palette.primary.light, 0.35)
       : alpha(theme.palette.primary.main, 0.16),
 
-    // Màu action
     '--app-table-action-view-hover-color': theme.palette.primary.main,
     '--app-table-action-edit-hover-color': theme.palette.warning.main,
     '--app-table-action-delete-hover-color': theme.palette.error.main,
@@ -298,9 +362,7 @@ export function AppTable<T>({
                 {selectionMode === 'multiple' && (
                   <Checkbox
                     size="small"
-                    indeterminate={
-                      effectiveSelectedIds.length > 0 && !isAllSelected
-                    }
+                    indeterminate={isIndeterminate}
                     checked={isAllSelected}
                     onChange={handleToggleAll}
                   />
@@ -327,13 +389,13 @@ export function AppTable<T>({
                         '&, &.Mui-active': {
                           color: 'inherit',
                           opacity: 1,
-                          transform: 'scale(1)',          // bình thường
+                          transform: 'scale(1)',
                           transition: 'transform 120ms ease-out',
                         },
                         '&:hover': {
                           color: 'inherit',
                           opacity: 1,
-                          transform: 'scale(1.06)',       // ↑ tăng cỡ chữ 15%
+                          transform: 'scale(1.06)',
                         },
                         '& .MuiTableSortLabel-icon': {
                           color: 'inherit !important',
@@ -365,19 +427,13 @@ export function AppTable<T>({
                 key={id}
                 hover
                 selected={isSelected}
-                onDoubleClick={
-                  onRowDoubleClick ? () => onRowDoubleClick(row) : undefined
-                }
+                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
                 className={
-                  'app-table-row' +
-                  (onRowDoubleClick ? ' app-table-row--clickable' : '')
+                  'app-table-row' + (onRowDoubleClick ? ' app-table-row--clickable' : '')
                 }
               >
                 {selectable && (
-                  <TableCell
-                    padding="checkbox"
-                    className="app-table-selection-cell"
-                  >
+                  <TableCell padding="checkbox" className="app-table-selection-cell">
                     <Checkbox
                       size="small"
                       checked={isSelected}
@@ -388,11 +444,8 @@ export function AppTable<T>({
                 )}
 
                 {columns.map((col) => (
-                  <TableCell
-                    key={String(col.field)}
-                    align={col.align ?? 'left'}
-                  >
-                    {col.render ? col.render(row) : (row as any)[col.field]}
+                  <TableCell key={String(col.field)} align={col.align ?? 'left'}>
+                    {col.render ? col.render(row) : (row as any)[col.field as any]}
                   </TableCell>
                 ))}
               </TableRow>
@@ -404,7 +457,11 @@ export function AppTable<T>({
       {enablePagination && (
         <TablePagination
           component="div"
-          count={paginationMode === 'server' && totalRows != null ? totalRows : sortedRows.length}
+          count={
+            paginationMode === 'server'
+              ? (totalRows ?? 0)
+              : sortedRows.length
+          }
           page={effectivePage}
           rowsPerPage={effectivePageSize}
           onPageChange={handleChangePage}

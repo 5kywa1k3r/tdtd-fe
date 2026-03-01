@@ -2,6 +2,13 @@
 import { createTheme } from '@mui/material/styles';
 import '@fortune-sheet/react/dist/index.css';
 
+// ✅ OFFLINE FONT (Inter) - self-host via npm package
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/inter/800.css';
+
 declare module '@mui/material/styles' {
   interface Theme {
     customGradients: {
@@ -23,9 +30,12 @@ declare module '@mui/material/styles' {
 
 // 👉 Typography chung: chữ to, dễ đọc cho cả 3 theme
 const baseTypography = {
+  // ✅ đồng bộ font toàn hệ thống (tránh fallback gây “lỗi font”)
+  fontFamily: `'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`,
   fontSize: 15,
+
   body1: {
-    fontSize: '1rem', // ~16px
+    fontSize: '1rem',
     lineHeight: 1.65,
   },
   body2: {
@@ -34,20 +44,20 @@ const baseTypography = {
   },
   h6: {
     fontSize: '1.1rem',
-    fontWeight: 600,
+    fontWeight: 700, // ✅ tránh 900 để không fake bold
   },
   h5: {
     fontSize: '1.4rem',
-    fontWeight: 600,
+    fontWeight: 800, // ✅ header/title nhìn “đã” hơn, vẫn an toàn
   },
   subtitle1: {
     fontSize: '1rem',
-    fontWeight: 500,
+    fontWeight: 600,
   },
   button: {
     fontSize: '0.95rem',
     textTransform: 'none' as const,
-    fontWeight: 600,
+    fontWeight: 700,
   },
 };
 
@@ -55,6 +65,13 @@ const baseTypography = {
  * THEME 1 – NAVY CALM
  * =======================================================*/
 export const navyTheme = createTheme({
+  zIndex: {
+    appBar: 1200,
+    drawer: 1100,
+    modal: 2000,
+    snackbar: 2100,
+    tooltip: 2200,
+  },
   palette: {
     mode: 'light',
     primary: {
@@ -138,6 +155,13 @@ export const navyTheme = createTheme({
  * THEME 2 – BLUE-GRAY SOFT
  * =======================================================*/
 export const blueGrayTheme = createTheme({
+  zIndex: {
+    appBar: 1200,
+    drawer: 1100,
+    modal: 2000,
+    snackbar: 2100,
+    tooltip: 2200,
+  },
   palette: {
     mode: 'light',
     primary: {
@@ -221,6 +245,13 @@ export const blueGrayTheme = createTheme({
  * THEME 3 – FOREST SLATE (green-ish dịu mắt)
  * =======================================================*/
 export const forestSlateTheme = createTheme({
+  zIndex: {
+    appBar: 1200,
+    drawer: 1100,
+    modal: 2000,
+    snackbar: 2100,
+    tooltip: 2200,
+  },
   palette: {
     mode: 'light',
     primary: {

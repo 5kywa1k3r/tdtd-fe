@@ -71,7 +71,7 @@ export const DynamicSchemaDesigner: React.FC<{ workId: string; workRange: { from
     d.fields[fieldKey] = next;
     const sec = d.sections.find(s => s.id === sectionId);
     if (sec) sec.fieldOrder.push(fieldKey);
-    // draft đang nằm trong store: bệ hạ map action setDraft/upsert nếu muốn strict immutable
+    // draft đang nằm trong store: map action setDraft/upsert nếu muốn strict immutable
     // demo: force rerender bằng trick
     setConfirm(null);
   };
@@ -101,7 +101,7 @@ export const DynamicSchemaDesigner: React.FC<{ workId: string; workRange: { from
 
   const doMigrate = async () => {
     const from = activeVersion?.id;
-    const to = (versions.at(-1) as SchemaVersion | undefined)?.id; // publish xong bệ hạ gọi migrate ngay sẽ đúng
+    const to = (versions.at(-1) as SchemaVersion | undefined)?.id; // publish xong gọi migrate ngay sẽ đúng
     if (!from || !to || from === to) { setConfirm(null); return; }
 
     const compatibleFieldKeys = Object.values(d.fields)

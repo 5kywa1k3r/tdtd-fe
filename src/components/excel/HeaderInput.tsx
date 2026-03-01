@@ -11,20 +11,34 @@ import {
 } from "@mui/material";
 
 import type { HeaderKind, HeaderSpec } from "../../features/excelDesigner/types";
+import { LabelMultiSelect } from "../label/labelMultiSelect";
+import { useState } from "react";
+import type { LabelOption } from "../label/labelTypes";
+import { MOCK_LABELS } from "../../data/labelMock";
 
 const clamp200 = (v: any) => Math.max(1, Math.min(200, Math.floor(Number(v || 1))));
 
 export function HeaderInput(props: {
   value: HeaderSpec;
   onChange: (v: HeaderSpec) => void;
+  disabled?: boolean;
 }) {
-  const { value, onChange } = props;
+  const { value, onChange, disabled = false } = props;
 
   const setKind = (kind: HeaderKind) => {
     if (kind === "TOP") onChange({ kind: "TOP", topRows: 3, topCols: 6, dataRows: 10 });
     if (kind === "LEFT") onChange({ kind: "LEFT", leftRows: 10, leftCols: 2, dataCols: 6 });
     if (kind === "MATRIX") onChange({ kind: "MATRIX", topRows: 3, topCols: 4, leftRows: 5, leftCols: 2 });
   };
+
+  const [tableCode, setTableCode] = useState('');
+  const [tableName, setTableName] = useState('');
+  // danh sách nhãn (mock / store / api sau này)
+  const [labels, setLabels] = useState<LabelOption[]>(MOCK_LABELS);
+
+  // các nhãn đang được chọn
+  const [selectedLabels, setSelectedLabels] = useState<LabelOption[]>([]);
+  
 
   return (
     <Card variant="outlined">
@@ -36,12 +50,57 @@ export function HeaderInput(props: {
             alignItems="stretch"
             sx={{ width: "100%" }}
           >
-            <FormControl size="small" sx={{ flex: 2, minWidth: 260 }}>
+              {/* Mã bảng */}
+              <TextField
+                label="Mã bảng"
+                size="small"
+                value={tableCode}
+                onChange={(e) => setTableCode(e.target.value)}
+                sx={{ flex: 1, minWidth: 180 }}
+                disabled={disabled}
+              />
+              {/* Tên bảng */}
+              <TextField
+                label="Tên bảng"
+                size="small"
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                sx={{ flex: 1, minWidth: 220 }}
+                disabled={disabled}
+              />
+              {/* Chọn nhãn */}
+              <LabelMultiSelect
+                options={labels}
+                value={selectedLabels}
+                onChange={setSelectedLabels}
+                onLabelSaved={(saved) => {
+                  // parent vẫn chịu trách nhiệm add/update options
+                  setLabels(prev => {
+                    const idx = prev.findIndex(x => x.id === saved.id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = saved;
+                      return next;
+                    }
+                    return [...prev, saved];
+                  });
+                }}
+                sx={{ flex: 1, minWidth: 200 }}
+              />
+            </Stack>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={2}
+            alignItems="stretch"
+            sx={{ width: "100%" }}
+          >
+            <FormControl size="small" sx={{ flex: 1.1, minWidth: 200 }}>
               <InputLabel>Loại</InputLabel>
               <Select
                 label="Loại"
                 value={value.kind}
                 onChange={(e) => setKind(e.target.value as HeaderKind)}
+                disabled={disabled}
               >
                 <MenuItem value="TOP">Bảng ngang</MenuItem>
                 <MenuItem value="LEFT">Bảng dọc</MenuItem>
@@ -59,6 +118,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.topRows}
                   onChange={(e) => onChange({ ...value, topRows: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
                 <TextField
                   fullWidth
@@ -68,6 +128,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.topCols}
                   onChange={(e) => onChange({ ...value, topCols: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
                 <TextField
                   fullWidth
@@ -77,6 +138,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.dataRows}
                   onChange={(e) => onChange({ ...value, dataRows: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
               </>
             )}
@@ -100,6 +162,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.leftCols}
                   onChange={(e) => onChange({ ...value, leftCols: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
                 <TextField
                   fullWidth
@@ -109,6 +172,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.dataCols}
                   onChange={(e) => onChange({ ...value, dataCols: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
               </>
             )}
@@ -123,6 +187,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.topRows}
                   onChange={(e) => onChange({ ...value, topRows: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
                 <TextField
                   fullWidth
@@ -132,6 +197,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.topCols}
                   onChange={(e) => onChange({ ...value, topCols: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
                 <TextField
                   fullWidth
@@ -141,6 +207,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.leftRows}
                   onChange={(e) => onChange({ ...value, leftRows: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
                 <TextField
                   fullWidth
@@ -150,6 +217,7 @@ export function HeaderInput(props: {
                   type="number"
                   value={value.leftCols}
                   onChange={(e) => onChange({ ...value, leftCols: clamp200(e.target.value) })}
+                  disabled={disabled}
                 />
               </>
             )}

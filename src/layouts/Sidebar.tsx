@@ -14,6 +14,8 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import FlagIcon from '@mui/icons-material/Flag';
 import { useLocation, useNavigate } from 'react-router-dom';
 import TableChartIcon from '@mui/icons-material/TableChart';
+//TEST
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
 export const drawerWidth = 260;
 
@@ -44,6 +46,18 @@ export const Sidebar = () => {
 
       <Divider />
 
+      {/* TEST */}
+      <ListItemButton
+        selected={isActive('/uploads-test')}
+        onClick={() => navigate('/uploads-test')}
+      >
+        <ListItemIcon>
+          <CloudUploadIcon />
+        </ListItemIcon>
+        <ListItemText primary="Upload test" />
+      </ListItemButton>
+      {/* TEST */}
+      
       <List
         subheader={
           <ListSubheader component="div">

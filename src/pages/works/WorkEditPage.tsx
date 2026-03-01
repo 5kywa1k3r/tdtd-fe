@@ -6,7 +6,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { WorkForm } from '../../components/works/WorkForm';
 import type { WorkDetailData } from '../../components/works/WorkForm';
 
-// ✅ mock tách file riêng của bệ hạ (map theo id)
+//  mock tách file riêng (map theo id)
 import { MOCK_WORK_DETAIL_MAP } from '../../data/mockWorkDetail';
 
 type WorkType = 'TASK' | 'INDICATOR';

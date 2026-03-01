@@ -133,7 +133,7 @@ export async function api_listSupplementWindows(workId: string) {
 export async function api_aggregate(selection: AggregationSelection) {
   await sleep(250);
   const values = db.values.get(selection.workId) ?? [];
-  // Demo: chỉ trả về list raw theo versionIds và fieldKeys (engine thật bệ hạ gắn sau)
+  // Demo: chỉ trả về list raw theo versionIds và fieldKeys (engine thật gắn sau)
   return values.filter(v =>
     selection.versionIds.includes(v.schemaVersionId) &&
     selection.fieldKeys.includes(v.fieldKey)

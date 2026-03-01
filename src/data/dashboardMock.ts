@@ -9,7 +9,7 @@ import {
 } from '../constants/status';
 import type { StatusPieItem } from '../components/charts';
 
-// ✅ import cây đơn vị
+//  import cây đơn vị
 import type { UnitId, UnitNode } from '../data/unitMock';
 import { UNIT_TREE } from '../data/unitMock';
 
@@ -18,7 +18,7 @@ export type MissionType = 'MISSION' | 'TARGET';
 export interface MissionItem {
   id: string;
   title: string;
-  unitId: UnitId;          // ✅ thay vì unit: string
+  unitId: UnitId;          //  thay vì unit: string
   category: string;
   type: MissionType;       // Nhiệm vụ / Chỉ tiêu
   startDate: string;
@@ -37,12 +37,12 @@ export interface DashboardMockData {
   missionSummary: MissionSummary;
   missionStatusPie: StatusPieItem[];
   missions: MissionItem[];
-  units: UnitNode[];       // ✅ trả về cây đơn vị
+  units: UnitNode[];       //  trả về cây đơn vị
 }
 
 const now = dayjs();
 
-// ✅ sửa toàn bộ mock: unit → unitId = UnitId
+//  sửa toàn bộ mock: unit → unitId = UnitId
 export const MOCK_MISSIONS: MissionItem[] = [
   {
     id: 'M1',
@@ -218,7 +218,7 @@ export async function getDashboardMockData(
 
   const missionStatusPie = buildMissionStatusPie(missionsInRange);
 
-  // ✅ trả luôn cây UNIT_TREE, dropdown tự xử lý "Tất cả đơn vị"
+  //  trả luôn cây UNIT_TREE, dropdown tự xử lý "Tất cả đơn vị"
   const units: UnitNode[] = UNIT_TREE;
 
   return {

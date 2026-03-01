@@ -321,7 +321,7 @@ export const WorkForm: React.FC<WorkFormProps> = ({
         <CardContent>
           <Stack spacing={1.5}>
             <Field
-              label="Căn cứ giao {titleLower}"
+              label={`Căn cứ giao ${titleLower}`}
               value={basisText}
               onChange={(e) => setBasisText(e.target.value)}
               fullWidth

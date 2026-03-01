@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router-dom';
 // Redux
 import { Provider } from 'react-redux';
 import { store } from './stores/store';
+import { hydrate } from './stores/authSlice';
 
 // MUI Theme
 import { CssBaseline } from '@mui/material';
@@ -22,6 +23,8 @@ import 'dayjs/locale/vi';
 
 // App root
 import App from './App';
+
+store.dispatch(hydrate());
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

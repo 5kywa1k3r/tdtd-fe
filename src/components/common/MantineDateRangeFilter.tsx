@@ -96,7 +96,7 @@ export const MantineDateRangeFilter: React.FC<MantineDateRangeFilterProps> = ({
     return '';
   }, [fromDayjs, toDayjs]);
 
-  // ✅ Chỉ dùng hàm này khi user thao tác (trong onChange của DatePicker)
+  //  Chỉ dùng hàm này khi user thao tác (trong onChange của DatePicker)
   const emitChange = useCallback(
     (fromStrVal: string | null, toStrVal: string | null) => {
       if (!onChange) return;
@@ -177,7 +177,7 @@ export const MantineDateRangeFilter: React.FC<MantineDateRangeFilterProps> = ({
                   emitChange(fromStr, nextToStr);
                 }}
                 locale="vi"
-                // ✅ Xám toàn bộ ngày < from (dùng cùng kiểu string)
+                //  Xám toàn bộ ngày < from (dùng cùng kiểu string)
                 minDate={fromStr ?? undefined}
               />
             </Card>

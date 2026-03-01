@@ -31,10 +31,15 @@ const indeterminateIcon = <IndeterminateCheckBoxIcon fontSize="small" />;
 
 type SpecialId = '__ALL__';
 
+export type UnitSelectMode = 'single' | 'multiple';
+
 export interface UnitMultiSelectProps {
   options: UnitNode[]; // cây UNIT_TREE
   value: UnitId[]; // list leaf UnitId được chọn
   onChange: (value: UnitId[]) => void;
+
+  /** PATCH: single = chỉ chọn 1 leaf; multiple = chọn nhiều (subtree toggle như cũ) */
+  mode?: UnitSelectMode;
 }
 
 interface FlatInfo {
@@ -65,9 +70,7 @@ function buildFlatInfo(options: UnitNode[]): {
       isLeaf: childrenIds.length === 0,
     };
     flatMap.set(node.id, info);
-    if (parentId === undefined) {
-      rootIds.push(node.id);
-    }
+    if (parentId === undefined) rootIds.push(node.id);
     node.children?.forEach((child) => walk(child, node.id, depth + 1));
   };
 
@@ -81,15 +84,12 @@ function buildDescendantMap(nodes: UnitNode[]): Map<UnitId, UnitId[]> {
   const walk = (node: UnitNode): UnitId[] => {
     if (node.children && node.children.length > 0) {
       const leaves: UnitId[] = [];
-      node.children.forEach((c) => {
-        leaves.push(...walk(c));
-      });
+      node.children.forEach((c) => leaves.push(...walk(c)));
       map.set(node.id, leaves);
       return leaves;
-    } else {
-      map.set(node.id, [node.id]);
-      return [node.id];
     }
+    map.set(node.id, [node.id]);
+    return [node.id];
   };
 
   nodes.forEach(walk);
@@ -99,16 +99,12 @@ function buildDescendantMap(nodes: UnitNode[]): Map<UnitId, UnitId[]> {
 // ===== helper: dynamic summary using width (≈ 3/4 textbox) =====
 function buildDynamicSummary(names: string[], maxWidth: number): string {
   if (names.length === 0) return '';
-
-  if (typeof window === 'undefined') {
-    return names.join(', ');
-  }
+  if (typeof window === 'undefined') return names.join(', ');
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) return names.join(', ');
 
-  // gần đúng font mặc định MUI
   ctx.font =
     '14px Roboto, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
@@ -120,10 +116,7 @@ function buildDynamicSummary(names: string[], maxWidth: number): string {
     const width = ctx.measureText(part).width;
 
     if (used + width > maxWidth) {
-      if (!result) {
-        // đảm bảo luôn có ít nhất 1 mục
-        result = part;
-      }
+      if (!result) result = part;
       result += ', ...';
       return result;
     }
@@ -139,6 +132,7 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
   options,
   value,
   onChange,
+  mode = 'multiple', // PATCH
 }) => {
   const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
@@ -153,14 +147,8 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
   const inputBoxRef = React.useRef<HTMLDivElement | null>(null);
 
   // ===== build flat info & descendant map =====
-  const { flatMap, rootIds } = React.useMemo(
-    () => buildFlatInfo(options),
-    [options]
-  );
-  const descendantsMap = React.useMemo(
-    () => buildDescendantMap(options),
-    [options]
-  );
+  const { flatMap, rootIds } = React.useMemo(() => buildFlatInfo(options), [options]);
+  const descendantsMap = React.useMemo(() => buildDescendantMap(options), [options]);
 
   // tất cả leaf (đơn vị cuối)
   const allLeaves = React.useMemo(
@@ -168,29 +156,36 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
       Array.from(flatMap.values())
         .filter((n) => n.isLeaf)
         .map((n) => n.id),
-    [flatMap]
+    [flatMap],
   );
   const totalLeafCount = allLeaves.length;
 
-  const selectedSet = React.useMemo(
-    () => new Set<UnitId>(value),
-    [value]
-  );
+  // PATCH: single chỉ cho 0..1 phần tử
+  const effectiveValue = React.useMemo<UnitId[]>(() => {
+    if (mode !== 'single') return value ?? [];
+    const v = value ?? [];
+    return v.length > 0 ? [v[0]] : [];
+  }, [value, mode]);
 
-  const handleOpen = (e: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(e.currentTarget);
-  };
+  const selectedSet = React.useMemo(() => new Set<UnitId>(effectiveValue), [effectiveValue]);
 
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  const handleOpen = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
+  const handleClose = () => setAnchorEl(null);
 
   // ===== toggle logic =====
   const getCheckState = (id: UnitId | SpecialId) => {
+    // PATCH: single mode -> không có ALL, và chỉ leaf mới có checked
+    if (mode === 'single') {
+      if (id === '__ALL__') return 'unchecked';
+      const info = flatMap.get(id as UnitId);
+      if (!info) return 'unchecked';
+      if (!info.isLeaf) return 'unchecked';
+      return selectedSet.has(info.id) ? 'checked' : 'unchecked';
+    }
+
+    // multiple (giữ nguyên)
     if (id === '__ALL__') {
-      const selectedCount = allLeaves.filter((d) =>
-        selectedSet.has(d)
-      ).length;
+      const selectedCount = allLeaves.filter((d) => selectedSet.has(d)).length;
       if (selectedCount === 0) return 'unchecked';
       if (selectedCount === allLeaves.length) return 'checked';
       return 'indeterminate';
@@ -205,15 +200,34 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
   };
 
   const applyToggle = (id: UnitId | SpecialId) => {
-    const current = new Set<UnitId>(value);
+    // PATCH: single mode
+    if (mode === 'single') {
+      if (id === '__ALL__') return; // không cho phép
+
+      const info = flatMap.get(id as UnitId);
+      if (!info) return;
+
+      // chỉ leaf mới được chọn
+      if (!info.isLeaf) return;
+
+      const current = new Set<UnitId>(effectiveValue);
+      const leafId = info.id;
+
+      if (current.has(leafId)) {
+        onChange([]); // bấm lại để bỏ chọn
+      } else {
+        onChange([leafId]); // luôn chỉ 1
+      }
+      return;
+    }
+
+    // multiple (giữ nguyên)
+    const current = new Set<UnitId>(effectiveValue);
 
     if (id === '__ALL__') {
       const allSelected = allLeaves.every((d) => current.has(d));
-      if (allSelected) {
-        allLeaves.forEach((d) => current.delete(d));
-      } else {
-        allLeaves.forEach((d) => current.add(d));
-      }
+      if (allSelected) allLeaves.forEach((d) => current.delete(d));
+      else allLeaves.forEach((d) => current.add(d));
       onChange(Array.from(current));
       return;
     }
@@ -221,43 +235,43 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
     const desc = descendantsMap.get(id as UnitId) ?? [id as UnitId];
     const allSelected = desc.every((d) => current.has(d));
 
-    if (allSelected) {
-      desc.forEach((d) => current.delete(d));
-    } else {
-      desc.forEach((d) => current.add(d));
-    }
+    if (allSelected) desc.forEach((d) => current.delete(d));
+    else desc.forEach((d) => current.add(d));
 
     onChange(Array.from(current));
   };
 
   // ===== compressed names cho summary (đa cấp) =====
   const compressedNames = React.useMemo(() => {
-    if (!value || value.length === 0) return [];
+    if (!effectiveValue || effectiveValue.length === 0) return [];
 
-    const leafSet = new Set<UnitId>(value);
+    // PATCH: single -> chỉ hiện 1 tên (leaf)
+    if (mode === 'single') {
+      const id = effectiveValue[0];
+      const info = flatMap.get(id);
+      return info ? [info.name] : [];
+    }
+
+    const leafSet = new Set<UnitId>(effectiveValue);
     const covered = new Set<UnitId>();
     const names: string[] = [];
 
-    // node theo depth tăng dần để ưu tiên node cha
-    const nodesInDepthOrder = Array.from(flatMap.values()).sort(
-      (a, b) => a.depth - b.depth
-    );
+    const nodesInDepthOrder = Array.from(flatMap.values()).sort((a, b) => a.depth - b.depth);
 
     nodesInDepthOrder.forEach((info) => {
       const desc = descendantsMap.get(info.id);
       if (!desc || desc.length === 0) return;
 
-      const allSelected = desc.every((id) => leafSet.has(id));
+      const allSelected = desc.every((x) => leafSet.has(x));
       if (!allSelected) return;
 
-      const hasUncovered = desc.some((id) => !covered.has(id));
+      const hasUncovered = desc.some((x) => !covered.has(x));
       if (!hasUncovered) return;
 
       names.push(info.name);
-      desc.forEach((id) => covered.add(id));
+      desc.forEach((x) => covered.add(x));
     });
 
-    // leaf lẻ còn lại
     leafSet.forEach((id) => {
       if (!covered.has(id)) {
         const info = flatMap.get(id);
@@ -266,41 +280,34 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
     });
 
     return names;
-  }, [value, flatMap, descendantsMap]);
+  }, [effectiveValue, flatMap, descendantsMap, mode]);
 
   // ===== summary label theo width (3/4 textbox) =====
   const summaryLabel = React.useMemo(() => {
-    // không chọn gì / chọn hết → ô trống
-    if (!value || value.length === 0 || value.length === totalLeafCount) {
-      return '';
-    }
+    if (!effectiveValue || effectiveValue.length === 0) return '';
+
+    // multiple: chọn hết -> ô trống
+    if (mode !== 'single' && effectiveValue.length === totalLeafCount) return '';
 
     const names = compressedNames;
     if (!names || names.length === 0) return '';
 
-    // 1–2 tên: hiện full, không đo width
-    if (names.length <= 2) {
-      return names.join(', ');
-    }
+    if (names.length <= 2) return names.join(', ');
 
-    // >=3 tên: đo theo ~3/4 chiều rộng textbox
-    const inputWidth =
-      inputBoxRef.current?.getBoundingClientRect().width ?? 240;
-
-    // 3/4 độ rộng textbox, trừ bớt cho padding + icon
+    const inputWidth = inputBoxRef.current?.getBoundingClientRect().width ?? 240;
     const maxWidth = Math.max(80, (inputWidth * 3) / 4 - 40);
 
     return buildDynamicSummary(names, maxWidth);
-  }, [value, totalLeafCount, compressedNames]);
-
+  }, [effectiveValue, totalLeafCount, compressedNames, mode]);
 
   const tooltipLabel = React.useMemo(() => {
-    if (!value || value.length === 0 || value.length === totalLeafCount) {
-      return 'Tất cả đơn vị';
-    }
-    if (compressedNames.length === 0) return 'Tất cả đơn vị';
+    if (!effectiveValue || effectiveValue.length === 0) return 'Chưa chọn đơn vị';
+
+    if (mode !== 'single' && effectiveValue.length === totalLeafCount) return 'Tất cả đơn vị';
+
+    if (compressedNames.length === 0) return 'Chưa chọn đơn vị';
     return compressedNames.join(', ');
-  }, [value, totalLeafCount, compressedNames]);
+  }, [effectiveValue, totalLeafCount, compressedNames, mode]);
 
   // ===== build các cột (mỗi cấp 1 cột) =====
   interface Column {
@@ -312,14 +319,13 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
   const columns: Column[] = React.useMemo(() => {
     const cols: Column[] = [];
 
-    // cột 0: root + "Tất cả đơn vị"
+    // PATCH: single mode -> bỏ "__ALL__"
     cols.push({
       level: 0,
       parentId: null,
-      nodeIds: ['__ALL__', ...rootIds],
+      nodeIds: mode === 'single' ? [...rootIds] : (['__ALL__', ...rootIds] as any),
     });
 
-    // các cột sâu hơn dựa theo activePath
     activePath.forEach((nodeId, idx) => {
       const info = flatMap.get(nodeId);
       if (!info) return;
@@ -332,7 +338,7 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
     });
 
     return cols;
-  }, [rootIds, flatMap, activePath]);
+  }, [rootIds, flatMap, activePath, mode]);
 
   // ===== search theo level =====
   const handleSearchChange = (level: number, text: string) => {
@@ -344,24 +350,19 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
   };
 
   const handleOpenChildColumn = (level: number, nodeId: UnitId) => {
-    // level = index của CỘT hiện tại (0 = root, 1 = con của root, ...)
     setActivePath((prev) => {
-      const next = prev.slice(0, level); // giữ các cấp trước cột này
-      next[level] = nodeId;              // set node được “mở” ở cấp tiếp theo
+      const next = prev.slice(0, level);
+      next[level] = nodeId;
       return next;
     });
   };
 
   const handleCloseFromLevel = (level: number) => {
-    // level = chỉ số cột (1 = cột con đầu tiên của root)
-    if (level <= 0) {
-      setActivePath([]);
-    } else {
-      setActivePath((prev) => prev.slice(0, level - 1));
-    }
+    if (level <= 0) setActivePath([]);
+    else setActivePath((prev) => prev.slice(0, level - 1));
   };
 
-  // ===== render =====
+  // ===== THEME → CSS VARIABLES =====
   return (
     <>
       <Tooltip title={tooltipLabel} arrow>
@@ -370,8 +371,8 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
             size="small"
             fullWidth
             label="Đơn vị"
-            placeholder=""          // không placeholder xám
-            value={summaryLabel}    // hiển thị trực tiếp ở input
+            placeholder=""
+            value={summaryLabel}
             onClick={handleOpen}
             slotProps={{
               input: {
@@ -380,11 +381,7 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
                 endAdornment: (
                   <InputAdornment position="end">
                     <Tooltip title="Trạng thái ô: trống = chưa chọn • gạch = chọn một phần • tích = chọn hết">
-                      <IconButton
-                        size="small"
-                        tabIndex={-1}
-                        sx={{ color: 'text.disabled', mr: 0.5 }}
-                      >
+                      <IconButton size="small" tabIndex={-1} sx={{ color: 'text.disabled', mr: 0.5 }}>
                         <InfoOutlinedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -418,16 +415,14 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
           const searchValue = searchByLevel[level] ?? '';
 
           const filteredNodeIds = col.nodeIds.filter((id) => {
-            if (id === '__ALL__') return true; // luôn hiển thị
+            if (id === '__ALL__') return true; // chỉ multiple
             const info = flatMap.get(id as UnitId);
             if (!info) return false;
             return normalizeVi(info.name).includes(normalizeVi(searchValue));
           });
 
           const isRoot = level === 0;
-          // parent của cột hiện tại (dùng cho title & nút back)
-          const parentInfo =
-            col.parentId ? flatMap.get(col.parentId) : undefined;
+          const parentInfo = col.parentId ? flatMap.get(col.parentId) : undefined;
 
           return (
             <Box
@@ -442,31 +437,14 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
                 flexDirection: 'column',
               }}
             >
-              {/* header mỗi cấp: search riêng + back (từ cấp > 0) */}
-              <Box
-                sx={{
-                  p: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0.5,
-                }}
-              >
+              <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                 {!isRoot && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Typography variant="subtitle2" sx={{ mr: 1 }}>
                       {parentInfo?.name ?? ''}
                     </Typography>
                     <Tooltip title="Thu gọn cấp này">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleCloseFromLevel(level)}
-                      >
+                      <IconButton size="small" onClick={() => handleCloseFromLevel(level)}>
                         <ChevronLeftIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -475,12 +453,10 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
 
                 <TextField
                   size="small"
-                  placeholder={isRoot ? 'Tìm đơn vị / khối...' : 'Tìm đơn vị con...'}
+                  placeholder={isRoot ? 'Tìm đơn vị / khối...' : 'Tìm đơn vị cấp dưới...'}
                   fullWidth
                   value={searchValue}
-                  onChange={(e) =>
-                    handleSearchChange(level, e.target.value)
-                  }
+                  onChange={(e) => handleSearchChange(level, e.target.value)}
                 />
               </Box>
 
@@ -489,14 +465,13 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
               <Box sx={{ flex: 1, overflowY: 'auto' }}>
                 <List dense>
                   {filteredNodeIds.map((id) => {
+                    // "__ALL__" chỉ tồn tại ở multiple mode
                     if (id === '__ALL__') {
                       return (
                         <ListItemButton
                           key={id}
                           selected={activePath.length === 0}
-                          onClick={() => {
-                            setActivePath([]);
-                          }}
+                          onClick={() => setActivePath([])}
                         >
                           <Checkbox
                             edge="start"
@@ -504,12 +479,8 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
                             icon={emptyIcon}
                             checkedIcon={checkedIcon}
                             indeterminateIcon={indeterminateIcon}
-                            indeterminate={
-                              getCheckState('__ALL__') === 'indeterminate'
-                            }
-                            checked={
-                              getCheckState('__ALL__') === 'checked'
-                            }
+                            indeterminate={getCheckState('__ALL__') === 'indeterminate'}
+                            checked={getCheckState('__ALL__') === 'checked'}
                             onClick={(e) => {
                               e.stopPropagation();
                               applyToggle('__ALL__');
@@ -531,32 +502,52 @@ export const UnitMultiSelect: React.FC<UnitMultiSelectProps> = ({
 
                     const isActiveOnThisLevel = level >= 1 && activePath[level] === info.id;
 
+                    // PATCH: single mode -> node cha chỉ mở cột con, không toggle
+                    const handleRowClick = () => {
+                      if (mode === 'single') {
+                        if (info.isLeaf) {
+                          applyToggle(info.id);
+                        } else if (hasChildren) {
+                          handleOpenChildColumn(level, info.id);
+                        }
+                        return;
+                      }
+
+                      // multiple mode: click row = toggle như cũ
+                      applyToggle(info.id);
+                    };
+
+                    const handleCheckboxClick = (e: React.MouseEvent) => {
+                      e.stopPropagation();
+
+                      if (mode === 'single') {
+                        // chỉ leaf mới cho click checkbox
+                        if (!info.isLeaf) return;
+                        applyToggle(info.id);
+                        return;
+                      }
+
+                      applyToggle(info.id);
+                    };
+
                     return (
-                      <ListItemButton
-                        key={id}
-                        selected={isActiveOnThisLevel}
-                        onClick={() => {
-                          // toggle chính node
-                          applyToggle(id as UnitId);
-                        }}
-                      >
+                      <ListItemButton key={id} selected={isActiveOnThisLevel} onClick={handleRowClick}>
                         <Checkbox
                           edge="start"
                           disableRipple
                           icon={emptyIcon}
                           checkedIcon={checkedIcon}
                           indeterminateIcon={indeterminateIcon}
-                          indeterminate={indeterminate}
+                          indeterminate={mode === 'single' ? false : indeterminate}
                           checked={checked}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            applyToggle(id as UnitId);
-                          }}
+                          disabled={mode === 'single' && !info.isLeaf} // PATCH
+                          onClick={handleCheckboxClick}
                           sx={{ mr: 1 }}
                         />
                         <ListItemText primary={info.name} />
+
                         {hasChildren && (
-                          <Tooltip title="Xem đơn vị con">
+                          <Tooltip title="Xem đơn vị cấp dưới">
                             <IconButton
                               size="small"
                               edge="end"
