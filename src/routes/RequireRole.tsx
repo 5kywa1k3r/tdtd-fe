@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useGetMeQuery } from '../api/base/meApi';
+import type { JSX } from "react";
 
 const hasAnyRole = (roles: string[] | undefined, allow: string[]) =>
   !!roles?.some((r) => allow.includes(r));

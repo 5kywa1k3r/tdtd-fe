@@ -93,3 +93,43 @@ export interface WorkState {
   loading: boolean;
   error?: string;
 }
+
+//REAL CODE, trên là mock up
+import type { WorkStatus } from '../constants/workStatus';
+
+export type WorkType = 'TASK' | 'INDICATOR';
+
+export type UserLite = { id: string; name: string; rank?: number | null };
+
+export type WorkRow = {
+  id: string;
+  type: WorkType;
+  code: string | null;
+  name: string;
+
+  status: WorkStatus;
+  fromDate: string;
+  toDate: string;
+
+  unitIds: string[];
+
+  leader?: UserLite | null;         // lãnh đạo chỉ đạo
+  watcherLeader?: UserLite | null;  // lãnh đạo theo dõi
+  focalOfficer?: { id: string; name: string } | null;
+
+  canEdit: boolean;                 // BE quyết định
+};
+
+export type WorkDetail = WorkRow & {
+  priority?: 'LOW'|'MEDIUM'|'HIGH'|null;
+  basisText?: string | null;
+  note?: string | null;
+  basisAttachments?: {
+    id: string;
+    fileName: string;
+    fileSize?: number | null;
+    mimeType?: string | null;
+    description?: string | null;
+    downloadUrl?: string | null;
+  }[];
+};

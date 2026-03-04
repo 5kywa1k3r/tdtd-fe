@@ -1,99 +1,191 @@
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import { useMemo, useState } from "react";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { DynamicExcelListTable } from "../../components/excel/DynamicExcelListTable";
 import type { SortDirection } from "../../components/common/AppTable";
-
-import { type DynamicExcelItem, MOCK_DYNAMIC_EXCEL_LIST } from "../../data/mockDataTable";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+
+import {
+  useDeleteDynamicExcelMutation,
+  useSearchDynamicExcelMutation,
+} from "../../api/dynamicExcelApi";
+import type {
+  DynamicExcelRow,
+  DynamicExcelSearchReq,
+} from "../../api/dynamicExcelApi";
+
+// ✅ dùng Mantine date range (hiển thị DD/MM/YYYY, to=endOf(day))
+import {
+  MantineDateRangeFilter,
+  type DateRangeFilterValue,
+} from "../../components/common/MantineDateRangeFilter";
 
 export default function DynamicExcelListPage() {
   const navigate = useNavigate();
 
-  // mock server-state
-  const [allRows, setAllRows] = useState<DynamicExcelItem[]>(MOCK_DYNAMIC_EXCEL_LIST);
-
-  // server pagination/sort (mock)
+  // server state
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
-  const [sortField, setSortField] = useState("createdAt");
+  const [sortField, setSortField] =
+    useState<DynamicExcelSearchReq["sortField"]>("createdAtUtc");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  const sorted = useMemo(() => {
-    const copied = [...allRows];
-    copied.sort((a: any, b: any) => {
-      const va = a[sortField];
-      const vb = b[sortField];
+  // ===== DRAFT (đang gõ) =====
+  const [codeDraft, setCodeDraft] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const [dateDraft, setDateDraft] = useState<DateRangeFilterValue>({
+    from: null,
+    to: null,
+  });
 
-      if (va == null && vb == null) return 0;
-      if (va == null) return -1;
-      if (vb == null) return 1;
+  // ===== APPLIED (đã bấm search) =====
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [dateApplied, setDateApplied] = useState<DateRangeFilterValue>({
+    from: null,
+    to: null,
+  });
 
-      if (va < vb) return sortDirection === "asc" ? -1 : 1;
-      if (va > vb) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
-    return copied;
-  }, [allRows, sortField, sortDirection]);
+  const [search, searchState] = useSearchDynamicExcelMutation();
+  const [del] = useDeleteDynamicExcelMutation();
+  const rows = searchState.data?.items ?? [];
+  const total = searchState.data?.total ?? 0;
 
-  const paged = useMemo(() => {
-    const start = page * pageSize;
-    return sorted.slice(start, start + pageSize);
-  }, [sorted, page, pageSize]);
+  const req = useMemo<DynamicExcelSearchReq>(
+    () => ({
+      code: code.trim() || undefined,
+      name: name.trim() || undefined,
+
+      // ✅ inclusive: from=startOf(day), to=endOf(day) đã được MantineDateRangeFilter đảm bảo
+      createdFromUtc: dateApplied.from ? dateApplied.from.toISOString() : null,
+      createdToUtc: dateApplied.to ? dateApplied.to.toISOString() : null,
+
+      q: undefined,
+      createdBy: undefined,
+      labels: null,
+
+      page,
+      pageSize,
+      sortField: sortField ?? "createdAtUtc",
+      sortDirection: sortDirection ?? "desc",
+    }),
+    [code, name, dateApplied.from, dateApplied.to, page, pageSize, sortField, sortDirection]
+  );
+
+  // ✅ chỉ search khi req đổi
+  useEffect(() => {
+    search(req);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [req]);
+
+  const doSearch = () => {
+    setCode(codeDraft);
+    setName(nameDraft);
+    setDateApplied(dateDraft);
+    setPage(0);
+  };
+
+  const clearFilters = () => {
+    setCodeDraft("");
+    setNameDraft("");
+    setDateDraft({ from: null, to: null });
+
+    setCode("");
+    setName("");
+    setDateApplied({ from: null, to: null });
+
+    setPage(0);
+  };
+
+  const onEnterSearch = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") doSearch();
+  };
 
   // delete confirm
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<DynamicExcelItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DynamicExcelRow | null>(null);
 
-  const openCreate = () => {
-    navigate("/dynamic-excel/create");
-  };
-
-  const openView = (row: DynamicExcelItem) => {
-    navigate(`/dynamic-excel/${row.id}`);
-  };
-
-  const openEdit = (row: DynamicExcelItem) => {
-    navigate(`/dynamic-excel/${row.id}/edit`);
-  };
-
-  const askDelete = (row: DynamicExcelItem) => {
+  const openCreate = () => navigate("/dynamic-excel/create");
+  const openView = (row: DynamicExcelRow) => navigate(`/dynamic-excel/${row.id}`);
+  const openEdit = (row: DynamicExcelRow) => navigate(`/dynamic-excel/${row.id}/edit`);
+  const askDelete = (row: DynamicExcelRow) => {
     setDeleteTarget(row);
     setConfirmOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (!deleteTarget) return;
-
-    setAllRows((prev) => prev.filter((x) => x.id !== deleteTarget.id));
-    setConfirmOpen(false);
-    setDeleteTarget(null);
-
-    // nếu xóa xong mà trang hiện tại vượt quá total -> kéo về trang trước (mock)
-    // (optional)
-    // setPage((p) => Math.max(0, Math.min(p, Math.floor((prev.length - 2) / pageSize))));
-  };
-
   return (
     <Box sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Box>
-          <Typography variant="h6">Bảng biểu động</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Danh sách cấu hình bảng biểu động (mock).
-          </Typography>
+      {/* Search bar */}
+      <Stack
+        direction="row"
+        spacing={1}
+        mb={2}
+        flexWrap="wrap"
+        useFlexGap
+        alignItems="center"
+      >
+        <TextField
+          size="small"
+          label="Mã"
+          value={codeDraft}
+          onChange={(e) => setCodeDraft(e.target.value)}
+          onKeyDown={onEnterSearch}
+          sx={{ minWidth: 180, flex: "1 1 200px" }}
+        />
+
+        <TextField
+          size="small"
+          label="Tên"
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onKeyDown={onEnterSearch}
+          sx={{ minWidth: 220, flex: "1 1 260px" }}
+        />
+
+        {/* ✅ 1 ô chọn khoảng ngày (dd/MM/yyyy) */}
+        <Box sx={{ minWidth: 320, flex: "1 1 360px" }}>
+          <MantineDateRangeFilter
+            value={dateDraft}
+            onChange={(v) => setDateDraft(v)}
+            placeholder="Chọn khoảng ngày"
+          />
         </Box>
 
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+        <Button
+          variant="contained"
+          startIcon={<SearchIcon />}
+          onClick={doSearch}
+          sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
+        >
+          Tìm kiếm
+        </Button>
+
+        <Button
+          variant="outlined"
+          startIcon={<ClearIcon />}
+          onClick={clearFilters}
+          sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
+        >
+          Xóa lọc
+        </Button>
+
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={openCreate}
+          sx={{ height: 40, flexShrink: 0, whiteSpace: "nowrap" }}
+        >
           Tạo mới
         </Button>
       </Stack>
 
       <DynamicExcelListTable
-        rows={paged}
-        total={allRows.length}
+        rows={rows as any}
+        total={total}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
@@ -101,17 +193,17 @@ export default function DynamicExcelListPage() {
           setPageSize(size);
           setPage(0);
         }}
-        sortField={sortField}
+        sortField={sortField ?? "createdAtUtc"}
         sortDirection={sortDirection}
         onSortChange={(field, dir) => {
-          setSortField(field);
+          setSortField(field as any);
           setSortDirection(dir);
           setPage(0);
         }}
-        onRowDoubleClick={openView}
-        onView={openView}
-        onEdit={openEdit}
-        onDelete={askDelete}
+        onRowDoubleClick={openView as any}
+        onView={openView as any}
+        onEdit={openEdit as any}
+        onDelete={askDelete as any}
       />
 
       <ConfirmDialog
@@ -123,14 +215,20 @@ export default function DynamicExcelListPage() {
               Bạn có chắc muốn xóa bảng <b>{deleteTarget?.code}</b>?
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Thao tác này không thể hoàn tác (mock).
+              Xóa mềm (soft delete).
             </Typography>
           </>
         }
         confirmText="Xóa"
         cancelText="Hủy"
         variant="danger"
-        onConfirm={handleConfirmDelete}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await del({ id: deleteTarget.id }).unwrap();
+          setConfirmOpen(false);
+          setDeleteTarget(null);
+          search(req);
+        }}
         onClose={() => {
           setConfirmOpen(false);
           setDeleteTarget(null);

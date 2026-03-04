@@ -47,7 +47,7 @@ export const Sidebar = () => {
       <Divider />
 
       {/* TEST */}
-      <ListItemButton
+      {/* <ListItemButton
         selected={isActive('/uploads-test')}
         onClick={() => navigate('/uploads-test')}
       >
@@ -55,9 +55,9 @@ export const Sidebar = () => {
           <CloudUploadIcon />
         </ListItemIcon>
         <ListItemText primary="Upload test" />
-      </ListItemButton>
+      </ListItemButton> */}
       {/* TEST */}
-      
+
       <List
         subheader={
           <ListSubheader component="div">

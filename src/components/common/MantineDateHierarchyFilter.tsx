@@ -27,7 +27,7 @@ dayjs.locale('vi');
 
 const inputStyles = {
   input: {
-    height: 40,            // bằng MUI TextField size="small"
+    height: 40,
     paddingTop: 8,
     paddingBottom: 8,
     fontSize: 16,
@@ -52,17 +52,19 @@ const YEARS_AROUND = 10;
 const getQuarterFromDate = (d: Dayjs): number =>
   Math.floor(d.month() / 3) + 1;
 
-export const MantineDateHierarchyFilter: React.FC<
-  MantineDateHierarchyFilterProps
-> = ({ value, onChange }) => {
+const ensureOrder = (from: Dayjs, to: Dayjs): [Dayjs, Dayjs] =>
+  from.isAfter(to) ? [to, from] : [from, to];
+
+export const MantineDateHierarchyFilter: React.FC<MantineDateHierarchyFilterProps> = ({
+  value,
+  onChange,
+}) => {
   const today = dayjs();
   const baseFrom = value?.from ?? today;
   const baseTo = value?.to ?? today;
 
   const [opened, setOpened] = useState(false);
-  const [level, setLevel] = useState<DateHierarchyLevel>(
-    value?.level ?? 'month'
-  );
+  const [level, setLevel] = useState<DateHierarchyLevel>(value?.level ?? 'month');
 
   const currentYear = today.year();
   const years = useMemo(
@@ -74,40 +76,31 @@ export const MantineDateHierarchyFilter: React.FC<
     [currentYear]
   );
 
-  // ===== NĂM =====
+  // ===== NĂM (YearPickerInput v8: string | null) =====
   const [yearFrom, setYearFrom] = useState<number | null>(baseFrom.year());
   const [yearTo, setYearTo] = useState<number | null>(baseTo.year());
 
   // ===== QUÝ =====
   const [qFromYear, setQFromYear] = useState<number | null>(baseFrom.year());
   const [qToYear, setQToYear] = useState<number | null>(baseTo.year());
-  const [qFrom, setQFrom] = useState<string>(
-    String(getQuarterFromDate(baseFrom))
-  );
-  const [qTo, setQTo] = useState<string>(
-    String(getQuarterFromDate(baseTo))
-  );
+  const [qFrom, setQFrom] = useState<string>(String(getQuarterFromDate(baseFrom)));
+  const [qTo, setQTo] = useState<string>(String(getQuarterFromDate(baseTo)));
 
-  // ===== THÁNG ===== (Mantine v8 dùng string)
+  // ===== THÁNG (string | null) =====
   const [mFrom, setMFrom] = useState<string | null>(
     baseFrom.startOf('month').format('YYYY-MM-DD')
   );
   const [mTo, setMTo] = useState<string | null>(
-    baseTo.endOf('month').format('YYYY-MM-DD')
+    baseTo.startOf('month').format('YYYY-MM-DD')
   );
 
-  // ===== NGÀY ===== – 2 quyển lịch: từ ngày / đến ngày (string)
+  // ===== NGÀY (string | null) =====
   const [dayFrom, setDayFrom] = useState<string | null>(
     baseFrom.startOf('day').format('YYYY-MM-DD')
   );
   const [dayTo, setDayTo] = useState<string | null>(
-    baseTo.endOf('day').format('YYYY-MM-DD')
+    baseTo.startOf('day').format('YYYY-MM-DD')
   );
-
-  const ensureOrder = (from: Dayjs, to: Dayjs): [Dayjs, Dayjs] => {
-    if (from.isAfter(to)) return [to, from];
-    return [from, to];
-  };
 
   const computeRange = (): DateHierarchyFilterValue => {
     let from: Dayjs;
@@ -139,24 +132,16 @@ export const MantineDateHierarchyFilter: React.FC<
       }
 
       case 'month': {
-        const f = mFrom
-          ? dayjs(mFrom).startOf('month')
-          : today.startOf('month');
-        const t = mTo
-          ? dayjs(mTo).endOf('month')
-          : f.endOf('month');
+        const f = mFrom ? dayjs(mFrom).startOf('month') : today.startOf('month');
+        const t = mTo ? dayjs(mTo).endOf('month') : f.endOf('month');
         [from, to] = ensureOrder(f, t);
         break;
       }
 
       case 'day':
       default: {
-        const f = dayFrom
-          ? dayjs(dayFrom).startOf('day')
-          : today.startOf('day');
-        const t = dayTo
-          ? dayjs(dayTo).endOf('day')
-          : f.endOf('day');
+        const f = dayFrom ? dayjs(dayFrom).startOf('day') : today.startOf('day');
+        const t = dayTo ? dayjs(dayTo).endOf('day') : f.endOf('day'); // ✅ inclusive
         [from, to] = ensureOrder(f, t);
         break;
       }
@@ -193,11 +178,8 @@ export const MantineDateHierarchyFilter: React.FC<
       }
       case 'day':
       default: {
-        const same = from.isSame(to, 'day');
-        if (same) return `Ngày ${from.format('DD/MM/YYYY')}`;
-        return `Từ ${from.format('DD/MM/YYYY')} đến ${to.format(
-          'DD/MM/YYYY'
-        )}`;
+        if (from.isSame(to, 'day')) return `Ngày ${from.format('DD/MM/YYYY')}`;
+        return `Từ ${from.format('DD/MM/YYYY')} đến ${to.format('DD/MM/YYYY')}`;
       }
     }
   };
@@ -222,13 +204,9 @@ export const MantineDateHierarchyFilter: React.FC<
     dayTo,
   ]);
 
-  // ========= UI =========
-
-  // helper nhỏ để convert year -> string 'YYYY-MM-DD'
+  // helper convert year -> string 'YYYY-MM-DD'
   const yearToStr = (year: number | null): string | null =>
-    year != null
-      ? dayjs().year(year).startOf('year').format('YYYY-MM-DD')
-      : null;
+    year != null ? dayjs().year(year).startOf('year').format('YYYY-MM-DD') : null;
 
   const renderYear = () => (
     <Group align="flex-start" grow>
@@ -239,12 +217,8 @@ export const MantineDateHierarchyFilter: React.FC<
         <YearPickerInput
           value={yearToStr(yearFrom)}
           onChange={(val) => {
-            if (!val) {
-              setYearFrom(null);
-              return;
-            }
-            const year = dayjs(val).year();
-            setYearFrom(year);
+            if (!val) return setYearFrom(null);
+            setYearFrom(dayjs(val).year());
           }}
           placeholder="Chọn năm"
           label={null}
@@ -260,12 +234,8 @@ export const MantineDateHierarchyFilter: React.FC<
         <YearPickerInput
           value={yearToStr(yearTo)}
           onChange={(val) => {
-            if (!val) {
-              setYearTo(null);
-              return;
-            }
-            const year = dayjs(val).year();
-            setYearTo(year);
+            if (!val) return setYearTo(null);
+            setYearTo(dayjs(val).year());
           }}
           placeholder="Chọn năm"
           label={null}
@@ -342,7 +312,7 @@ export const MantineDateHierarchyFilter: React.FC<
           label={null}
           placeholder="Chọn tháng"
           value={mFrom}
-          onChange={setMFrom}
+          onChange={setMFrom} // ✅ giờ đúng type (string | null)
           locale="vi"
           valueFormat="MM/YYYY"
           clearable
@@ -357,7 +327,7 @@ export const MantineDateHierarchyFilter: React.FC<
           label={null}
           placeholder="Chọn tháng"
           value={mTo}
-          onChange={setMTo}
+          onChange={setMTo} // ✅ đúng type
           locale="vi"
           valueFormat="MM/YYYY"
           clearable
@@ -366,19 +336,13 @@ export const MantineDateHierarchyFilter: React.FC<
     </Group>
   );
 
-  // 2 quyển lịch chọn ngày
   const renderDay = () => (
     <Group align="flex-start" grow>
       <Card shadow="xs" radius="md" withBorder>
         <Text size="xs" fw={500} c="dimmed" mb={4}>
           Từ ngày
         </Text>
-        <DatePicker
-          value={dayFrom}
-          onChange={setDayFrom}
-          locale="vi"
-          // valueFormat="DD/MM/YYYY"
-        />
+        <DatePicker value={dayFrom} onChange={setDayFrom} locale="vi" />
       </Card>
 
       <Card shadow="xs" radius="md" withBorder>
@@ -389,7 +353,7 @@ export const MantineDateHierarchyFilter: React.FC<
           value={dayTo}
           onChange={setDayTo}
           locale="vi"
-          // valueFormat="DD/MM/YYYY"
+          minDate={dayFrom ?? undefined}
         />
       </Card>
     </Group>
@@ -425,9 +389,10 @@ export const MantineDateHierarchyFilter: React.FC<
           value={label}
           rightSection={<IconCalendar size={20} />}
           onClick={() => setOpened((o) => !o)}
-          styles={inputStyles}          // <<== dùng styles đã khai báo
+          styles={inputStyles}
         />
       </Popover.Target>
+
       <Popover.Dropdown>
         <Stack gap="sm">
           <Group gap="xs" align="center">
@@ -449,11 +414,7 @@ export const MantineDateHierarchyFilter: React.FC<
           {renderByLevel()}
 
           <Group justify="flex-end" mt="xs">
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={() => setOpened(false)}
-            >
+            <Button variant="subtle" size="xs" onClick={() => setOpened(false)}>
               Đóng
             </Button>
           </Group>

@@ -1,0 +1,8 @@
+/* Scope chỉ áp dụng trong vùng designer của tdtd */
+.tdtdSheet .luckysheet-bottom-controll-row {
+  display: none !important; /* Add rows / back to top */
+}
+
+.tdtdSheet .luckysheet-sheet-content {
+  display: none !important; /* sheet tabs / sheet operations */
+}

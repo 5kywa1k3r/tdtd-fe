@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -9,9 +9,15 @@ import {
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import { Box } from '@mui/system';
 
-import { useSearchUsersQuery, useSoftDeleteUserMutation, useResetPasswordMutation } from './adminUsersApi';
+import {
+  useSearchUsersQuery,
+  useSoftDeleteUserMutation,
+  useResetPasswordMutation,
+} from './adminUsersApi';
 import { useGetMeQuery } from '../../../api/base/meApi';
 import { UserEditorDialog } from './UserEditorDialog';
 import { ResetPasswordDialog } from './ResetPasswordDialog';
@@ -23,7 +29,6 @@ import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 
 import { Permission } from '../../../constants/permissions';
 import { hasPermission } from '../../../utils/rbac';
-import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 
 const DEFAULT_PASSWORD = '123456@Aa';
 
@@ -45,32 +50,26 @@ export function UsersPanel() {
 
   const canDelete = canUpdate;
 
-  // ===== filters =====
-  const [q, setQ] = useState('');
-  const qDebounced = useDebouncedValue(q, 200);
-
-  // chọn 1 đơn vị cha để lấy prefix
-  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
-  const [unitCodePrefix, setUnitCodePrefix] = useState<string>('');
-
-  // position filter ('' = all)
-  const [positionCode, setPositionCode] = useState<string>('');
-
-  // reset password dialog (detailed)
-  const [resetTarget, setResetTarget] = useState<{ userId: string; username: string; isMe?: boolean } | null>(null);
-
-  // confirm dialogs
-  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
-  const [resetConfirmTarget, setResetConfirmTarget] = useState<AdminUserRow | null>(null);
-
-  // snackbar
-  const [snack, setSnack] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
   type DeleteFilter = 'active' | 'deleted' | 'all';
   const [deleteFilter] = useState<DeleteFilter>('active');
+  const isDeleted = deleteFilter === 'all' ? undefined : deleteFilter === 'deleted';
 
-  const isDeleted =
-    deleteFilter === 'all' ? undefined : deleteFilter === 'deleted';
+  // ===== INPUT FILTERS (chỉ là UI, chưa apply) =====
+  const [qInput, setQInput] = useState('');
+  const [selectedUnitIdInput, setSelectedUnitIdInput] = useState<string>('');
+  const [unitCodePrefixInput, setUnitCodePrefixInput] = useState<string>('');
+  const [positionCodeInput, setPositionCodeInput] = useState<string>('');
+
+  // ===== APPLIED FILTERS (bấm Tìm kiếm mới cập nhật) =====
+  const [applied, setApplied] = useState<{
+    q: string;
+    unitCodePrefix?: string;
+    positionCode?: string;
+  }>({
+    q: '',
+    unitCodePrefix: undefined,
+    positionCode: undefined,
+  });
 
   // ===== server paging/sort =====
   const [page, setPage] = useState(0);
@@ -80,25 +79,23 @@ export function UsersPanel() {
   const [sortField, setSortField] = useState<string | undefined>('positionCode');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // reset page when filter changes
-  useEffect(() => {
-    setPage(0);
-  }, [qDebounced, unitCodePrefix, positionCode, deleteFilter]);
-
   const { data, isFetching, refetch } = useSearchUsersQuery({
-    q: qDebounced,
+    q: applied.q,
     isDeleted,
-    unitCodePrefix: unitCodePrefix.trim() ? unitCodePrefix.trim() : undefined,
-    positionCode: positionCode || undefined,
+    unitCodePrefix: applied.unitCodePrefix,
+    positionCode: applied.positionCode,
     page,
     pageSize,
     sortField,
     sortDirection: sortField ? sortDirection : undefined,
   });
 
+  // snackbar
+  const [snack, setSnack] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const notifySuccess = (msg: string) => {
     setSnack({ type: 'success', message: msg });
-    refetch();            // ✅ kéo list mới nhất
+    refetch();
   };
 
   const notifyError = (e: any, fallback: string) => {
@@ -131,6 +128,33 @@ export function UsersPanel() {
 
   const [editor, setEditor] = useState<Editor>(null);
 
+  // reset password dialog (detailed)
+  const [resetTarget, setResetTarget] = useState<{ userId: string; username: string; isMe?: boolean } | null>(null);
+
+  // confirm dialogs
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
+  const [resetConfirmTarget, setResetConfirmTarget] = useState<AdminUserRow | null>(null);
+
+  const applySearch = () => {
+    const next = {
+      q: qInput.trim(),
+      unitCodePrefix: unitCodePrefixInput.trim() ? unitCodePrefixInput.trim() : undefined,
+      positionCode: positionCodeInput || undefined,
+    };
+    setApplied(next);
+    setPage(0);
+  };
+
+  const clearFilters = () => {
+    setQInput('');
+    setSelectedUnitIdInput('');
+    setUnitCodePrefixInput('');
+    setPositionCodeInput('');
+
+    setApplied({ q: '', unitCodePrefix: undefined, positionCode: undefined });
+    setPage(0);
+  };
+
   return (
     <Card>
       <CardContent>
@@ -157,24 +181,25 @@ export function UsersPanel() {
             <TextField
               size="small"
               placeholder="Tìm username / fullName"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applySearch();
+              }}
               sx={{ flex: '1 1 260px', minWidth: 220 }}
             />
 
             <Box sx={{ flex: '1 1 260px', minWidth: 220 }}>
               <LazyUnitMultiSelect
-                value={selectedUnitId ? [selectedUnitId] : []}
+                value={selectedUnitIdInput ? [selectedUnitIdInput] : []}
                 onChange={(v) => {
                   const id = v?.[0] ?? '';
-                  setSelectedUnitId(id);
-                  if (!id) setUnitCodePrefix('');
-                  setPage(0);
+                  setSelectedUnitIdInput(id);
+                  if (!id) setUnitCodePrefixInput('');
                 }}
                 onChangeMeta={(selected) => {
                   const first = selected?.[0];
-                  setUnitCodePrefix(first?.code ?? '');
-                  setPage(0);
+                  setUnitCodePrefixInput(first?.code ?? '');
                 }}
                 mode="single"
                 label="Đơn vị"
@@ -183,14 +208,34 @@ export function UsersPanel() {
 
             <Box sx={{ flex: '1 1 260px', minWidth: 220 }}>
               <PositionSelect
-                value={positionCode}
-                onChange={(v) => {
-                  setPositionCode(v);
-                  setPage(0);
-                }}
-                unitCode={unitCodePrefix || null}
+                value={positionCodeInput}
+                onChange={(v) => setPositionCodeInput(v)}
+                unitCode={unitCodePrefixInput || null}
                 label="Chức vụ"
               />
+            </Box>
+
+            {/* ACTION BUTTONS: Search + Clear */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<SearchIcon />}
+                onClick={applySearch}
+                sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}
+              >
+                Tìm kiếm
+              </Button>
+
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ClearIcon />}
+                onClick={clearFilters}
+                sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}
+              >
+                Xóa lọc
+              </Button>
             </Box>
           </Box>
 
@@ -204,10 +249,6 @@ export function UsersPanel() {
               marginLeft: { xs: 0, sm: 'auto' },
             }}
           >
-            <Typography variant="body2" sx={{ opacity: 0.7, whiteSpace: 'nowrap' }}>
-              {isFetching ? 'Đang tải…' : `${data?.totalRows ?? 0} kết quả`}
-            </Typography>
-
             {canCreate && (
               <Button
                 variant="contained"
@@ -255,7 +296,6 @@ export function UsersPanel() {
             setDeleteTarget(row);
           }}
           onResetPassword={(row) => {
-            // bệ hạ muốn confirm khi reset: mở confirm trước
             setResetConfirmTarget(row);
           }}
         />
@@ -264,20 +304,13 @@ export function UsersPanel() {
           open={!!editor}
           editor={editor}
           onClose={() => setEditor(null)}
-          onCreated={() => {
-            notifySuccess('Tạo tài khoản thành công.');
-            // nếu muốn nhảy về trang 0 để thấy record mới:
-            // setPage(0);
-          }}
-          onUpdated={() => {
-            notifySuccess('Cập nhật tài khoản thành công.');
-          }}
+          onCreated={() => notifySuccess('Tạo tài khoản thành công.')}
+          onUpdated={() => notifySuccess('Cập nhật tài khoản thành công.')}
           onFailed={(e, op) => {
             notifyError(e, op === 'create' ? 'Tạo tài khoản thất bại.' : 'Cập nhật thất bại.');
           }}
         />
 
-        {/* dialog reset (detailed) - giữ nguyên nếu bệ hạ vẫn muốn dùng */}
         <ResetPasswordDialog
           open={!!resetTarget}
           target={resetTarget}
@@ -335,7 +368,6 @@ export function UsersPanel() {
                 body: { newPassword: DEFAULT_PASSWORD },
               }).unwrap();
 
-              setSnack({ type: 'success', message: 'Đặt lại mật khẩu thành công.' });
               notifySuccess('Đặt lại mật khẩu thành công.');
             } catch (e: any) {
               setSnack({ type: 'error', message: e?.data?.title ?? e?.message ?? 'Đặt lại mật khẩu thất bại.' });

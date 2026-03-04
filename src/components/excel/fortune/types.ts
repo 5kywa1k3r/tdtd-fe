@@ -31,8 +31,13 @@ export type HeaderCell = {
   colSpan?: number;
 };
 
+export type ValidationIssueCode =
+  | "VUOT_PHAM_VI_BANG"        // Ô vượt ra ngoài bảng
+  | "NOI_DUNG_NGOAI_TIEU_DE"   // Có nội dung nằm ngoài vùng tiêu đề
+  | "LAN_RANH_GIOI"            // Phủ cả vùng tiêu đề và vùng dữ liệu
+
 export type ValidationIssue = {
-  code: "OUTSIDE_HEADER" | "EMPTY_HEADER" | "LEAF_NOT_MERGED";
-  message: string;
-  at?: { r: number; c: number };
+  code: ValidationIssueCode;
+  message: string; // Thông báo đầy đủ tiếng Việt
+  at?: { r: number; c: number }; // Tọa độ nội bộ (0-based) để highlight
 };

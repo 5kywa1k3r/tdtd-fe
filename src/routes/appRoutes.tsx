@@ -19,7 +19,7 @@ import AdminAccountsPage from '../pages/admin/AdminAccountPages';
 import { RequireAuth } from './RequireAuth';
 import { RequireRole } from './RequireRole';
 import { Role } from '../constants/roles';
-import UploadTestPage from '../features/uploads/UploadTestPage';
+// import UploadTestPage from '../features/uploads/UploadTestPage';
 
 export const appRoutes: RouteObject[] = [
   // ====== Auth (public) ======
@@ -41,7 +41,7 @@ export const appRoutes: RouteObject[] = [
       { index: true, element: <Navigate to="dashboard" replace /> },
 
       { path: 'dashboard', element: <DashboardPage /> },
-      { path: 'uploads-test', element: <UploadTestPage /> },
+      // { path: 'uploads-test', element: <UploadTestPage /> },
       {
         path: 'tasks',
         element: (
@@ -74,10 +74,15 @@ export const appRoutes: RouteObject[] = [
         ],
       },
 
-      { path: "dynamic-excel", element: <DynamicExcelListPage /> },
-      { path: "dynamic-excel/create", element: <DynamicExcelCreatePage /> },
-      { path: "dynamic-excel/:id", element: <DynamicExcelViewPage /> },
-      { path: "dynamic-excel/:id/edit", element: <DynamicExcelEditPage /> },
+      { 
+        path: "dynamic-excel",
+        children: [
+          { index: true, element: <DynamicExcelListPage /> },
+          { path: "create", element: <DynamicExcelCreatePage /> },
+          { path: ":id", element: <DynamicExcelViewPage /> },
+          { path: ":id/edit", element: <DynamicExcelEditPage /> },
+        ], 
+      },
     ],
   },
   // ====== Admin (protected) ======

@@ -1,4 +1,4 @@
-import type { HeaderSpec } from "../features/excelDesigner/types";
+import type { HeaderSpec } from "../components/excel/fortune/types";
 
 export type LabelLite = { id: string; name: string };
 

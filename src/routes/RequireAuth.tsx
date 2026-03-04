@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { getTokenFromStorage } from '../stores/authStorage';
 import { useGetMeQuery } from '../api/base/meApi';
+import type { JSX } from "react";
 
 export function RequireAuth({ children }: { children: JSX.Element }) {
   const token = getTokenFromStorage();

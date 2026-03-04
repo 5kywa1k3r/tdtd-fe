@@ -32,7 +32,7 @@ export interface AppTableColumn<T> {
   getSortValue?: (row: T) => string | number | Date;
 }
 
-interface AppTableProps<T> {
+export interface AppTableProps<T, F extends string = string> {
   rows: T[];
   columns: AppTableColumn<T>[];
   rowKey: (row: T) => string;
@@ -53,13 +53,13 @@ interface AppTableProps<T> {
   sortMode?: 'client' | 'server';
 
   // client-mode: sort ban đầu
-  initialSortField?: string;
+  initialSortField?: F;
   initialSortDirection?: SortDirection;
 
   // server-mode: controlled từ bên ngoài
-  sortField?: string;
+  sortField?: F;
   sortDirection?: SortDirection;
-  onSortChange?: (field: string, direction: SortDirection) => void;
+  onSortChange?: (field: F, direction: SortDirection) => void;
 
   // pagination
   enablePagination?: boolean;
@@ -81,7 +81,7 @@ interface AppTableProps<T> {
   onRowDoubleClick?: (row: T) => void;
 }
 
-function assertServerPaginationProps<T>(props: AppTableProps<T>) {
+function assertServerPaginationProps<T, F extends string>(props: AppTableProps<T, F>) {
   if (props.paginationMode !== 'server') return;
   // server-mode nên truyền đủ để tránh UI tự “đoán”
   if (props.page == null || props.pageSize == null || props.totalRows == null) {
@@ -92,7 +92,7 @@ function assertServerPaginationProps<T>(props: AppTableProps<T>) {
   }
 }
 
-function assertServerSortProps<T>(props: AppTableProps<T>) {
+function assertServerSortProps<T, F extends string>(props: AppTableProps<T, F>) {
   if (props.sortMode !== 'server') return;
   if (props.sortField == null || props.sortDirection == null) {
     // eslint-disable-next-line no-console
@@ -102,7 +102,7 @@ function assertServerSortProps<T>(props: AppTableProps<T>) {
   }
 }
 
-export function AppTable<T>(props: AppTableProps<T>) {
+export function AppTable<T, F extends string = string>(props: AppTableProps<T, F>) {
   const {
     rows,
     columns,
@@ -155,19 +155,18 @@ export function AppTable<T>(props: AppTableProps<T>) {
   };
 
   // ================== SORT STATE ==================
-  const [internalSortField, setInternalSortField] = useState<string | undefined>(
-    initialSortField,
-  );
+  const [internalSortField, setInternalSortField] = useState<F | undefined>(initialSortField);
   const [internalSortDirection, setInternalSortDirection] =
     useState<SortDirection>(initialSortDirection);
 
-  const effectiveSortField = sortMode === 'server' ? sortField : internalSortField;
+  const effectiveSortField: F | undefined = sortMode === 'server' ? sortField : internalSortField;
+
   const effectiveSortDirection: SortDirection =
     sortMode === 'server'
       ? (sortDirection ?? 'asc')
       : internalSortDirection;
 
-  const handleSortClick = (field: string) => {
+  const handleSortClick = (field: F) => {
     const currentField = effectiveSortField;
     const currentDirection = effectiveSortDirection ?? 'asc';
 
@@ -186,7 +185,7 @@ export function AppTable<T>(props: AppTableProps<T>) {
   const sortedRows = useMemo(() => {
     if (sortMode === 'server' || !effectiveSortField) return rows;
 
-    const col = columns.find((c) => String(c.field) === effectiveSortField);
+    const col = columns.find((c) => String(c.field) === String(effectiveSortField));
     if (!col) return rows;
 
     const getVal = (row: T) => {
@@ -371,12 +370,12 @@ export function AppTable<T>(props: AppTableProps<T>) {
             )}
 
             {columns.map((col) => {
-              const field = String(col.field);
-              const active = effectiveSortField === field;
+              const field = String(col.field) as F;
+              const active = String(effectiveSortField ?? '') === String(field);
 
               return (
                 <TableCell
-                  key={field}
+                  key={String(col.field)}
                   align={col.align ?? 'left'}
                   sx={{ width: col.width }}
                 >
@@ -443,8 +442,8 @@ export function AppTable<T>(props: AppTableProps<T>) {
                   </TableCell>
                 )}
 
-                {columns.map((col) => (
-                  <TableCell key={String(col.field)} align={col.align ?? 'left'}>
+                {columns.map((col, idx) => (
+                  <TableCell key={`${String(col.field)}:${idx}`} align={col.align ?? 'left'}>
                     {col.render ? col.render(row) : (row as any)[col.field as any]}
                   </TableCell>
                 ))}

@@ -7,11 +7,6 @@ type TusState =
   | { status: 'success'; uploadId: string }
   | { status: 'error'; error: string; uploadId?: string };
 
-function b64(s: string) {
-  // tus metadata expects base64
-  return btoa(unescape(encodeURIComponent(s)));
-}
-
 function extractUploadId(uploadUrl?: string | null) {
   if (!uploadUrl) return undefined;
   const parts = uploadUrl.split('/').filter(Boolean);

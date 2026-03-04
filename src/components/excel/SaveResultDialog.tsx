@@ -1,5 +1,5 @@
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Alert, Stack, Typography } from "@mui/material";
-import type { ValidationIssue } from "../../features/excelDesigner/types";
+import type { ValidationIssue } from "./fortune/types";
 
 export function SaveResultDialog(props: {
   open: boolean;

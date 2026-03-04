@@ -1,13 +1,16 @@
 import React, { useMemo } from 'react';
 import dayjs from 'dayjs';
-import { Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Chip, IconButton, Stack, Tooltip, Box } from '@mui/material';
 
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 import { AppTable, type AppTableColumn, type SortDirection } from '../common/AppTable';
-import type { DynamicExcelItem } from '../../data/mockDataTable';
+import type { DynamicExcelRow as DynamicExcelItem, DynamicExcelSearchReq } from '../../api/dynamicExcelApi';
+
+type SortField = NonNullable<DynamicExcelSearchReq['sortField']>;
 
 interface DynamicExcelListTableProps {
   rows: DynamicExcelItem[];
@@ -18,15 +21,23 @@ interface DynamicExcelListTableProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 
-  sortField: string;
+  sortField: SortField;
   sortDirection: SortDirection;
-  onSortChange: (field: string, direction: SortDirection) => void;
+  onSortChange: (field: SortField, direction: SortDirection) => void;
 
   onRowDoubleClick?: (row: DynamicExcelItem) => void;
 
   onView?: (row: DynamicExcelItem) => void;
   onEdit?: (row: DynamicExcelItem) => void;
   onDelete?: (row: DynamicExcelItem) => void;
+}
+
+function copyText(text: string) {
+  try {
+    void navigator.clipboard?.writeText(text);
+  } catch {
+    // ignore
+  }
 }
 
 export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
@@ -60,10 +71,8 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   onView?.(row);
-                  // fallback: nếu không truyền onView thì dùng doubleclick handler
                   if (!onView) onRowDoubleClick?.(row);
                 }}
-                sx={{ '&:hover': { transform: 'scale(1.05)' } }}
               >
                 <VisibilityIcon fontSize="small" />
               </IconButton>
@@ -76,7 +85,6 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
                   e.stopPropagation();
                   onEdit?.(row);
                 }}
-                sx={{ '&:hover': { transform: 'scale(1.05)' } }}
               >
                 <EditIcon fontSize="small" />
               </IconButton>
@@ -89,7 +97,6 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
                   e.stopPropagation();
                   onDelete?.(row);
                 }}
-                sx={{ '&:hover': { transform: 'scale(1.05)' } }}
               >
                 <DeleteOutlineIcon fontSize="small" />
               </IconButton>
@@ -98,65 +105,90 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
         ),
       },
 
-      { field: 'code', header: 'Mã', sortable: true, width: 140 },
-
-      { field: 'name', header: 'Tên', sortable: true, width: '35%' },
-
+      // ✅ Code: preview đẹp + copy
       {
-        field: 'labels',
-        header: 'Nhãn',
-        sortable: false,
-        width: '30%',
+        field: 'code',
+        header: 'Mã',
+        sortable: true,
+        width: 190,
         render: (row) => (
-          <Stack direction="row" spacing={0.5} flexWrap="wrap">
-            {row.labels?.length ? (
-              row.labels.map((l) => (
-                <Chip
-                  key={l.id}
-                  label={l.name}
-                  size="small"
-                  sx={{ height: 22, fontSize: 12 }}
-                />
-              ))
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                -
-              </Typography>
-            )}
+          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+            <Tooltip title={row.code}>
+              <Chip
+                label={row.code}
+                size="small"
+                variant="outlined"
+                sx={{
+                  height: 24,
+                  fontSize: 12,
+                  maxWidth: 150,
+                  '& .MuiChip-label': {
+                    px: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                }}
+              />
+            </Tooltip>
+
+            <Tooltip title="Copy mã">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyText(row.code);
+                }}
+              >
+                <ContentCopyIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
           </Stack>
         ),
       },
 
+      { field: 'name', header: 'Tên', sortable: true, width: '35%' },
+
       {
-        field: 'createdAt',
+        field: 'createdAtUtc',
         header: 'Ngày tạo',
         sortable: true,
-        width: 140,
-        render: (row) => dayjs(row.createdAt).format('DD/MM/YYYY'),
-        getSortValue: (row) => new Date(row.createdAt),
+        width: 160,
+        render: (row) => dayjs(row.createdAtUtc).format('DD/MM/YYYY'),
+        getSortValue: (row) => new Date(row.createdAtUtc),
+      },
+
+      {
+        field: 'createdByUsername',
+        header: 'Người tạo',
+        sortable: true,
+        width: 160,
       },
     ],
     [onRowDoubleClick, onView, onEdit, onDelete],
   );
 
   return (
-    <AppTable<DynamicExcelItem>
-      rows={rows}
-      columns={columns}
-      rowKey={(row) => row.id}
-      selectable={false}
-      sortMode="server"
-      sortField={sortField}
-      sortDirection={sortDirection}
-      onSortChange={onSortChange}
-      enablePagination
-      paginationMode="server"
-      page={page}
-      pageSize={pageSize}
-      totalRows={total}
-      onPageChange={onPageChange}
-      onPageSizeChange={onPageSizeChange}
-      onRowDoubleClick={onRowDoubleClick}
-    />
+    <Box>
+      <AppTable<DynamicExcelItem, SortField>
+        rows={rows}
+        columns={columns}
+        rowKey={(row) => row.id}
+        selectable={false}
+        sortMode="server"
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSortChange={onSortChange}
+        enablePagination
+        paginationMode="server"
+        page={page}
+        pageSize={pageSize}
+        totalRows={total}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        onRowDoubleClick={onRowDoubleClick}
+      />
+      {/* (không bắt buộc) */}
+    </Box>
   );
 };
