@@ -1,4 +1,4 @@
-import { baseApi } from '../../../api/base/baseApi';
+import { baseApi } from './base/baseApi';
 
 // ===== Types =====
 export type UnitDto = {

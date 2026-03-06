@@ -6,7 +6,6 @@ import {
   CardContent,
   Snackbar,
   TextField,
-  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -17,7 +16,7 @@ import {
   useSearchUsersQuery,
   useSoftDeleteUserMutation,
   useResetPasswordMutation,
-} from './adminUsersApi';
+} from '../../../api/adminUsersApi';
 import { useGetMeQuery } from '../../../api/base/meApi';
 import { UserEditorDialog } from './UserEditorDialog';
 import { ResetPasswordDialog } from './ResetPasswordDialog';

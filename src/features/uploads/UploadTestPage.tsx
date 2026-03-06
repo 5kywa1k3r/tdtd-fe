@@ -6,7 +6,7 @@ import {
   useCreateUploadSessionMutation,
   useLazyVerifyUploadQuery,
   useLazyPresignDownloadQuery,
-} from './uploadApi';
+} from '../../api/uploadApi';
 import { useTusUpload } from './useTusUpload';
 
 export default function UploadTestPage() {

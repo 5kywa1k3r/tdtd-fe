@@ -1,5 +1,5 @@
 import { WORK_STATUS_FILTER } from '../constants/status';
-import type { WorkDetailData } from '../components/works/WorkForm';
+import type { WorkDetailData } from '../components/works/workform/WorkForm';
 
 export type WorkAttachmentMock = {
   id: string;

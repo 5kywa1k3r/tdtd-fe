@@ -1,13 +1,11 @@
 // src/stores/store.ts
 import { configureStore } from '@reduxjs/toolkit';
-import workReducer from './works/workSlice';
 import authReducer from './authSlice';
 import { baseApi } from '../api/base/baseApi';
 
 
 export const store = configureStore({
   reducer: {
-    work: workReducer,
     auth: authReducer,
     [baseApi.reducerPath]: baseApi.reducer,
   },

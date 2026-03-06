@@ -23,7 +23,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import InputAdornment from '@mui/material/InputAdornment';
 
 import { normalizeVi } from '../../helpers/normalize';
-import { useGetUnitChildrenQuery, type UnitPickNode } from '../../features/admin/units/adminUnitsApi';
+import { useGetUnitChildrenQuery, type UnitPickNode } from '../../api/adminUnitsApi';
 
 const emptyIcon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;

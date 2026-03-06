@@ -1,24 +1,19 @@
-// src/pages/work/WorkListPage.tsx
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-} from '@mui/material';
+import { Box, Dialog, DialogContent } from '@mui/material';
 
-import { useAppDispatch, useAppSelector } from '../../hooks';
-import { setWorkList } from '../../stores/works/workSlice';
-import type { ParentWork } from '../../types/work';
-import { MOCK_WORK_LIST } from '../../data/mockData';
-import { WorkListTable } from '../../components/works/WorkListTable';
+import { WorkListTable, type WorkSortField } from '../../components/works/WorkListTable';
 import type { SortDirection } from '../../components/common/AppTable';
-import { WorkForm } from '../../components/works/WorkForm';
+
+import { WorkForm } from '../../components/works/workform/WorkForm';
 import { WorkFilter, type WorkFilterValues } from '../../components/works/WorkFilter';
-import { STATUS_FILTER_OPTIONS } from '../../constants/status';
 import { WorkListToolbar } from '../../components/common/WorkListToolbar';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+
+import type { ParentWork } from '../../types/work';
+import { useSearchWorksQuery, useDeleteWorkMutation } from '../../api/workApi';
+
+import { WORK_TYPE, WORK_STATUS_OPTIONS } from '../../types/work';
 
 interface WorkListPageProps {
   type: 'TASK' | 'INDICATOR';
@@ -27,43 +22,73 @@ interface WorkListPageProps {
 const DEFAULT_PAGE_SIZE = 10;
 
 const WorkListPage = ({ type }: WorkListPageProps) => {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const rows = useAppSelector((s) => s.work.workList);
+
+  const basePath = type === 'TASK' ? '/tasks' : '/indicators';
+  const nameColumnHeader = type === 'TASK' ? 'Tên nhiệm vụ' : 'Tên chỉ tiêu';
 
   const [openCreate, setOpenCreate] = useState(false);
 
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [sortField, setSortField] = useState<string>('fromDate');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  const basePath = type === 'TASK' ? '/tasks' : '/indicators';
-  const nameColumnHeader = type === 'TASK' ? 'Tên nhiệm vụ' : 'Tên chỉ tiêu';
-  const totalRows = MOCK_WORK_LIST.length;
+  const [sortField, setSortField] = useState<WorkSortField>('createdAtUtc');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  useEffect(() => {
-    let data = [...MOCK_WORK_LIST];
+  const [filter, setFilter] = useState<WorkFilterValues>({
+    q: '',
+    status: null,
+    leaderDirectiveUserId: null,
+    priority: null,
+  });
 
-    data.sort((a: any, b: any) => {
-      const va = a[sortField];
-      const vb = b[sortField];
+  // ✅ dùng constant chuẩn hoá enum số
+  const STATUS_OPTIONS = useMemo(() => WORK_STATUS_OPTIONS, []);
 
-      if (va == null && vb == null) return 0;
-      if (va == null) return -1;
-      if (vb == null) return 1;
-      if (va < vb) return sortDirection === 'asc' ? -1 : 1;
-      if (va > vb) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
+  const { data, isFetching } = useSearchWorksQuery({
+    q: filter.q || undefined,
+    status: filter.status ?? null,
+    leaderDirectiveUserId: filter.leaderDirectiveUserId ?? null,
 
-    const start = page * pageSize;
-    const pageData = data.slice(start, start + pageSize);
+    // ✅ ÉP THEO TAB: gửi số 1/2 đúng BE enum
+    type: WORK_TYPE[type],
 
-    dispatch(setWorkList(pageData));
-  }, [dispatch, page, pageSize, sortField, sortDirection, type]);
+    // ✅ priority là số 1/2/3
+    priority: filter.priority ?? null,
 
-  const handleSortChange = (field: string, direction: SortDirection) => {
+    page,
+    pageSize,
+    sortField,
+    sortDirection,
+  });
+
+  // ✅ map đúng WorkListRow hiện tại của BE:
+  // (Id, AutoCode, Code, Name, Status, Priority, LeaderDirectiveUserId, LeaderWatchCount, DueDate, CreatedAtUtc)
+  const rows: ParentWork[] = useMemo(
+    () =>
+      (data?.rows ?? []).map((x: any) => ({
+        id: x.id,
+        autoCode: x.autoCode,
+        code: x.code ?? null,
+        name: x.name,
+
+        // fields UI đang dùng
+        dueDate: x.dueDate ?? null,
+        createdAtUtc: x.createdAtUtc,
+        status: x.status,
+
+        leaderDirectiveUserId: x.leaderDirectiveUserId,
+        leaderWatchCount: x.leaderWatchCount,
+
+        // ✅ NEW: ưu tiên số
+        // priority: x.priority ?? 2, // default MEDIUM=2 nếu BE thiếu
+      })),
+    [data],
+  );
+
+  const totalRows = data?.totalRows ?? 0;
+
+  const handleSortChange = (field: WorkSortField, direction: SortDirection) => {
     setSortField(field);
     setSortDirection(direction);
     setPage(0);
@@ -76,48 +101,37 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
     setPage(0);
   };
 
-  const [filter, setFilter] = useState<WorkFilterValues>({
-    leader: null,
-    fromDate: null,
-    toDate: null,
-    code: '',
-    unitIds: [],
-    status: null,
-  });
-
   const [deleteTarget, setDeleteTarget] = useState<ParentWork | null>(null);
-
   const openDelete = (row: ParentWork) => setDeleteTarget(row);
   const closeDelete = () => setDeleteTarget(null);
 
-  const handleConfirmDelete = () => {
+  const [deleteWork, { isLoading: deleting }] = useDeleteWorkMutation();
+
+  const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
-    // TODO: thay bằng thunk API sau
-    // dispatch(deleteWorkThunk(deleteTarget.id))
-    console.log('delete', deleteTarget.id);
+    await deleteWork(deleteTarget.id).unwrap();
     closeDelete();
   };
 
   return (
     <Box sx={{ flex: 1, p: 2, pt: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* Thanh action: Filter + Tạo mới */}
-        <Box>
-          <WorkListToolbar
-            type={type}
-            onCreate={() => setOpenCreate(true)}
-          />
-        </Box>
+      <Box>
+        <WorkListToolbar type={type} onCreate={() => setOpenCreate(true)} />
+      </Box>
 
-        <Box>
-          <WorkFilter
-            value={filter}
-            onChange={setFilter}
-            statusOptions={STATUS_FILTER_OPTIONS}
-          />
-        </Box>
-      {/* Bảng */}
+      <Box>
+        <WorkFilter
+          value={filter}
+          onChange={(v) => setFilter(v)}
+          statusOptions={STATUS_OPTIONS}
+          leaderOptions={[]}
+          onSubmit={() => setPage(0)}
+          onReset={() => setPage(0)}
+        />
+      </Box>
+
       <WorkListTable
-        rows={rows as ParentWork[]}
+        rows={rows}
         total={totalRows}
         page={page}
         pageSize={pageSize}
@@ -128,42 +142,34 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
         onSortChange={handleSortChange}
         onRowDoubleClick={(row) => navigate(`${basePath}/${row.id}`)}
         nameColumnHeader={nameColumnHeader}
-        onEdit={(row) => navigate(`${basePath}/${row.id}/edit`)} // route 
+        onEdit={(row) => navigate(`${basePath}/${row.id}/edit`)}
         onDelete={(row) => openDelete(row)}
       />
 
-      {/* Dialog tạo */}
-      <Dialog
-        open={openCreate}
-        onClose={() => setOpenCreate(false)}
-        fullWidth
-        maxWidth="lg"
-      >
-        <DialogTitle>
-          {type === 'TASK' ? 'Tạo nhiệm vụ mới' : 'Tạo chỉ tiêu mới'}
-        </DialogTitle>
+      <Dialog open={openCreate} onClose={() => setOpenCreate(false)} fullWidth maxWidth="md">
         <DialogContent dividers sx={{ pt: 2, pb: 3 }}>
           <WorkForm
             type={type}
             mode="create"
             onCancel={() => setOpenCreate(false)}
-            onSaved={() => {
-              setOpenCreate(false);
-              // TODO reload list
-            }}    
+            onSaved={() => setOpenCreate(false)}
           />
         </DialogContent>
       </Dialog>
+
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Xóa công việc"
+        title="Xóa"
         message={`Xóa "${deleteTarget?.name}"?`}
         confirmText="Xóa"
         cancelText="Hủy"
         variant="danger"
+        confirmLoading={deleting}
         onClose={closeDelete}
         onConfirm={handleConfirmDelete}
       />
+
+      {isFetching ? null : null}
     </Box>
   );
 };

@@ -1,4 +1,3 @@
-// src/components/works/WorkListTable.tsx
 import React, { useMemo } from 'react';
 import dayjs from 'dayjs';
 import { IconButton, Stack, Tooltip } from '@mui/material';
@@ -9,7 +8,10 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 import { AppTable, type AppTableColumn, type SortDirection } from '../common/AppTable';
 import type { ParentWork } from '../../types/work';
-import { StatusChip } from '../common/StatusChip';
+import { WorkStatusChip } from '../common/WorkStatusChip';
+
+/** ✅ NEW */
+export type WorkSortField = 'autoCode' | 'name' | 'dueDate' | 'createdAtUtc' | 'priority';
 
 interface WorkListTableProps {
   rows: ParentWork[];
@@ -20,18 +22,25 @@ interface WorkListTableProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 
-  sortField: string;
+  sortField: WorkSortField;
   sortDirection: SortDirection;
-  onSortChange: (field: string, direction: SortDirection) => void;
+  onSortChange: (field: WorkSortField, direction: SortDirection) => void;
 
   onRowDoubleClick?: (row: ParentWork) => void;
 
-  // NEW: edit/delete handlers
   onEdit?: (row: ParentWork) => void;
   onDelete?: (row: ParentWork) => void;
 
   nameColumnHeader: string;
 }
+
+/** ✅ NEW: label hiển thị */
+const typeLabel = (t?: string | null) => (t === 'INDICATOR' ? 'Chỉ tiêu' : 'Nhiệm vụ');
+const priorityLabel = (p?: string | null) => {
+  if (p === 'HIGH') return 'Cao';
+  if (p === 'LOW') return 'Thấp';
+  return 'Trung bình';
+};
 
 export const WorkListTable: React.FC<WorkListTableProps> = ({
   rows,
@@ -65,7 +74,6 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
                   e.stopPropagation();
                   onRowDoubleClick?.(row);
                 }}
-                sx={{ '&:hover': { transform: 'scale(1.05)' } }}
               >
                 <VisibilityIcon fontSize="small" />
               </IconButton>
@@ -78,7 +86,6 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
                   e.stopPropagation();
                   onEdit?.(row);
                 }}
-                sx={{ '&:hover': { transform: 'scale(1.05)' } }}
               >
                 <EditIcon fontSize="small" />
               </IconButton>
@@ -91,7 +98,6 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
                   e.stopPropagation();
                   onDelete?.(row);
                 }}
-                sx={{ '&:hover': { transform: 'scale(1.05)' } }}
               >
                 <DeleteOutlineIcon fontSize="small" />
               </IconButton>
@@ -100,7 +106,7 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
         ),
       },
 
-      { field: 'code', header: 'Mã', sortable: true, width: 120 },
+      { field: 'autoCode', header: 'Mã', sortable: true, width: 160 },
 
       { field: 'name', header: nameColumnHeader, sortable: true, width: '40%' },
 
@@ -109,32 +115,48 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
         header: 'Trạng thái',
         sortable: false,
         width: 180,
-        render: (row) => <StatusChip status={row.status} />,
+        render: (row) => <WorkStatusChip status={row.status} />,
+      },
+
+      /** ✅ NEW */
+      {
+        field: 'type',
+        header: 'Loại',
+        sortable: true,
+        width: 110,
+        render: (row) => typeLabel((row as any).type),
+      },
+
+      /** ✅ NEW */
+      {
+        field: 'priority',
+        header: 'Ưu tiên',
+        sortable: true,
+        width: 120,
+        render: (row) => priorityLabel((row as any).priority),
       },
 
       {
-        field: 'fromDate',
-        header: 'Từ ngày',
+        field: 'dueDate',
+        header: 'Hạn',
         sortable: true,
         width: 120,
-        render: (row) => dayjs(row.fromDate).format('DD/MM/YYYY'),
-      },
-      {
-        field: 'toDate',
-        header: 'Đến ngày',
-        sortable: true,
-        width: 120,
-        render: (row) => dayjs(row.toDate).format('DD/MM/YYYY'),
+        render: (row) => (row.dueDate ? dayjs(row.dueDate).format('DD/MM/YYYY') : ''),
       },
 
-      { field: 'leader', header: 'Lãnh đạo chỉ đạo', sortable: true, width: 180 },
-      { field: 'focalOfficer', header: 'Cán bộ đầu mối', sortable: true, width: 180 },
+      {
+        field: 'createdAtUtc',
+        header: 'Ngày tạo',
+        sortable: true,
+        width: 130,
+        render: (row) => dayjs(row.createdAtUtc).format('DD/MM/YYYY'),
+      },
     ],
     [onRowDoubleClick, onEdit, onDelete, nameColumnHeader],
   );
 
   return (
-    <AppTable<ParentWork>
+    <AppTable<ParentWork, WorkSortField>
       rows={rows}
       columns={columns}
       rowKey={(row) => row.id}

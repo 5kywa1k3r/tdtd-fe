@@ -1,4 +1,4 @@
-import { baseApi } from '../../api/base/baseApi';
+import { baseApi } from './base/baseApi';
 import type { CreateUploadSessionResp, VerifyUploadResp, PresignResp } from './upload.type';
 
 export type CreateUploadSessionReq = {

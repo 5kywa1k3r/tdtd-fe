@@ -1,4 +1,4 @@
-import type { UnitDto } from './adminUnitsApi';
+import type { UnitDto } from '../../../api/adminUnitsApi';
 
 // UnitMultiSelect đang dùng UnitNode shape: { id, name, children? }
 export type UnitNode = {

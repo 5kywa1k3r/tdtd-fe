@@ -1,135 +1,170 @@
 // src/types/work.ts
-import type { WorkStatusCore } from '../constants/status';
+import { type UserRefDTO } from "./userRefDto";
+export const WORK_STATUS = {
+  S1: 1,
+  S2: 2,
+  S3: 3,
+  S4: 4,
+  S5: 5,
+} as const;
+export type WorkStatusCore = typeof WORK_STATUS[keyof typeof WORK_STATUS];
 
-export type ReportScheduleType =
-  | 'BY_DATE'
-  | 'BY_DATE_LIST'
-  | 'BY_WEEK'
-  | 'BY_WEEK_LIST'
-  | 'WEEKDAY_EVERY_WEEK'
-  | 'BY_MONTH'
-  | 'WEEK_OF_MONTH'
-  | 'BY_QUARTER'
-  | 'BY_QUARTER_LIST'
-  | 'HALF_YEAR'
-  | 'YEARLY';
+export const WORK_TYPE = {
+  TASK: 1,
+  INDICATOR: 2,
+} as const;
+
+export type WorkTypeCore = typeof WORK_TYPE[keyof typeof WORK_TYPE];
+
+export const WORK_PRIORITY = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+} as const;
+export type WorkPriorityCore = typeof WORK_PRIORITY[keyof typeof WORK_PRIORITY];
+
+export interface WorkListRow {
+  id: string;
+  autoCode: string;
+  code?: string | null;
+  name: string;
+
+  status: WorkStatusCore;
+  priority: WorkPriorityCore;
+  type: WorkTypeCore;
+
+  createdByUserId?: string | null;
+  ownerName?: string | null;
+
+  leaderDirectiveUserId: string;
+  leaderWatchCount: number;
+
+  dueDate?: string | null;
+  createdAtUtc: string;
+}
+
+export interface WorkDetail {
+  id: string;
+  autoCode: string;
+  code?: string | null;
+  name: string;
+  description?: string | null;
+  note?: string | null;
+
+  status: WorkStatusCore;
+  createdByUserId?: string | null;
+
+  leaderDirectiveUserId: string;
+  leaderWatchUserIds: string[];
+
+  startDate?: string | null;
+  endDate?: string | null;
+  dueDate?: string | null;
+
+  priority: WorkPriorityCore;
+  type: WorkTypeCore;
+
+  createdAtUtc: string;
+  updatedAtUtc: string;
+
+  owner?: UserRefDTO | null;
+  leaderDirective?: UserRefDTO | null;
+  leaderWatch?: UserRefDTO[];
+}
 
 export interface ParentWork {
   id: string;
-  code: string;
+  autoCode: string;
+  code?: string | null;
   name: string;
-  fromDate: string;
-  toDate: string;
-  leader: string;
-  focalOfficer: string;
-  // 👇 thêm để biết nó là con của ai (optional)
+
+  startDate?: string | null;
+  endDate?: string | null;
+  dueDate?: string | null;
+
+  leaderDirectiveUserId: string;
+  leaderWatchCount: number;
+  createdAtUtc: string;
+
   parentId?: string | null;
   status: WorkStatusCore;
 }
 
-export interface CommonAttributes {
+export const WORK_TYPE_OPTIONS = [
+  { value: WORK_TYPE.TASK, label: "Nhiệm vụ" },
+  { value: WORK_TYPE.INDICATOR, label: "Chỉ tiêu" },
+] as const;
+
+export const WORK_PRIORITY_OPTIONS = [
+  { value: WORK_PRIORITY.LOW, label: "Thấp" },
+  { value: WORK_PRIORITY.MEDIUM, label: "Trung bình" },
+  { value: WORK_PRIORITY.HIGH, label: "Cao" },
+] as const;
+
+export const WORK_STATUS_OPTIONS = [
+  { value: WORK_STATUS.S1, label: "Trạng thái 1" },
+  { value: WORK_STATUS.S2, label: "Trạng thái 2" },
+  { value: WORK_STATUS.S3, label: "Trạng thái 3" },
+  { value: WORK_STATUS.S4, label: "Trạng thái 4" },
+  { value: WORK_STATUS.S5, label: "Trạng thái 5" },
+] as const;
+
+export interface WorkListRow {
+  id: string;
+  autoCode: string;
+  code?: string | null;
   name: string;
-  fromDate: string;
-  toDate: string;
-  basis: string; // Căn cứ giao work
-  priority: 'NORMAL' | 'URGENT' | 'VERY_URGENT';
-  directingLeader: string;
-  unitIds: string[]; // DANH SÁCH đơn vị nhận nhiệm vụ
-  scheduleType: ReportScheduleType | '';
-  scheduleConfig: any; // tạm để any, sau refine sau
+  status: WorkStatusCore;
+
+  leaderDirectiveUserId: string;
+  leaderWatchCount: number;
+
+  dueDate?: string | null;
+  createdAtUtc: string;
+
+  attachmentCount: number;
 }
 
-export type ReportStatus = 'NOT_REPORTED' | 'REPORTED' | 'LATE';
-
-export interface ReportingUnitRow {
+export interface WorkDetail {
   id: string;
-  unitName: string;
-  officerName: string;
-  officerPhone?: string;
-  officerEmail?: string;
-  status: ReportStatus;
-  hasDifficulties: boolean;
-  submittedAt?: string; // ngày báo cáo
-}
-
-export interface ReportingUnitDetail {
-  id: string;
-  basis: string;
-  content?: string; // nội dung thực hiện / hoặc mô tả bảng biểu
-  difficulties?: string;
-  submittedAt?: string;
-  solution?: string; // phương án xử lý
-  comment?: string; // nhận xét đánh giá
-}
-
-// UI mode: TREE = giao diện (1) – nhiệm vụ + danh sách con
-//          DETAIL = giao diện (2) – cập nhật nhiệm vụ
-export type WorkUiMode = 'TREE' | 'DETAIL';
-
-export interface WorkState {
-  // Work đang được xem / chỉnh
-  parentWork: ParentWork | null;
-
-  showHeader: boolean;
-  mode: 'VIEW' | 'ADDING_WORK' | 'ADDING_TEMPLATE';
-  templates: { id: string; name: string }[];
-
-  // Giao diện hiện tại: TREE hay DETAIL
-  uiMode: WorkUiMode;
-
-  // Form thuộc tính chung dùng khi bấm "Thêm"
-  commonAttributes: CommonAttributes;
-
-  // Danh sách work con trực tiếp (cây)
-  children: ParentWork[];
-
-  // Danh sách work trong màn WorkList (có thể được giao từ nhiều thằng)
-  workList: ParentWork[];
-
-  // Phần báo cáo
-  reportingUnits: ReportingUnitRow[];
-  selectedUnitDetail: ReportingUnitDetail | null;
-
-  loading: boolean;
-  error?: string;
-}
-
-//REAL CODE, trên là mock up
-import type { WorkStatus } from '../constants/workStatus';
-
-export type WorkType = 'TASK' | 'INDICATOR';
-
-export type UserLite = { id: string; name: string; rank?: number | null };
-
-export type WorkRow = {
-  id: string;
-  type: WorkType;
-  code: string | null;
+  autoCode: string;
+  code?: string | null;
   name: string;
-
-  status: WorkStatus;
-  fromDate: string;
-  toDate: string;
-
-  unitIds: string[];
-
-  leader?: UserLite | null;         // lãnh đạo chỉ đạo
-  watcherLeader?: UserLite | null;  // lãnh đạo theo dõi
-  focalOfficer?: { id: string; name: string } | null;
-
-  canEdit: boolean;                 // BE quyết định
-};
-
-export type WorkDetail = WorkRow & {
-  priority?: 'LOW'|'MEDIUM'|'HIGH'|null;
-  basisText?: string | null;
+  description?: string | null;
   note?: string | null;
-  basisAttachments?: {
-    id: string;
-    fileName: string;
-    fileSize?: number | null;
-    mimeType?: string | null;
-    description?: string | null;
-    downloadUrl?: string | null;
-  }[];
-};
+
+  status: WorkStatusCore;
+  priority: WorkPriorityCore;
+  type: WorkTypeCore;
+
+  createdByUserId?: string | null;
+
+  leaderDirectiveUserId: string;
+  leaderWatchUserIds: string[];
+
+  startDate?: string | null;
+  endDate?: string | null;
+  dueDate?: string | null;
+
+  createdAtUtc: string;
+  updatedAtUtc: string;
+
+  owner?: UserRefDTO | null;
+  leaderDirective?: UserRefDTO | null;
+  leaderWatch?: UserRefDTO[];
+}
+
+export interface ParentWork {
+  id: string;
+  autoCode: string;
+  code?: string | null;
+  name: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  dueDate?: string | null;
+  leaderDirectiveUserId: string;
+  leaderWatchCount: number;
+  createdAtUtc: string;
+  parentId?: string | null;
+  status: WorkStatusCore;
+}

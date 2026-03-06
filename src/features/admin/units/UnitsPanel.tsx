@@ -5,7 +5,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useEffect, useMemo, useState } from 'react';
 
 import { useGetMeQuery } from '../../../api/base/meApi';
-import { useSearchSubtreeByCodePrefixQuery, useSoftDeleteUnitMutation } from './adminUnitsApi';
+import { useSearchSubtreeByCodePrefixQuery, useSoftDeleteUnitMutation } from '../../../api/adminUnitsApi';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { UnitEditorDrawer } from './UnitEditorDrawer';
 import { LazyUnitMultiSelect } from '../../../components/common/LazyUnitMultiSelect';

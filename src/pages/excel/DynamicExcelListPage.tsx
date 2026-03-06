@@ -52,8 +52,8 @@ export default function DynamicExcelListPage() {
 
   const [search, searchState] = useSearchDynamicExcelMutation();
   const [del] = useDeleteDynamicExcelMutation();
-  const rows = searchState.data?.items ?? [];
-  const total = searchState.data?.total ?? 0;
+  const rows = searchState.data?.rows ?? [];
+  const total = searchState.data?.totalRows ?? 0;
 
   const req = useMemo<DynamicExcelSearchReq>(
     () => ({

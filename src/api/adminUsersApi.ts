@@ -1,13 +1,7 @@
-import { baseApi } from '../../../api/base/baseApi';
+import { baseApi } from './base/baseApi';
+import { type PagedResult } from '../types/pagedResult';
 
 export type SortDirection = 'asc' | 'desc';
-
-export type PagedResult<T> = {
-  rows: T[];
-  totalRows: number;
-  page: number; // 0-based
-  pageSize: number;
-};
 
 export type UserSearchRow = {
   id: string;

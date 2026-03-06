@@ -1,35 +1,28 @@
 // src/components/works/WorkFilter.tsx
 import React from 'react';
-import dayjs from 'dayjs';
 import { TextField, MenuItem, Button, Box } from '@mui/material';
-
-import { MantineDateRangeFilter } from '../../components/common/MantineDateRangeFilter';
-import { UnitMultiSelect } from '../../components/common/UnitMultiSelect';
-import { UNIT_TREE, type UnitId } from '../../data/unitMock';
-import { MOCK_LEADER_OPTIONS } from '../../data/mockData';
-
-import type { WorkStatusFilterValue } from '../../constants/status';
+import type { WorkPriorityCore, WorkStatusCore } from '../../types/work';
+import { WORK_PRIORITY_OPTIONS } from '../../types/work';
 
 export interface WorkFilterValues {
-  fromDate: dayjs.Dayjs | null;
-  toDate: dayjs.Dayjs | null;
-  code: string;
-  unitIds: UnitId[];
-  status: WorkStatusFilterValue | null;
-  leader: string | null;              // << NEW FIELD
+  q: string;
+  status: WorkStatusCore | null;
+  leaderDirectiveUserId: string | null;
+  priority: WorkPriorityCore | null;
 }
 
-interface Option {
-  value: WorkStatusFilterValue;
+export type Option<T = number | string> = {
+  value: T;
   label: string;
-}
+};
 
 interface WorkFilterProps {
   value: WorkFilterValues;
   onChange: (v: WorkFilterValues) => void;
-  statusOptions: Option[];
+  statusOptions: readonly Option<WorkStatusCore>[];
   onSubmit?: (v: WorkFilterValues) => void;
   onReset?: () => void;
+  leaderOptions: { id: string; name: string }[];
 }
 
 export const WorkFilter: React.FC<WorkFilterProps> = ({
@@ -38,157 +31,92 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
   statusOptions,
   onSubmit,
   onReset,
+  leaderOptions,
 }) => {
-  const setField = (field: keyof WorkFilterValues, val: any) => {
-    onChange({ ...value, [field]: val });
-  };
-
-  const handleSubmit = () => onSubmit?.(value);
+  const setField = (field: keyof WorkFilterValues, val: any) => onChange({ ...value, [field]: val });
 
   const handleReset = () => {
-    onChange({
-      fromDate: null,
-      toDate: null,
-      code: '',
-      unitIds: [],
-      status: null,
-      leader: null,
-    });
+    onChange({ q: '', status: null, leaderDirectiveUserId: null, priority: null });
     onReset?.();
   };
 
-return (
-  <Box sx={{ width: '100%' }}>
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 2,
-        alignItems: 'center',
-        width: '100%',
-      }}
-    >
-      {/* 1. Khoảng thời gian */}
-      <Box
-        sx={{
-          flex: { xs: '1 1 100%', md: '1 1 0' },
-          minWidth: 240,
-        }}
-      >
-        <MantineDateRangeFilter
-          value={{ from: value.fromDate, to: value.toDate }}
-          onChange={(r) =>
-            onChange({
-              ...value,
-              fromDate: r.from,
-              toDate: r.to,
-            })
-          }
-          placeholder="Chọn khoảng thời gian"
-        />
-      </Box>
+  return (
+    <Box sx={{ width: '100%' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', width: '100%' }}>
+        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 220 }}>
+          <TextField
+            fullWidth
+            size="small"
+            label="Từ khóa (mã/tên)"
+            value={value.q}
+            onChange={(e) => setField('q', e.target.value)}
+          />
+        </Box>
 
-      {/* 2. Mã nhiệm vụ */}
-      <Box
-        sx={{
-          flex: { xs: '1 1 100%', md: '1 1 0' },
-          minWidth: 160,
-        }}
-      >
-        <TextField
-          fullWidth
-          size="small"
-          label="Mã nhiệm vụ"
-          value={value.code}
-          onChange={(e) => setField('code', e.target.value)}
-        />
-      </Box>
+        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 220 }}>
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Lãnh đạo chỉ đạo"
+            value={value.leaderDirectiveUserId ?? ''}
+            onChange={(e) => setField('leaderDirectiveUserId', e.target.value || null)}
+          >
+            <MenuItem value="">Tất cả</MenuItem>
+            {leaderOptions.map((x) => (
+              <MenuItem key={x.id} value={x.id}>
+                {x.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
 
-      {/* 3. Đơn vị */}
-      <Box
-        sx={{
-          flex: { xs: '1 1 100%', md: '1 1 0' },
-          minWidth: 200,
-        }}
-      >
-        <UnitMultiSelect
-          options={UNIT_TREE}
-          value={value.unitIds}
-          onChange={(ids) => setField('unitIds', ids)}
-        />
-      </Box>
+        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 180 }}>
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Trạng thái"
+            value={value.status ?? ''}
+            onChange={(e) => setField('status', e.target.value ? (Number(e.target.value) as WorkStatusCore) : null)}
+          >
+            <MenuItem value="">Tất cả</MenuItem>
+            {statusOptions.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
 
-      {/* 4. Lãnh đạo */}
-      <Box
-        sx={{
-          flex: { xs: '1 1 100%', md: '1 1 0' },
-          minWidth: 180,
-        }}
-      >
-        <TextField
-          select
-          fullWidth
-          size="small"
-          label="Lãnh đạo"
-          value={value.leader ?? ''}
-          onChange={(e) => setField('leader', e.target.value || null)}
-        >
-          <MenuItem value="">Tất cả</MenuItem>
-          {MOCK_LEADER_OPTIONS.map((name) => (
-            <MenuItem key={name} value={name}>
-              {name}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Box>
+        {/* ✅ NEW: Ưu tiên (số 1/2/3) */}
+        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 160 }}>
+          <TextField
+            select
+            fullWidth
+            size="small"
+            label="Ưu tiên"
+            value={value.priority ?? ''}
+            onChange={(e) => setField('priority', e.target.value ? (Number(e.target.value) as WorkPriorityCore) : null)}
+          >
+            <MenuItem value="">Tất cả</MenuItem>
+            {WORK_PRIORITY_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
 
-      {/* 5. Trạng thái */}
-      <Box
-        sx={{
-          flex: { xs: '1 1 100%', md: '1 1 0' },
-          minWidth: 180,
-        }}
-      >
-        <TextField
-          select
-          fullWidth
-          size="small"
-          label="Trạng thái"
-          value={value.status ?? ''}
-          onChange={(e) =>
-            setField(
-              'status',
-              (e.target.value || null) as WorkStatusFilterValue | null
-            )
-          }
-        >
-          <MenuItem value="">Tất cả</MenuItem>
-          {statusOptions.map((opt) => (
-            <MenuItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Box>
-
-      {/* 6. Nút hành động */}
-      <Box
-        sx={{
-          display: 'flex',
-          gap: 1,
-          flexShrink: 0,
-          ml: { xs: 0, md: 'auto' },   // đẩy sang phải khi đủ chỗ
-        }}
-      >
-        <Button variant="outlined" size="small" onClick={handleReset}>
-          Xóa lọc
-        </Button>
-        <Button variant="contained" size="small" onClick={handleSubmit}>
-          Tìm kiếm
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, ml: { xs: 0, md: 'auto' } }}>
+          <Button variant="outlined" size="small" onClick={handleReset}>
+            Xóa lọc
+          </Button>
+          <Button variant="contained" size="small" onClick={() => onSubmit?.(value)}>
+            Tìm kiếm
+          </Button>
+        </Box>
       </Box>
     </Box>
-  </Box>
-);
-
+  );
 };

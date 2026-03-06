@@ -11,8 +11,7 @@ import WorkListPage from '../pages/works/WorkListPage';
 import DynamicExcelCreatePage from '../pages/excel/DynamicExcelCreatePage';
 import DynamicExcelViewPage from '../pages/excel/DynamicExcelViewPage';
 import DynamicExcelEditPage from '../pages/excel/DynamicExcelEditPage';
-import WorkDetailPage from '../pages/works/detail-work-page/WorkDetailPage';
-import WorkEditPage from '../pages/works/WorkEditPage';
+import WorkDetailPage from '../pages/works/WorkDetailPage';
 import DynamicExcelListPage from '../pages/excel/DynamicExcelListPage';
 import AdminAccountsPage from '../pages/admin/AdminAccountPages';
 
@@ -54,7 +53,6 @@ export const appRoutes: RouteObject[] = [
         children: [
           { index: true, element: <WorkListPage type="TASK" /> },
           { path: ':id', element: <WorkDetailPage type="TASK" /> },
-          { path: ':id/edit', element: <WorkEditPage type="TASK" /> },
         ],
       },
 
@@ -70,7 +68,6 @@ export const appRoutes: RouteObject[] = [
         children: [
           { index: true, element: <WorkListPage type="INDICATOR" /> },
           { path: ':id', element: <WorkDetailPage type="INDICATOR" /> },
-          { path: ':id/edit', element: <WorkEditPage type="INDICATOR" /> },
         ],
       },
 

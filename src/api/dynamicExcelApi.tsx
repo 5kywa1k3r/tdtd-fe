@@ -1,4 +1,5 @@
 import { baseApi } from "./base/baseApi";
+import { type PagedResult } from '../types/pagedResult';
 
 export type DynamicExcelRow = {
   id: string;
@@ -16,8 +17,6 @@ export type DynamicExcelDetail = DynamicExcelRow & {
   w: number;
   h: number;
 };
-
-export type PagedResult<T> = { items: T[]; total: number; page: number; pageSize: number };
 
 export type DynamicExcelSearchReq = {
   q?: string;

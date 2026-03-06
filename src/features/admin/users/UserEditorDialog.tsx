@@ -18,7 +18,7 @@ import {
   useCreateUserMutation,
   useUpdateUserMutation,
   useGetUserByIdQuery
-} from './adminUsersApi';
+} from '../../../api/adminUsersApi';
 import { LazyUnitMultiSelect } from '../../../components/common/LazyUnitMultiSelect';
 
 import {

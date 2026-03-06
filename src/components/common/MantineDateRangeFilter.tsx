@@ -1,22 +1,13 @@
 // src/components/common/MantineDateRangeFilter.tsx
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import dayjs, { Dayjs } from 'dayjs';
-import 'dayjs/locale/vi';
+import React, { useMemo, useState, useEffect, useCallback } from "react";
+import dayjs, { Dayjs } from "dayjs";
+import "dayjs/locale/vi";
 
-import { Popover, TextInput, Group, Button, Card, Text, Stack } from '@mantine/core';
-import { DatePicker } from '@mantine/dates';
-import { IconCalendar } from '@tabler/icons-react';
+import { Popover, TextInput, Group, Button, Stack } from "@mantine/core";
+import { DatePicker } from "@mantine/dates";
+import { IconCalendar } from "@tabler/icons-react";
 
-dayjs.locale('vi');
-
-const inputStyles = {
-  input: {
-    height: 40,
-    paddingTop: 8,
-    paddingBottom: 8,
-    fontSize: 16,
-  },
-};
+dayjs.locale("vi");
 
 export interface DateRangeFilterValue {
   from: Dayjs | null; // startOf('day')
@@ -27,59 +18,51 @@ interface MantineDateRangeFilterProps {
   value?: DateRangeFilterValue;
   onChange?: (v: DateRangeFilterValue) => void;
   placeholder?: string;
+
+  inputHeight?: number;   // default 40 (khớp MUI small)
+  dropdownWidth?: number; // default 720
+  zIndex?: number;        // default 20000
+  disabled?: boolean;
 }
 
-const toStr = (d: Dayjs | null | undefined) =>
-  d ? d.format('YYYY-MM-DD') : null;
-
-const toDayStart = (s: string | null) =>
-  s ? dayjs(s).startOf('day') : null;
-
-const toDayEnd = (s: string | null) =>
-  s ? dayjs(s).endOf('day') : null;
+const toDate = (d: Dayjs | null | undefined) => (d ? d.toDate() : null);
+const toStart = (d: Date | null) => (d ? dayjs(d).startOf("day") : null);
+const toEnd = (d: Date | null) => (d ? dayjs(d).endOf("day") : null);
 
 export const MantineDateRangeFilter: React.FC<MantineDateRangeFilterProps> = ({
   value,
   onChange,
-  placeholder = 'Chọn khoảng thời gian',
+  placeholder = "Chọn khoảng thời gian",
+  inputHeight = 40,
+  dropdownWidth = 560,
+  zIndex = 2000,
+  disabled,
 }) => {
   const [opened, setOpened] = useState(false);
 
-  // ✅ Mantine Dates (project của bệ hạ): string | null
-  const [fromStr, setFromStr] = useState<string | null>(toStr(value?.from?.startOf('day') ?? null));
-  const [toStrState, setToStrState] = useState<string | null>(toStr(value?.to?.endOf('day') ?? null));
+  // DatePicker type="range" dùng tuple Date|null
+  const [range, setRange] = useState<[Date | null, Date | null]>([
+    toDate(value?.from),
+    toDate(value?.to),
+  ]);
 
-  // sync khi value từ ngoài đổi (chỉ đồng bộ local state)
   useEffect(() => {
-    const nextFrom = toStr(value?.from?.startOf('day') ?? null);
-    const nextTo = toStr(value?.to?.endOf('day') ?? null);
-
-    if (nextFrom !== fromStr) setFromStr(nextFrom);
-    if (nextTo !== toStrState) setToStrState(nextTo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setRange([toDate(value?.from), toDate(value?.to)]);
   }, [value?.from, value?.to]);
 
-  const fromDayjs = useMemo(() => toDayStart(fromStr), [fromStr]);
-  const toDayjs = useMemo(() => toDayEnd(toStrState), [toStrState]);
-
   const label = useMemo(() => {
-    const from = fromDayjs;
-    const to = toDayjs;
+    const [f, t] = range;
+    if (!f && !t) return "";
+    if (f && !t) return `Từ ${dayjs(f).format("DD/MM/YYYY")}`;
+    if (!f && t) return `Đến ${dayjs(t).format("DD/MM/YYYY")}`;
+    return `${dayjs(f!).format("DD/MM/YYYY")} – ${dayjs(t!).format("DD/MM/YYYY")}`;
+  }, [range]);
 
-    if (!from && !to) return '';
-    if (from && !to) return `Từ ${from.format('DD/MM/YYYY')}`;
-    if (!from && to) return `Đến ${to.format('DD/MM/YYYY')}`;
-    if (from && to && from.isSame(to, 'day')) return `Ngày ${from.format('DD/MM/YYYY')}`;
-    if (from && to) return `Từ ${from.format('DD/MM/YYYY')} đến ${to.format('DD/MM/YYYY')}`;
-    return '';
-  }, [fromDayjs, toDayjs]);
-
-  const emitChange = useCallback(
-    (f: string | null, t: string | null) => {
-      if (!onChange) return;
-      onChange({
-        from: toDayStart(f),
-        to: toDayEnd(t), // ✅ inclusive end-day
+  const emit = useCallback(
+    (r: [Date | null, Date | null]) => {
+      onChange?.({
+        from: toStart(r[0]),
+        to: toEnd(r[1]),
       });
     },
     [onChange]
@@ -89,68 +72,53 @@ export const MantineDateRangeFilter: React.FC<MantineDateRangeFilterProps> = ({
     <Popover
       opened={opened}
       onChange={setOpened}
-      width={600}
       position="bottom-start"
       withArrow
       shadow="md"
       closeOnClickOutside={false}
+      withinPortal
+      zIndex={zIndex}
+      width={dropdownWidth}
     >
       <Popover.Target>
         <TextInput
           readOnly
+          disabled={disabled}
           placeholder={placeholder}
           value={label}
-          rightSection={<IconCalendar size={20} />}
-          onClick={() => setOpened((o) => !o)}
-          styles={inputStyles}
+          rightSection={<IconCalendar size={18} />}
+          onClick={() => {
+            if (disabled) return;
+            setOpened((o) => !o);
+          }}
+          styles={{
+            input: {
+              height: inputHeight,
+              paddingTop: 8,
+              paddingBottom: 8,
+              fontSize: 16,
+              cursor: disabled ? "not-allowed" : "pointer",
+            },
+          }}
         />
       </Popover.Target>
 
       <Popover.Dropdown>
         <Stack gap="sm">
-          <Group align="flex-start" grow>
-            <Card shadow="xs" radius="md" withBorder>
-              <Text size="xs" fw={500} c="dimmed" mb={4}>
-                Từ ngày
-              </Text>
-              <DatePicker
-                value={fromStr}
-                onChange={(val) => {
-                  let nextFrom = val;
-                  let nextTo = toStrState;
+          <DatePicker
+            type="range"
+            locale="vi"
+            numberOfColumns={2}
+            allowSingleDateInRange
+            value={range}
+            onChange={(v) => {
+              const r = (v ?? [null, null]) as [Date | null, Date | null];
+              setRange(r);
+              emit(r);
+            }}
+          />
 
-                  // nếu to < from thì reset to
-                  if (nextFrom && nextTo && dayjs(nextTo).isBefore(dayjs(nextFrom), 'day')) {
-                    nextTo = null;
-                  }
-
-                  setFromStr(nextFrom);
-                  setToStrState(nextTo);
-                  emitChange(nextFrom, nextTo);
-                }}
-                locale="vi"
-              />
-            </Card>
-
-            <Card shadow="xs" radius="md" withBorder>
-              <Text size="xs" fw={500} c="dimmed" mb={4}>
-                Đến ngày
-              </Text>
-              <DatePicker
-                value={toStrState}
-                onChange={(val) => {
-                  const nextTo = val;
-                  setToStrState(nextTo);
-                  emitChange(fromStr, nextTo);
-                }}
-                locale="vi"
-                // nếu DatePicker của bệ hạ hỗ trợ minDate là string:
-                minDate={fromStr ?? undefined}
-              />
-            </Card>
-          </Group>
-
-          <Group justify="flex-end" mt="xs">
+          <Group justify="flex-end">
             <Button variant="subtle" size="xs" onClick={() => setOpened(false)}>
               Đóng
             </Button>

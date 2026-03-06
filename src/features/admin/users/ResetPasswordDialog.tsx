@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 
-import { useResetPasswordMutation } from './adminUsersApi';
+import { useResetPasswordMutation } from '../../../api/adminUsersApi';
 
 type Target = { userId: string; username: string; isMe?: boolean } | null;
 

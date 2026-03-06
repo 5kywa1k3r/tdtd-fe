@@ -7,7 +7,7 @@ import {
   useUpdateUnitMutation,
   useSoftDeleteUnitMutation,
   useGetUnitHistoryQuery,
-} from './adminUnitsApi';
+} from '../../../api/adminUnitsApi';
 
 type ParentDisplay = {
   fullName: string;
