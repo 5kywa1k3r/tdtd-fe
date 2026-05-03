@@ -25,8 +25,9 @@ export type WorkCreateReq = {
   name: string;
   description?: string | null;
   note?: string | null;
-  leaderDirectiveUserId: string;
+  leaderDirectiveUserId?: string | null;
   leaderWatchUserIds?: string[];
+  evaluationTemplateId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   dueDate?: string | null;
@@ -62,10 +63,7 @@ export const workApi = baseApi.injectEndpoints({
     }),
 
     getWork: build.query<WorkDetail, string>({
-      query: (id) => ({
-        url: `works/${id}`,
-        method: "GET",
-      }),
+      query: (id) => ({ url: `works/${id}`, method: "GET" }),
       providesTags: (_r, _e, id) => [{ type: "Work" as const, id }],
     }),
 
@@ -75,6 +73,8 @@ export const workApi = baseApi.injectEndpoints({
         method: "POST",
         data: {
           ...data,
+          leaderDirectiveUserId: data.leaderDirectiveUserId?.trim() || null,
+          evaluationTemplateId: data.evaluationTemplateId?.trim() || null,
           priority: data.priority == null ? undefined : Number(data.priority),
           type: Number(data.type),
         },
@@ -88,6 +88,8 @@ export const workApi = baseApi.injectEndpoints({
         method: "PUT",
         data: {
           ...data,
+          leaderDirectiveUserId: data.leaderDirectiveUserId === undefined ? undefined : (data.leaderDirectiveUserId?.trim() || null),
+          evaluationTemplateId: data.evaluationTemplateId === undefined ? undefined : (data.evaluationTemplateId?.trim() || null),
           priority: data.priority == null ? undefined : Number(data.priority),
         },
       }),
@@ -98,10 +100,7 @@ export const workApi = baseApi.injectEndpoints({
     }),
 
     deleteWork: build.mutation<void, string>({
-      query: (id) => ({
-        url: `works/${id}`,
-        method: "DELETE",
-      }),
+      query: (id) => ({ url: `works/${id}`, method: "DELETE" }),
       invalidatesTags: (_r, _e, id) => [
         { type: "Work" as const, id: "LIST" },
         { type: "Work" as const, id },

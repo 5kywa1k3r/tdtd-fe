@@ -1,15 +1,38 @@
-// src/api/reportApi.ts
 import { baseApi } from "./base/baseApi";
 import type {
-  PagedResult,
+  MyReportTemplateDetailResponse,
   MyReportTemplateRow,
   MyReportTemplateSearchRequest,
+  PagedResult,
+  SaveWorkAssignmentReportDraftRequest,
+  SubmitWorkAssignmentReportRequest,
+  ReturnWorkAssignmentReportRequest,
   WorkAssignmentReportListRow,
+  WorkAssignmentReportLogRow,
   WorkAssignmentReportResponse,
   WorkAssignmentReportSearchRequest,
-  InitWorkAssignmentReportRequest,
-  SaveWorkAssignmentReportDraftRequest,
+  CreateUserCreatedReportRequest,
 } from "../types/report";
+
+import type {
+  AggregateTableRequest,
+  AggregateTableResponse,
+  DynamicFormAggregateRequest,
+  DynamicFormAggregateResponse,
+} from "../types/reportAggregate";
+
+import type {
+  ApproveReportRequest,
+  ReturnReportRequest,
+  RecallApprovedReportRequest,
+  ReviewReportFlatRowDto,
+  ReviewReportFlatSearchRequest,
+  ReviewSummaryRowDto,
+  ReviewSummarySearchRequest,
+} from "../types/reportReview";
+
+import type { WorkAssignmentEvaluationLogRow } from "./workAssignmentApi";
+import type {EvaluateAssignmentRequest} from '../types/evaluation';
 
 export const reportApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -20,66 +43,39 @@ export const reportApi = baseApi.injectEndpoints({
       query: ({ workId, req }) => ({
         url: `works/${workId}/my-report-templates/search`,
         method: "POST",
-        data: {
-          page: req.page,
-          pageSize: req.pageSize,
-          q: req.q || undefined,
-          isActive: req.isActive ?? undefined,
-          hasReport: req.hasReport ?? undefined,
-          sortField: req.sortField || "latestUpdatedAtUtc",
-          sortDirection: req.sortDirection || "desc",
-        },
+        data: req,
       }),
-      providesTags: (result, _e, arg) => [
-        ...((result?.rows ?? []).map((x) => ({
-          type: "ReportTemplateGroup" as const,
-          id: x.dynamicExcelId,
-        }))),
-        { type: "ReportTemplateGroup" as const, id: `WORK_${arg.workId}` },
-      ],
     }),
 
-    getAssignmentReports: build.query<WorkAssignmentReportListRow[], string>({
-      query: (workAssignmentId) => ({
-        url: `work-assignments/${workAssignmentId}/reports`,
+    getMyReportTemplateDetail: build.query<
+      MyReportTemplateDetailResponse,
+      { workId: string; dynamicExcelId: string }
+    >({
+      query: ({ workId, dynamicExcelId }) => ({
+        url: `works/${workId}/my-report-templates/${dynamicExcelId}`,
         method: "GET",
       }),
-      providesTags: (result, _e, workAssignmentId) => [
-        ...((result ?? []).map((x) => ({
-          type: "WorkAssignmentReport" as const,
-          id: x.id,
-        }))),
-        { type: "WorkAssignmentReportList" as const, id: workAssignmentId },
-      ],
     }),
 
-    searchWorkAssignmentReports: build.query<
-      PagedResult<WorkAssignmentReportListRow>,
-      WorkAssignmentReportSearchRequest
+    openWorkReportPeriod: build.mutation<
+      WorkAssignmentReportResponse,
+      { workReportPeriodId: string }
     >({
-      query: (req) => ({
-        url: "work-assignment-reports/search",
+      query: ({ workReportPeriodId }) => ({
+        url: `work-report-periods/${workReportPeriodId}/open`,
         method: "POST",
-        data: {
-          page: req.page,
-          pageSize: req.pageSize,
-          workId: req.workId || undefined,
-          workAssignmentId: req.workAssignmentId || undefined,
-          q: req.q || undefined,
-          periodKey: req.periodKey || undefined,
-          status: req.status ?? undefined,
-          isCurrent: req.isCurrent ?? undefined,
-          sortField: req.sortField || "updatedAtUtc",
-          sortDirection: req.sortDirection || "desc",
-        },
       }),
-      providesTags: (result) => [
-        ...((result?.rows ?? []).map((x) => ({
-          type: "WorkAssignmentReport" as const,
-          id: x.id,
-        }))),
-        { type: "WorkAssignmentReportSearch" as const, id: "LIST" },
-      ],
+    }),
+
+    createUserCreatedReport: build.mutation<
+      WorkAssignmentReportResponse,
+      { workAssignmentId: string; data: CreateUserCreatedReportRequest }
+    >({
+      query: ({ workAssignmentId, data }) => ({
+        url: `work-assignments/${workAssignmentId}/reports/user-created`,
+        method: "POST",
+        data,
+      }),
     }),
 
     getWorkAssignmentReport: build.query<WorkAssignmentReportResponse, string>({
@@ -87,47 +83,195 @@ export const reportApi = baseApi.injectEndpoints({
         url: `work-assignment-reports/${id}`,
         method: "GET",
       }),
-      providesTags: (_r, _e, id) => [
-        { type: "WorkAssignmentReport" as const, id },
-      ],
-    }),
-
-    initWorkAssignmentReport: build.mutation<
-      WorkAssignmentReportResponse,
-      { workAssignmentId: string; data: InitWorkAssignmentReportRequest }
-    >({
-      query: ({ workAssignmentId, data }) => ({
-        url: `work-assignments/${workAssignmentId}/reports/init`,
-        method: "POST",
-        data: {
-          periodKey: data.periodKey,
-          periodStart: data.periodStart || undefined,
-          periodEnd: data.periodEnd || undefined,
-          note: data.note || undefined,
-        },
-      }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "WorkAssignmentReportList" as const, id: arg.workAssignmentId },
-        { type: "WorkAssignmentReportSearch" as const, id: "LIST" },
-      ],
     }),
 
     saveWorkAssignmentReportDraft: build.mutation<
       WorkAssignmentReportResponse,
-      { id: string; data: SaveWorkAssignmentReportDraftRequest }
+      {
+        id: string;
+        data: SaveWorkAssignmentReportDraftRequest;
+      }
     >({
       query: ({ id, data }) => ({
         url: `work-assignment-reports/${id}/draft`,
         method: "PUT",
-        data: {
-          rawWorkbookDataJson: data.rawWorkbookDataJson,
-          values1D: data.values1D,
-          note: data.note || undefined,
-        },
+        data,
+      }),
+    }),
+
+    submitWorkAssignmentReport: build.mutation<
+      WorkAssignmentReportResponse,
+      {
+        id: string;
+        data: SubmitWorkAssignmentReportRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/submit`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    deleteUserCreatedReport: build.mutation<void, { id: string }>({
+      query: ({ id }) => ({
+        url: `work-assignment-reports/${id}/user-created`,
+        method: "DELETE",
+      }),
+    }),
+
+    getWorkAssignmentReportLogs: build.query<
+      WorkAssignmentReportLogRow[],
+      { id: string }
+    >({
+      query: ({ id }) => ({
+        url: `work-assignment-reports/${id}/logs`,
+        method: "GET",
+      }),
+    }),
+
+
+    withdrawSubmittedReport: build.mutation<
+      WorkAssignmentReportResponse,
+      {
+        id: string;
+        data: ReturnWorkAssignmentReportRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/withdraw-submitted`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    searchWorkAssignmentReports: build.query<
+      PagedResult<WorkAssignmentReportListRow>,
+      WorkAssignmentReportSearchRequest
+    >({
+      query: (req) => ({
+        url: `work-assignment-reports/search`,
+        method: "POST",
+        data: req,
+      }),
+    }),
+
+    getReportsByAssignment: build.query<
+      WorkAssignmentReportListRow[],
+      { workAssignmentId: string }
+    >({
+      query: ({ workAssignmentId }) => ({
+        url: `work-assignments/${workAssignmentId}/reports`,
+        method: "GET",
+      }),
+    }),
+
+    searchReviewSummary: build.mutation<
+      PagedResult<ReviewSummaryRowDto>,
+      ReviewSummarySearchRequest
+    >({
+      query: (data) => ({
+        url: `work-assignment-review/summary/search`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    searchReviewReports: build.mutation<
+      PagedResult<ReviewReportFlatRowDto>,
+      ReviewReportFlatSearchRequest
+    >({
+      query: (data) => ({
+        url: `work-assignment-review/reports/search`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    approveReviewReport: build.mutation<
+      void,
+      { reportId: string; data: ApproveReportRequest }
+    >({
+      query: ({ reportId, data }) => ({
+        url: `work-assignment-review/reports/${reportId}/approve`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    returnReviewReport: build.mutation<
+      void,
+      { reportId: string; data: ReturnReportRequest }
+    >({
+      query: ({ reportId, data }) => ({
+        url: `work-assignment-review/reports/${reportId}/return`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+
+    recallApprovedReviewReport: build.mutation<
+      void,
+      { reportId: string; data: RecallApprovedReportRequest }
+    >({
+      query: ({ reportId, data }) => ({
+        url: `work-assignment-review/reports/${reportId}/recall-approved`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    getAggregateTable: build.mutation<
+      AggregateTableResponse,
+      AggregateTableRequest
+    >({
+      query: (data) => ({
+        url: `work-assignment-aggregate-table/table`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    getDynamicFormAggregateTable: build.mutation<
+      DynamicFormAggregateResponse,
+      DynamicFormAggregateRequest
+    >({
+      query: (data) => ({
+        url: `work-assignment-aggregate-table/dynamic-form/table`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    evaluateAssignment: build.mutation<
+      void,
+      { assignmentId: string; data: EvaluateAssignmentRequest }
+    >({
+      query: ({ assignmentId, data }) => ({
+        url: `work-assignment-review/assignments/${assignmentId}/evaluate`,
+        method: "POST",
+        data,
       }),
       invalidatesTags: (_r, _e, arg) => [
-        { type: "WorkAssignmentReport" as const, id: arg.id },
-        { type: "WorkAssignmentReportSearch" as const, id: "LIST" },
+        { type: "WorkAssignment" as const, id: arg.assignmentId },
+        { type: "ReviewSummary" as const, id: "LIST" },
+        { type: "ReviewReport" as const, id: "LIST" },
+        { type: "AssignmentEvaluationLog" as const, id: arg.assignmentId },
+      ],
+    }),
+
+    getEvaluationLogs: build.query<
+      PagedResult<WorkAssignmentEvaluationLogRow>,
+      { assignmentId: string; page?: number; pageSize?: number }
+    >({
+      query: ({ assignmentId, page = 0, pageSize = 20 }) => ({
+        url: `work-assignment-review/assignments/${assignmentId}/evaluation-logs`,
+        method: "GET",
+        params: { page, pageSize },
+      }),
+      providesTags: (_r, _e, arg) => [
+        { type: "AssignmentEvaluationLog" as const, id: arg.assignmentId },
       ],
     }),
   }),
@@ -138,15 +282,32 @@ export const {
   useSearchMyReportTemplatesQuery,
   useLazySearchMyReportTemplatesQuery,
 
-  useGetAssignmentReportsQuery,
-  useLazyGetAssignmentReportsQuery,
+  useGetMyReportTemplateDetailQuery,
+  useLazyGetMyReportTemplateDetailQuery,
 
-  useSearchWorkAssignmentReportsQuery,
-  useLazySearchWorkAssignmentReportsQuery,
+  useOpenWorkReportPeriodMutation,
+  useCreateUserCreatedReportMutation,
 
   useGetWorkAssignmentReportQuery,
-  useLazyGetWorkAssignmentReportQuery,
-
-  useInitWorkAssignmentReportMutation,
   useSaveWorkAssignmentReportDraftMutation,
+  useSubmitWorkAssignmentReportMutation,
+  useWithdrawSubmittedReportMutation,
+  useDeleteUserCreatedReportMutation,
+  useGetWorkAssignmentReportLogsQuery,
+  useLazyGetWorkAssignmentReportLogsQuery,
+
+  useSearchWorkAssignmentReportsQuery,
+  useGetReportsByAssignmentQuery,
+
+  useSearchReviewSummaryMutation,
+  useSearchReviewReportsMutation,
+  useApproveReviewReportMutation,
+  useReturnReviewReportMutation,
+  useRecallApprovedReviewReportMutation,
+  useGetAggregateTableMutation,
+  useGetDynamicFormAggregateTableMutation,
+
+  useEvaluateAssignmentMutation,
+  useGetEvaluationLogsQuery,
+  useLazyGetEvaluationLogsQuery,
 } = reportApi;

@@ -16,10 +16,12 @@ import type { WorkDetail, WorkPriorityCore } from "../../../types/work";
 import { WORK_PRIORITY_OPTIONS } from "../../../types/work";
 
 import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
-import { MantineDateRangeFilter } from "../../common/MantineDateRangeFilter";
+import { MantineDateRangeFilter } from "../../common/dateRanger/MantineDateRangeFilter";
 import { ActionResultDialog } from "../../common/ActionResultDialog";
+import SingleDayKeyField, { isoDateToDayKey, dayKeyToIsoDate } from "../../common/SingleDayKeyField";
 import { useWorkFormState } from "./parts/useWorkFormState";
 import { WorkBasisFiles } from "./parts/WorkBasisFiles";
+import EvaluationTemplateSelector from "../../evaluation/EvaluationTemplateSelector";
 
 type WorkType = "TASK" | "INDICATOR";
 type WorkFormMode = "create" | "edit" | "view";
@@ -203,14 +205,17 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                 </Box>
 
                 <Box sx={{ width: { xs: "100%", md: 190 } }}>
-                  <Field
-                    isView={isView}
-                    type="date"
-                    fullWidth
+                  <SingleDayKeyField
                     label="Hạn"
-                    value={state.dueDate}
-                    onChange={(e) => setState((s) => ({ ...s, dueDate: e.target.value }))}
-                    InputLabelProps={{ shrink: true }}
+                    value={isoDateToDayKey(state.dueDate)}
+                    disabled={isView}
+                    fullWidth
+                    onChange={(dayKey) =>
+                      setState((s) => ({
+                        ...s,
+                        dueDate: dayKey ? dayKeyToIsoDate(dayKey) : "",
+                      }))
+                    }
                   />
                 </Box>
               </Stack>
@@ -258,6 +263,18 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                   />
                 </Box>
               </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent>
+            <Stack spacing={1}>
+              <EvaluationTemplateSelector
+                value={state.evaluationTemplateId}
+                onChange={(next) => setState((s) => ({ ...s, evaluationTemplateId: next }))}
+                disabled={isView || busy}
+              />
             </Stack>
           </CardContent>
         </Card>

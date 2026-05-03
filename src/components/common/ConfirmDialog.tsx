@@ -68,17 +68,21 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button
+          size="small"
           variant="outlined"
           onClick={onClose}
           disabled={confirmLoading}
+          sx={{ height: 36, px: 1.75 }}
         >
           {cancelText}
         </Button>
         <Button
+          size="small"
           variant="contained"
           color={confirmColor as any}
           onClick={onConfirm}
           disabled={confirmLoading}
+          sx={{ height: 36, px: 1.75 }}
         >
           {confirmText}
         </Button>

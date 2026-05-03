@@ -1,10 +1,13 @@
 import * as React from "react";
-import { Alert, Box, Button, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Stack, Typography } from "@mui/material";
 
 import type { SortDirection } from "../../../components/common/AppTable";
 import MyReportTemplateGroupTable, {
   type MyReportTemplateSortField,
 } from "../../../components/reports/MyReportTemplateGroupTable";
+import WorkReportTemplateGroupFilterBar, {
+  type WorkReportTemplateGroupFilterValue,
+} from "../../../components/reports/WorkReportTemplateGroupFilterBar";
 
 import { useLazySearchMyReportTemplatesQuery } from "../../../api/reportApi";
 import type {
@@ -21,23 +24,30 @@ export interface WorkReportTemplateGroupsPageProps {
 const DEFAULT_SORT_FIELD: MyReportTemplateSortField = "latestUpdatedAtUtc";
 const DEFAULT_SORT_DIRECTION: SortDirection = "desc";
 
+const defaultFilterBarValue = (): WorkReportTemplateGroupFilterValue => ({
+  q: "",
+});
+
+const defaultSearchRequest = (): MyReportTemplateSearchRequest => ({
+  page: 0,
+  pageSize: 10,
+  q: "",
+  isActive: null,
+  hasReport: null,
+  sortField: DEFAULT_SORT_FIELD,
+  sortDirection: DEFAULT_SORT_DIRECTION,
+});
+
 export default function WorkReportTemplateGroupsPage(
   props: WorkReportTemplateGroupsPageProps
 ) {
   const { workId, active = true, onOpenGroup } = props;
 
-  const [qInput, setQInput] = React.useState("");
+  const [filterValue, setFilterValue] = React.useState<WorkReportTemplateGroupFilterValue>(
+    defaultFilterBarValue()
+  );
   const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
-
-  const [filter, setFilter] = React.useState<MyReportTemplateSearchRequest>({
-    page: 0,
-    pageSize: 10,
-    q: "",
-    isActive: true,
-    hasReport: null,
-    sortField: DEFAULT_SORT_FIELD,
-    sortDirection: DEFAULT_SORT_DIRECTION,
-  });
+  const [filter, setFilter] = React.useState<MyReportTemplateSearchRequest>(defaultSearchRequest());
 
   const [trigger, { data, isLoading, isFetching, error }] =
     useLazySearchMyReportTemplatesQuery();
@@ -60,114 +70,86 @@ export default function WorkReportTemplateGroupsPage(
   React.useEffect(() => {
     if (!active || !workId || hasLoadedOnce) return;
     runSearch(filter);
-  }, [active, workId, hasLoadedOnce, filter, runSearch]);
+  }, [active, filter, hasLoadedOnce, runSearch, workId]);
 
   const rows = data?.rows ?? [];
   const total = data?.totalRows ?? 0;
 
-  const handleSearch = () => {
-    const next = {
-      ...filter,
-      page: 0,
-      q: qInput.trim(),
-    };
-    setFilter(next);
-    runSearch(next);
-  };
-
-  const handleReset = () => {
+  const handleSearch = React.useCallback(() => {
     const next: MyReportTemplateSearchRequest = {
-      page: 0,
-      pageSize: 10,
-      q: "",
-      isActive: true,
-      hasReport: null,
-      sortField: DEFAULT_SORT_FIELD,
-      sortDirection: DEFAULT_SORT_DIRECTION,
-    };
-    setQInput("");
-    setFilter(next);
-    runSearch(next);
-  };
-
-  const handleSortChange = (
-    field: MyReportTemplateSortField,
-    direction: SortDirection
-  ) => {
-    const next = {
       ...filter,
       page: 0,
-      sortField: field,
-      sortDirection: direction,
+      q: filterValue.q.trim(),
     };
     setFilter(next);
     runSearch(next);
-  };
+  }, [filter, filterValue.q, runSearch]);
 
-  const handlePageChange = (page: number) => {
-    const next = {
-      ...filter,
-      page,
-    };
+  const handleReset = React.useCallback(() => {
+    const next = defaultSearchRequest();
+    setFilterValue(defaultFilterBarValue());
     setFilter(next);
     runSearch(next);
-  };
+  }, [runSearch]);
 
-  const handlePageSizeChange = (pageSize: number) => {
-    const next = {
-      ...filter,
-      page: 0,
-      pageSize,
-    };
-    setFilter(next);
-    runSearch(next);
-  };
+  const handleSortChange = React.useCallback(
+    (field: MyReportTemplateSortField, direction: SortDirection) => {
+      const next: MyReportTemplateSearchRequest = {
+        ...filter,
+        page: 0,
+        sortField: field,
+        sortDirection: direction,
+      };
+      setFilter(next);
+      runSearch(next);
+    },
+    [filter, runSearch]
+  );
 
-  const handleReload = () => {
-    runSearch(filter);
-  };
+  const handlePageChange = React.useCallback(
+    (page: number) => {
+      const next: MyReportTemplateSearchRequest = {
+        ...filter,
+        page,
+      };
+      setFilter(next);
+      runSearch(next);
+    },
+    [filter, runSearch]
+  );
+
+  const handlePageSizeChange = React.useCallback(
+    (pageSize: number) => {
+      const next: MyReportTemplateSearchRequest = {
+        ...filter,
+        page: 0,
+        pageSize,
+      };
+      setFilter(next);
+      runSearch(next);
+    },
+    [filter, runSearch]
+  );
 
   if (!workId) {
     return <Alert severity="warning">Thiếu workId để tải danh sách báo cáo.</Alert>;
   }
 
   return (
-    <Stack spacing={2}>
-      <Box>
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Nhóm biểu mẫu báo cáo
-        </Typography>
-
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
-          <TextField
-            size="small"
-            label="Tìm mã / tên biểu mẫu"
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSearch();
-            }}
-            fullWidth
-          />
-
-          <Button variant="contained" onClick={handleSearch}>
-            Tìm
-          </Button>
-
-          <Button variant="outlined" onClick={handleReset}>
-            Đặt lại
-          </Button>
-
-          <Button variant="outlined" onClick={handleReload} disabled={isFetching}>
-            Tải lại
-          </Button>
-        </Stack>
-      </Box>
+    <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
+      <WorkReportTemplateGroupFilterBar
+        value={filterValue}
+        onChange={setFilterValue}
+        onSearch={handleSearch}
+        onReset={handleReset}
+        onReload={() => runSearch(filter)}
+        loading={isFetching}
+      />
 
       {error ? (
-        <Alert severity="error">
-          Không tải được danh sách nhóm biểu mẫu báo cáo.
-        </Alert>
+        <Alert severity="error">Không tải được danh sách báo cáo.</Alert>
+      ) : rows.length === 0 && !isLoading && !isFetching ? (
+        <Alert severity="info">Không có nhóm biểu mẫu báo cáo phù hợp.</Alert>
       ) : (
         <MyReportTemplateGroupTable
           rows={rows}

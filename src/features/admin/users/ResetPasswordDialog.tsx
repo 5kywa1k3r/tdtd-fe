@@ -86,10 +86,10 @@ export function ResetPasswordDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={st.isLoading}>
+        <Button size="small" variant="outlined" onClick={onClose} disabled={st.isLoading} sx={{ height: 36, px: 1.75 }}>
           Hủy
         </Button>
-        <Button variant="contained" onClick={submit} disabled={st.isLoading}>
+        <Button size="small" variant="contained" onClick={submit} disabled={st.isLoading} sx={{ height: 36, px: 1.75 }}>
           Reset
         </Button>
       </DialogActions>

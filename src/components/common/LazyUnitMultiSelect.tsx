@@ -12,6 +12,8 @@ import {
   ListItemText,
   IconButton,
   CircularProgress,
+  Stack,
+  Chip,
 } from '@mui/material';
 
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
@@ -20,16 +22,21 @@ import IndeterminateCheckBoxIcon from '@mui/icons-material/IndeterminateCheckBox
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SelectAllOutlinedIcon from '@mui/icons-material/SelectAllOutlined';
 import InputAdornment from '@mui/material/InputAdornment';
 
 import { normalizeVi } from '../../helpers/normalize';
-import { useGetUnitChildrenQuery, type UnitPickNode } from '../../api/adminUnitsApi';
+import {
+  useGetUnitChildrenQuery,
+  type UnitPickNode,
+} from '../../api/adminUnitsApi';
 
 const emptyIcon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 const indeterminateIcon = <IndeterminateCheckBoxIcon fontSize="small" />;
 
 export type UnitSelectMode = 'single' | 'multiple';
+export type VirtualUnitBehavior = 'select' | 'reject';
 
 export type UnitPickMeta = {
   id: string;
@@ -38,6 +45,8 @@ export type UnitPickMeta = {
   shortName?: string;
   symbol?: string;
   level?: number;
+  primaryUnitTypeCode?: string | null;
+  isVirtual?: boolean;
 };
 
 export interface LazyUnitMultiSelectProps {
@@ -46,6 +55,7 @@ export interface LazyUnitMultiSelectProps {
   onChangeMeta?: (selected: UnitPickMeta[]) => void;
   mode?: UnitSelectMode;
   label?: string;
+  virtualUnitBehavior?: VirtualUnitBehavior;
 }
 
 type Ref<T> = { current: T };
@@ -57,6 +67,8 @@ interface FlatInfo {
   shortName?: string;
   symbol?: string;
   level?: number;
+  primaryUnitTypeCode?: string | null;
+  isVirtual?: boolean;
   parentId?: string | null;
   depth: number;
 }
@@ -65,6 +77,8 @@ interface Column {
   level: number;
   parentId: string | null; // null => level 0
 }
+
+type CheckState = 'checked' | 'indeterminate' | 'unchecked';
 
 function measureSummary(names: string[], maxWidth: number): string {
   if (names.length === 0) return '';
@@ -110,8 +124,8 @@ type ColumnViewProps = {
   activePath: string[];
   setActivePath: React.Dispatch<React.SetStateAction<string[]>>;
 
-  applyToggle: (id: string) => void;
-  getCheckState: (id: string) => 'checked' | 'indeterminate' | 'unchecked';
+  applyToggle: (id: string) => void | Promise<void>;
+  getCheckState: (id: string) => CheckState;
   getInfo: (id: string) => FlatInfo | undefined;
 
   handleCloseFromLevel: (level: number) => void;
@@ -119,11 +133,11 @@ type ColumnViewProps = {
 
   infoMapRef: Ref<Map<string, FlatInfo>>;
   childrenCountRef: Ref<Map<string, number>>;
+
+  onToggleColumnSelection: (ids: string[]) => void | Promise<void>;
+  virtualUnitBehavior: VirtualUnitBehavior;
 };
 
-/**
- *  Tách ra top-level để không bị remount khi gõ => không mất focus
- */
 function ColumnView({
   open,
   col,
@@ -141,27 +155,28 @@ function ColumnView({
   handleOpenChildColumn,
   infoMapRef,
   childrenCountRef,
+  onToggleColumnSelection,
+  virtualUnitBehavior,
 }: ColumnViewProps) {
   const level = col.level;
   const parentId = col.parentId;
 
-  //  chỉ query khi popover mở (đỡ spam), root vẫn ok
   const q = useGetUnitChildrenQuery({ parentId: parentId ?? null }, { skip: !open });
 
   const nodes: UnitPickNode[] = q.data ?? [];
   const loading = q.isFetching;
 
-  // cache info (để label + ancestry)
   React.useEffect(() => {
     const map = infoMapRef.current;
 
     const put = (n: any, p: string | null) => {
-      // API  có lúc trả fullname / fullName (legacy) => normalize
       const fn = n.fullName ?? n.fullname ?? '';
       const sn = n.shortName ?? n.shortname ?? '';
       const code = n.code ?? '';
       const symbol = n.symbol ?? '';
       const lvl = n.level ?? undefined;
+      const primaryUnitTypeCode = n.primaryUnitTypeCode ?? null;
+      const isVirtual = !!n.isVirtual;
 
       map.set(n.id, {
         id: n.id,
@@ -170,6 +185,8 @@ function ColumnView({
         shortName: sn || undefined,
         symbol: symbol || undefined,
         level: lvl,
+        primaryUnitTypeCode,
+        isVirtual,
         parentId: p,
         depth: level,
       });
@@ -179,17 +196,13 @@ function ColumnView({
       nodes.forEach((n: any) => put(n, null));
     } else {
       nodes.forEach((n: any) => put(n, parentId));
-
-      // vẫn có thể cache count (không dùng để ẩn nút > nữa)
       childrenCountRef.current.set(parentId, nodes.length);
 
-      //  nếu mở 1 cột mà không có dữ liệu thì cắt path (tránh mở cột rỗng mãi)
       if (nodes.length === 0) {
         setActivePath((prev) => {
           const idx = prev.indexOf(parentId);
           if (idx < 0) return prev;
           const next = prev.slice(0, idx + 1);
-          //  không đổi thì không set
           if (next.length === prev.length) return prev;
           return next;
         });
@@ -208,6 +221,25 @@ function ColumnView({
     });
   }, [nodes, searchValue]);
 
+  const columnIds = React.useMemo(
+    () => filtered.map((n: any) => n.id as string).filter(Boolean),
+    [filtered],
+  );
+
+  const columnState = React.useMemo<CheckState>(() => {
+    if (columnIds.length === 0 || mode === 'single') return 'unchecked';
+
+    const states = columnIds.map((id) => getCheckState(id));
+    const checkedCount = states.filter((state) => state === 'checked').length;
+    const hasAnySelection = states.some(
+      (state) => state === 'checked' || state === 'indeterminate',
+    );
+
+    if (!hasAnySelection) return 'unchecked';
+    if (checkedCount === columnIds.length) return 'checked';
+    return 'indeterminate';
+  }, [columnIds, getCheckState, mode]);
+
   const isRoot = parentId === null;
   const parentInfo = parentId ? getInfo(parentId) : undefined;
 
@@ -222,18 +254,19 @@ function ColumnView({
       }}
     >
       <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        {!isRoot && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="subtitle2" sx={{ mr: 1 }}>
-              {parentInfo?.shortName ?? parentInfo?.fullName ?? ''}
-            </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+          <Typography variant="subtitle2" sx={{ minWidth: 0 }} noWrap>
+            {isRoot ? 'Đơn vị' : (parentInfo?.shortName ?? parentInfo?.fullName ?? '')}
+          </Typography>
+
+          {!isRoot && (
             <Tooltip title="Thu gọn cấp này">
               <IconButton size="small" onClick={() => handleCloseFromLevel(level)}>
                 <ChevronLeftIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-          </Box>
-        )}
+          )}
+        </Stack>
 
         <TextField
           size="small"
@@ -256,17 +289,54 @@ function ColumnView({
           </Box>
         ) : (
           <List dense>
+            {mode === 'multiple' && (
+              <ListItemButton
+                onClick={() => void onToggleColumnSelection(columnIds)}
+                disabled={columnIds.length === 0}
+              >
+                <Checkbox
+                  edge="start"
+                  disableRipple
+                  icon={emptyIcon}
+                  checkedIcon={checkedIcon}
+                  indeterminateIcon={indeterminateIcon}
+                  indeterminate={columnState === 'indeterminate'}
+                  checked={columnState === 'checked'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onToggleColumnSelection(columnIds);
+                  }}
+                  sx={{ mr: 1 }}
+                />
+                <SelectAllOutlinedIcon fontSize="small" style={{ marginRight: 8, opacity: 0.7 }} />
+                <ListItemText
+                  primary={
+                    <Typography variant="body2" fontWeight={600}>
+                      Chọn tất cả
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {columnIds.length > 0
+                        ? `Chọn toàn bộ ${columnIds.length} đơn vị ở cột này`
+                        : 'Không có đơn vị để chọn'}
+                    </Typography>
+                  }
+                />
+              </ListItemButton>
+            )}
+
+            {mode === 'multiple' && <Divider sx={{ my: 0.5 }} />}
+
             {filtered.map((n: any) => {
               const id = n.id as string;
+              const isVirtual = !!n.isVirtual;
 
               const state = getCheckState(id);
               const checked = state === 'checked';
               const indeterminate = state === 'indeterminate';
 
               const isActiveOnThisLevel = level >= 1 && activePath[level] === id;
-
-              //  luôn cho phép mở, backend quyết định có con hay không
-              const canExpand = true;
 
               const primary =
                 n.shortName ??
@@ -279,7 +349,7 @@ function ColumnView({
                 <ListItemButton
                   key={id}
                   selected={isActiveOnThisLevel}
-                  onClick={() => applyToggle(id)}
+                  onClick={() => void applyToggle(id)}
                 >
                   <Checkbox
                     edge="start"
@@ -291,26 +361,43 @@ function ColumnView({
                     checked={checked}
                     onClick={(e) => {
                       e.stopPropagation();
-                      applyToggle(id);
+                      void applyToggle(id);
                     }}
                     sx={{ mr: 1 }}
                   />
-                  <ListItemText primary={primary} />
+                  <ListItemText
+                    primary={
+                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" noWrap title={primary} sx={{ minWidth: 0 }}>
+                          {primary}
+                        </Typography>
+                        {isVirtual && (
+                          <Tooltip
+                            title={
+                              virtualUnitBehavior === 'reject'
+                                ? 'Unit ao khong the dung lam don vi chua user'
+                                : 'Unit ao'
+                            }
+                          >
+                            <Chip size="small" label="VU" variant="outlined" sx={{ height: 18 }} />
+                          </Tooltip>
+                        )}
+                      </Stack>
+                    }
+                  />
 
-                  {canExpand && (
-                    <Tooltip title="Xem đơn vị cấp dưới">
-                      <IconButton
-                        size="small"
-                        edge="end"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenChildColumn(level, id);
-                        }}
-                      >
-                        <ChevronRightIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+                  <Tooltip title="Xem đơn vị cấp dưới">
+                    <IconButton
+                      size="small"
+                      edge="end"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenChildColumn(level, id);
+                      }}
+                    >
+                      <ChevronRightIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </ListItemButton>
               );
             })}
@@ -334,24 +421,24 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
   onChange,
   onChangeMeta,
   mode = 'multiple',
+  virtualUnitBehavior,
   label = 'Đơn vị',
 }) => {
   const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
-  // path đang mở theo cột: [id cấp 0, id cấp 1, ...]
   const [activePath, setActivePath] = React.useState<string[]>([]);
-  // search theo level/cột
   const [searchByLevel, setSearchByLevel] = React.useState<string[]>([]);
-  // đo width textbox
   const inputBoxRef = React.useRef<HTMLDivElement | null>(null);
 
-  // cache info cho name/parent để làm exclusive check
   const infoMapRef = React.useRef<Map<string, FlatInfo>>(new Map());
-  // cache: parentId -> children count (after first fetch)
   const childrenCountRef = React.useRef<Map<string, number>>(new Map());
 
-  // normalize selected
+  const resolvedVirtualBehavior = React.useMemo<VirtualUnitBehavior>(
+    () => virtualUnitBehavior ?? 'select',
+    [virtualUnitBehavior],
+  );
+
   const effectiveValue = React.useMemo<string[]>(() => {
     const v = value ?? [];
     if (mode !== 'single') return v;
@@ -365,7 +452,6 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
 
   const getInfo = React.useCallback((id: string) => infoMapRef.current.get(id), []);
 
-  // ancestor check using loaded parent links
   const isAncestor = React.useCallback(
     (ancestorId: string, nodeId: string) => {
       if (ancestorId === nodeId) return false;
@@ -406,6 +492,8 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
           shortName: info?.shortName,
           symbol: info?.symbol,
           level: info?.level,
+          primaryUnitTypeCode: info?.primaryUnitTypeCode,
+          isVirtual: info?.isVirtual,
         };
       });
       onChangeMeta(metas);
@@ -413,9 +501,45 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
     [onChangeMeta],
   );
 
+  const commitSelection = React.useCallback(
+    (next: Set<string>) => {
+      const nextIds = Array.from(next);
+      onChange(nextIds);
+      emitMeta(nextIds);
+    },
+    [emitMeta, onChange],
+  );
+
+  const resolveSelectableIds = React.useCallback(
+    async (ids: string[]) => {
+      const result: string[] = [];
+      for (const id of Array.from(new Set(ids.filter(Boolean)))) {
+        const info = getInfo(id);
+        if (!info?.isVirtual) {
+          result.push(id);
+          continue;
+        }
+
+        if (resolvedVirtualBehavior === 'reject') {
+          continue;
+        }
+
+        result.push(id);
+      }
+
+      return Array.from(new Set(result));
+    },
+    [getInfo, resolvedVirtualBehavior],
+  );
+
   const applyToggle = React.useCallback(
-    (id: string) => {
+    async (id: string) => {
       const current = new Set<string>(effectiveValue);
+      const info = getInfo(id);
+
+      if (info?.isVirtual && resolvedVirtualBehavior === 'reject') {
+        return;
+      }
 
       if (mode === 'single') {
         if (current.has(id)) {
@@ -428,35 +552,81 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
         return;
       }
 
-      if (current.has(id)) {
-        current.delete(id);
-        const nextIds = Array.from(current);
-        onChange(nextIds);
-        emitMeta(nextIds);
+      const toggleIds = await resolveSelectableIds([id]);
+      if (toggleIds.length === 0) return;
+
+      const allChecked = toggleIds.every((toggleId) => current.has(toggleId));
+      if (allChecked) {
+        toggleIds.forEach((toggleId) => current.delete(toggleId));
+        commitSelection(current);
         return;
       }
 
       const next = new Set<string>(current);
 
-      // chọn con -> bỏ cha
-      for (const s of current) {
-        if (isAncestor(s, id)) next.delete(s);
-      }
-      // chọn cha -> bỏ con
-      for (const s of current) {
-        if (isAncestor(id, s)) next.delete(s);
+      for (const toggleId of toggleIds) {
+        for (const s of current) {
+          if (isAncestor(s, toggleId)) next.delete(s);
+        }
+        for (const s of current) {
+          if (isAncestor(toggleId, s)) next.delete(s);
+        }
+        next.add(toggleId);
       }
 
-      next.add(id);
-      const nextIds = Array.from(next);
-      onChange(nextIds);
-      emitMeta(nextIds);
+      commitSelection(next);
     },
-    [effectiveValue, isAncestor, mode, onChange, emitMeta],
+    [
+      commitSelection,
+      effectiveValue,
+      emitMeta,
+      getInfo,
+      isAncestor,
+      mode,
+      onChange,
+      resolveSelectableIds,
+      resolvedVirtualBehavior,
+    ],
+  );
+
+  const applyToggleMany = React.useCallback(
+    async (ids: string[]) => {
+      if (mode !== 'multiple' || ids.length === 0) return;
+
+      const uniqueIds = await resolveSelectableIds(ids);
+      if (uniqueIds.length === 0) return;
+
+      const current = new Set<string>(effectiveValue);
+      const allChecked = uniqueIds.every((id) => current.has(id));
+
+      if (allChecked) {
+        uniqueIds.forEach((id) => current.delete(id));
+        commitSelection(current);
+        return;
+      }
+
+      const next = new Set<string>(current);
+
+      for (const id of uniqueIds) {
+        for (const s of Array.from(next)) {
+          if (isAncestor(s, id)) next.delete(s);
+        }
+      }
+
+      for (const s of Array.from(next)) {
+        if (uniqueIds.some((id) => isAncestor(id, s))) {
+          next.delete(s);
+        }
+      }
+
+      uniqueIds.forEach((id) => next.add(id));
+      commitSelection(next);
+    },
+    [commitSelection, effectiveValue, isAncestor, mode, resolveSelectableIds],
   );
 
   const getCheckState = React.useCallback(
-    (id: string) => {
+    (id: string): CheckState => {
       if (selectedSet.has(id)) return 'checked';
       if (mode !== 'single' && hasSelectedDescendant(id)) return 'indeterminate';
       return 'unchecked';
@@ -464,7 +634,6 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
     [selectedSet, hasSelectedDescendant, mode],
   );
 
-  // summary names: only selected ids
   const compressedNames = React.useMemo(() => {
     const names: string[] = [];
     for (const id of effectiveValue) {
@@ -531,7 +700,7 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
                 sx: { cursor: 'pointer' },
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Trạng thái ô: trống = chưa chọn • gạch = chọn một phần • tích = đã chọn">
+                    <Tooltip title="Có thể chọn từng đơn vị hoặc dùng “Chọn tất cả” ở từng cột để lấy toàn bộ các đơn vị đang hiển thị trong cột đó.">
                       <IconButton size="small" tabIndex={-1} sx={{ color: 'text.disabled', mr: 0.5 }}>
                         <InfoOutlinedIcon fontSize="small" />
                       </IconButton>
@@ -580,9 +749,13 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
             handleOpenChildColumn={handleOpenChildColumn}
             infoMapRef={infoMapRef}
             childrenCountRef={childrenCountRef}
+            onToggleColumnSelection={applyToggleMany}
+            virtualUnitBehavior={resolvedVirtualBehavior}
           />
         ))}
       </Popover>
     </>
   );
 };
+
+export default LazyUnitMultiSelect;

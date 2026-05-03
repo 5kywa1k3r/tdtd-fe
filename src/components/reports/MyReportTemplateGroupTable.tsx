@@ -1,55 +1,59 @@
-// src/components/reports/MyReportTemplateGroupTable.tsx
-import React, { useMemo } from "react";
-import dayjs from "dayjs";
+import React from "react";
 import { IconButton, Stack, Tooltip } from "@mui/material";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 
-import VisibilityIcon from "@mui/icons-material/Visibility";
-
-import {
-  AppTable,
-  type AppTableColumn,
-  type SortDirection,
-} from "../common/AppTable";
-
+import { AppTable, type AppTableColumn, type SortDirection } from "../common/AppTable";
+import CommonLabelText from "../common/CommonLabelText";
+import CommonDateText from "../common/CommonDateText";
+import BooleanChip from "../common/BooleanChip";
+import ReportPeriodStatusChip from "./ReportPeriodStatusChip";
 import type { MyReportTemplateRow } from "../../types/report";
-import { WorkAssignmentReportStatusChip } from "../common/WorkAssignmentReportStatusChip";
 
-export type MyReportTemplateSortField = "latestUpdatedAtUtc";
+export type MyReportTemplateSortField =
+  | "dynamicExcelCode"
+  | "dynamicExcelName"
+  | "bindingCount"
+  | "periodCount"
+  | "reportCount"
+  | "latestPeriodKey"
+  | "latestDueAtUtc"
+  | "latestUpdatedAtUtc";
 
-interface MyReportTemplateGroupTableProps {
+type Props = {
   rows: MyReportTemplateRow[];
   total: number;
-
   page: number;
   pageSize: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (size: number) => void;
-
-  sortField: MyReportTemplateSortField;
-  sortDirection: SortDirection;
-  onSortChange: (
-    field: MyReportTemplateSortField,
-    direction: SortDirection
-  ) => void;
-
+  sortField?: MyReportTemplateSortField;
+  sortDirection?: SortDirection;
+  onSortChange?: (field: MyReportTemplateSortField, direction: SortDirection) => void;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
   onOpen?: (row: MyReportTemplateRow) => void;
   onRowDoubleClick?: (row: MyReportTemplateRow) => void;
+};
+
+function getTemplateLabel(row: MyReportTemplateRow) {
+  const code = row.dynamicExcelCode?.trim();
+  const name = row.dynamicExcelName?.trim();
+  if (code && name) return `${code} - ${name}`;
+  return code || name || row.dynamicExcelId;
 }
 
-export const MyReportTemplateGroupTable: React.FC<MyReportTemplateGroupTableProps> = ({
+export default function MyReportTemplateGroupTable({
   rows,
   total,
   page,
   pageSize,
+  sortField = "latestUpdatedAtUtc",
+  sortDirection = "desc",
+  onSortChange,
   onPageChange,
   onPageSizeChange,
-  sortField,
-  sortDirection,
-  onSortChange,
   onOpen,
   onRowDoubleClick,
-}) => {
-  const columns: AppTableColumn<MyReportTemplateRow>[] = useMemo(
+}: Props) {
+  const columns = React.useMemo<AppTableColumn<MyReportTemplateRow>[]>(
     () => [
       {
         field: "actions",
@@ -59,73 +63,90 @@ export const MyReportTemplateGroupTable: React.FC<MyReportTemplateGroupTableProp
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Mở">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen?.(row);
-                }}
-              >
-                <VisibilityIcon fontSize="small" />
-              </IconButton>
+            <Tooltip title="Mở chi tiết">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen?.(row);
+                  }}
+                  disabled={!onOpen}
+                >
+                  <VisibilityOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           </Stack>
         ),
       },
       {
         field: "dynamicExcelCode",
-        header: "Mã biểu mẫu",
-        sortable: false,
-        width: 150,
+        header: "Biểu mẫu",
+        width: "28%",
+        sortable: true,
+        render: (row) => <CommonLabelText text={getTemplateLabel(row)} fontWeight={600} />,
       },
       {
-        field: "dynamicExcelName",
-        header: "Tên biểu mẫu",
-        sortable: false,
-        width: "38%",
-      },
-      {
-        field: "assignmentCount",
-        header: "Số assignment",
-        sortable: false,
-        width: 120,
+        field: "bindingCount",
+        header: "Phân công",
+        width: 100,
         align: "center",
+        sortable: true,
+        render: (row) => row.bindingCount ?? 0,
+      },
+      {
+        field: "periodCount",
+        header: "Số kỳ",
+        width: 90,
+        align: "center",
+        sortable: true,
+        render: (row) => row.periodCount ?? 0,
       },
       {
         field: "reportCount",
-        header: "Số report",
-        sortable: false,
-        width: 100,
+        header: "Báo cáo",
+        width: 90,
         align: "center",
+        sortable: true,
+        render: (row) => row.reportCount ?? 0,
       },
       {
-        field: "latestPeriodKey",
-        header: "Kỳ gần nhất",
-        sortable: false,
-        width: 130,
+        field: "latestPeriodStatus",
+        header: "Trạng thái kỳ",
+        width: 140,
         align: "center",
-        render: (row) => row.latestPeriodKey || "",
+        sortable: false,
+        render: (row) => <ReportPeriodStatusChip status={row.latestPeriodStatus} />,
       },
       {
-        field: "latestReportStatus",
-        header: "Trạng thái",
-        sortable: false,
+        field: "latestDueAtUtc",
+        header: "Hạn gần nhất",
         width: 130,
+        sortable: true,
+        render: (row) => <CommonDateText value={row.latestDueAtUtc} />,
+      },
+      {
+        field: "hasOverduePeriod",
+        header: "Quá hạn",
+        width: 110,
         align: "center",
+        sortable: false,
         render: (row) => (
-          <WorkAssignmentReportStatusChip status={row.latestReportStatus} />
+          <BooleanChip
+            value={!!row.hasOverduePeriod}
+            trueLabel="Có"
+            falseLabel="Không"
+            trueColor="error"
+          />
         ),
       },
       {
         field: "latestUpdatedAtUtc",
         header: "Cập nhật gần nhất",
+        width: 170,
         sortable: true,
-        width: 160,
-        render: (row) =>
-          row.latestUpdatedAtUtc
-            ? dayjs(row.latestUpdatedAtUtc).format("DD/MM/YYYY HH:mm")
-            : "",
+        render: (row) => <CommonDateText value={row.latestUpdatedAtUtc} withTime />,
       },
     ],
     [onOpen]
@@ -137,6 +158,7 @@ export const MyReportTemplateGroupTable: React.FC<MyReportTemplateGroupTableProp
       columns={columns}
       rowKey={(row) => row.dynamicExcelId}
       selectable={false}
+      onRowDoubleClick={onRowDoubleClick}
       sortMode="server"
       sortField={sortField}
       sortDirection={sortDirection}
@@ -148,9 +170,7 @@ export const MyReportTemplateGroupTable: React.FC<MyReportTemplateGroupTableProp
       totalRows={total}
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
-      onRowDoubleClick={onRowDoubleClick}
+      rowsPerPageOptions={[10, 20, 50, 100]}
     />
   );
-};
-
-export default MyReportTemplateGroupTable;
+}

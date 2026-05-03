@@ -7,6 +7,7 @@ import { HeaderInput, type HeaderMeta } from "../HeaderInput";
 import { SaveResultDialog } from "../SaveResultDialog";
 
 import { Workbook } from "@fortune-sheet/react";
+import "@fortune-sheet/react/dist/index.css";
 
 import { normalizeToSingleSheet } from "./normalizeWorkbook";
 import { computeRegions, getTableRect, getAnchors, type Rect as RegionRect } from "./regions";

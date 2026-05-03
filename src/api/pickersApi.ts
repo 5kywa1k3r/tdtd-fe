@@ -11,6 +11,7 @@ export type UnitPickRow = {
   symbol?: string | null;
   level: number;
   parentId?: string | null;
+  isVirtual?: boolean;
 };
 
 export type UserPickRow = {
@@ -50,6 +51,29 @@ function normParentId(parentId?: string | null) {
   return p;
 }
 
+function isHiddenRootUnit(x: Pick<UnitPickRow, 'code' | 'fullName' | 'shortName' | 'symbol'>) {
+  const code = (x.code ?? '').trim().toUpperCase();
+  const fullName = (x.fullName ?? '').trim().toUpperCase();
+  const shortName = (x.shortName ?? '').trim().toUpperCase();
+  const symbol = (x.symbol ?? '').trim().toUpperCase();
+
+  if (!code || code === 'ROOT') return true;
+  return [fullName, shortName, symbol].some((value) => value === 'ROOT' || value === 'ROOT UNIT');
+}
+
+function mapUnitPickRow(x: any): UnitPickRow {
+  return {
+    id: x.id,
+    code: x.code,
+    fullName: x.fullName,
+    shortName: x.shortName ?? null,
+    symbol: x.symbol ?? null,
+    level: Number(x.level ?? 0),
+    parentId: x.parentId ?? null,
+    isVirtual: !!x.isVirtual,
+  };
+}
+
 export const pickersApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     // ===== UNITS =====
@@ -71,15 +95,9 @@ export const pickersApi = baseApi.injectEndpoints({
       },
 
       transformResponse: (res: any): UnitPickRow[] =>
-        (res ?? []).map((x: any) => ({
-          id: x.id,
-          code: x.code,
-          fullName: x.fullName,
-          shortName: x.shortName ?? null,
-          symbol: x.symbol ?? null,
-          level: Number(x.level ?? 0),
-          parentId: x.parentId ?? null,
-        })),
+        (res ?? [])
+          .map((x: any) => mapUnitPickRow(x))
+          .filter((row: UnitPickRow) => !isHiddenRootUnit(row)),
 
       providesTags: (_res, _err, arg): Tag[] => [
         { type: 'PickersUnits', id: `CHILDREN:${normParentId(arg.parentId) || 'ROOT'}` },
@@ -107,15 +125,9 @@ export const pickersApi = baseApi.injectEndpoints({
       },
 
       transformResponse: (res: any): PagedResult<UnitPickRow> => ({
-        rows: (res?.rows ?? []).map((x: any) => ({
-          id: x.id,
-          code: x.code,
-          fullName: x.fullName,
-          shortName: x.shortName ?? null,
-          symbol: x.symbol ?? null,
-          level: Number(x.level ?? 0),
-          parentId: x.parentId ?? null,
-        })),
+        rows: (res?.rows ?? [])
+          .map((x: any) => mapUnitPickRow(x))
+          .filter((row: UnitPickRow) => !isHiddenRootUnit(row)),
         totalRows: Number(res?.totalRows ?? 0),
         page: Number(res?.page ?? 0),
         pageSize: Number(res?.pageSize ?? 20),

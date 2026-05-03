@@ -3,7 +3,9 @@ import { useGetMeQuery } from '../api/base/meApi';
 import type { JSX } from "react";
 
 const hasAnyRole = (roles: string[] | undefined, allow: string[]) =>
-  !!roles?.some((r) => allow.includes(r));
+  !!roles?.some((role) =>
+    allow.some((allowed) => role === allowed || role.startsWith(`${allowed}:`)),
+  );
 
 export function RequireRole(props: { allow: string[]; children: JSX.Element }) {
   const { data: me, isLoading } = useGetMeQuery();

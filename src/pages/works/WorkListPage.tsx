@@ -10,7 +10,7 @@ import { WorkFilter, type WorkFilterValues } from '../../components/works/WorkFi
 import { WorkListToolbar } from '../../components/common/WorkListToolbar';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 
-import type { ParentWork } from '../../types/work';
+import type { WorkListRow } from '../../types/work';
 import { useSearchWorksQuery, useDeleteWorkMutation } from '../../api/workApi';
 
 import { WORK_TYPE, WORK_STATUS_OPTIONS } from '../../types/work';
@@ -42,46 +42,44 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
     priority: null,
   });
 
-  // ✅ dùng constant chuẩn hoá enum số
   const STATUS_OPTIONS = useMemo(() => WORK_STATUS_OPTIONS, []);
 
   const { data, isFetching } = useSearchWorksQuery({
     q: filter.q || undefined,
     status: filter.status ?? null,
     leaderDirectiveUserId: filter.leaderDirectiveUserId ?? null,
-
-    // ✅ ÉP THEO TAB: gửi số 1/2 đúng BE enum
     type: WORK_TYPE[type],
-
-    // ✅ priority là số 1/2/3
     priority: filter.priority ?? null,
-
     page,
     pageSize,
     sortField,
     sortDirection,
   });
 
-  // ✅ map đúng WorkListRow hiện tại của BE:
-  // (Id, AutoCode, Code, Name, Status, Priority, LeaderDirectiveUserId, LeaderWatchCount, DueDate, CreatedAtUtc)
-  const rows: ParentWork[] = useMemo(
+  const rows: WorkListRow[] = useMemo(
     () =>
       (data?.rows ?? []).map((x: any) => ({
         id: x.id,
         autoCode: x.autoCode,
         code: x.code ?? null,
         name: x.name,
-
-        // fields UI đang dùng
+        status: x.status,
+        priority: x.priority,
+        type: x.type,
+        createdByUserId: x.createdByUserId ?? null,
+        ownerName: x.ownerName ?? null,
+        leaderDirectiveUserId: x.leaderDirectiveUserId ?? null,
+        leaderWatchCount: x.leaderWatchCount ?? 0,
+        evaluationTemplateId: x.evaluationTemplateId ?? null,
+        evaluationTemplateCode: x.evaluationTemplateCode ?? null,
+        evaluationTemplateLabel: x.evaluationTemplateLabel ?? null,
+        hasManualEvaluations: x.hasManualEvaluations ?? false,
+        evaluatedAssignmentCount: x.evaluatedAssignmentCount ?? 0,
+        worstEvaluationCode: x.worstEvaluationCode ?? null,
+        worstEvaluationLabel: x.worstEvaluationLabel ?? null,
         dueDate: x.dueDate ?? null,
         createdAtUtc: x.createdAtUtc,
-        status: x.status,
-
-        leaderDirectiveUserId: x.leaderDirectiveUserId,
-        leaderWatchCount: x.leaderWatchCount,
-
-        // ✅ NEW: ưu tiên số
-        // priority: x.priority ?? 2, // default MEDIUM=2 nếu BE thiếu
+        attachmentCount: x.attachmentCount ?? 0,
       })),
     [data],
   );
@@ -101,8 +99,8 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
     setPage(0);
   };
 
-  const [deleteTarget, setDeleteTarget] = useState<ParentWork | null>(null);
-  const openDelete = (row: ParentWork) => setDeleteTarget(row);
+  const [deleteTarget, setDeleteTarget] = useState<WorkListRow | null>(null);
+  const openDelete = (row: WorkListRow) => setDeleteTarget(row);
   const closeDelete = () => setDeleteTarget(null);
 
   const [deleteWork, { isLoading: deleting }] = useDeleteWorkMutation();

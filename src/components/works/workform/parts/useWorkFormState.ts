@@ -15,10 +15,9 @@ export type WorkFormState = {
   dueDate: string;
   priority: WorkPriorityCore;
   type: WorkTypeCore;
-
   leaderDirectiveUserId: string;
   leaderWatchUserIds: string[];
-
+  evaluationTemplateId: string;
   note: string;
 };
 
@@ -42,19 +41,15 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
     dueDate: "",
     priority: 2 as WorkPriorityCore,
     type: mapUiTypeToCore(formType ?? "TASK"),
-
     leaderDirectiveUserId: "",
     leaderWatchUserIds: [],
-
+    evaluationTemplateId: "",
     note: "",
   }));
 
   useEffect(() => {
     if (!initialData?.id) {
-      setState((s) => ({
-        ...s,
-        type: mapUiTypeToCore(formType ?? "TASK"),
-      }));
+      setState((s) => ({ ...s, type: mapUiTypeToCore(formType ?? "TASK") }));
       return;
     }
 
@@ -71,6 +66,7 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
       dueDate: initialData.dueDate ? dayjs(initialData.dueDate).format("YYYY-MM-DD") : "",
       leaderDirectiveUserId: initialData.leaderDirectiveUserId ?? "",
       leaderWatchUserIds: initialData.leaderWatchUserIds ?? [],
+      evaluationTemplateId: initialData.evaluationTemplateId ?? "",
       priority: (initialData.priority ?? 2) as WorkPriorityCore,
       type: (initialData.type ?? mapUiTypeToCore(formType ?? "TASK")) as WorkTypeCore,
       note: initialData.note ?? "",
@@ -92,7 +88,6 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
     if (dayjs(state.endDate).isBefore(dayjs(state.startDate), "day")) {
       return '"Đến ngày" phải >= "Từ ngày".';
     }
-    if (!state.leaderDirectiveUserId.trim()) return "Vui lòng chọn Lãnh đạo chỉ đạo.";
     if (state.dueDate && dayjs(state.dueDate).isBefore(dayjs(state.startDate), "day")) {
       return '"Hạn" phải >= "Từ ngày".';
     }
@@ -103,8 +98,9 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
     name: state.name.trim(),
     description: state.description.trim() ? state.description.trim() : null,
     note: state.note.trim() ? state.note.trim() : null,
-    leaderDirectiveUserId: state.leaderDirectiveUserId.trim(),
+    leaderDirectiveUserId: state.leaderDirectiveUserId.trim() || null,
     leaderWatchUserIds: state.leaderWatchUserIds,
+    evaluationTemplateId: state.evaluationTemplateId.trim() || null,
     startDate: isoOrNull(state.startDate),
     endDate: isoOrNull(state.endDate),
     dueDate: isoOrNull(state.dueDate),
@@ -116,20 +112,14 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
     name: state.name.trim(),
     description: state.description.trim() ? state.description.trim() : null,
     note: state.note.trim() ? state.note.trim() : null,
-    leaderDirectiveUserId: state.leaderDirectiveUserId.trim(),
+    leaderDirectiveUserId: state.leaderDirectiveUserId.trim() || null,
     leaderWatchUserIds: state.leaderWatchUserIds,
+    evaluationTemplateId: state.evaluationTemplateId.trim() || null,
     startDate: isoOrNull(state.startDate),
     endDate: isoOrNull(state.endDate),
     dueDate: isoOrNull(state.dueDate),
     priority: state.priority ?? null,
   });
 
-  return {
-    state,
-    setState,
-    dateValue,
-    validate,
-    buildCreatePayload,
-    buildUpdatePayload,
-  };
+  return { state, setState, dateValue, validate, buildCreatePayload, buildUpdatePayload };
 }

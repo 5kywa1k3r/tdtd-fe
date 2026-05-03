@@ -1,34 +1,36 @@
-import React, { useMemo } from 'react';
-import dayjs from 'dayjs';
-import { Chip, IconButton, Stack, Tooltip, Box } from '@mui/material';
+import React, { useMemo } from "react";
+import { Box, Chip, IconButton, Stack, Tooltip } from "@mui/material";
 
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import PostAddIcon from "@mui/icons-material/PostAdd";
 
-import { AppTable, type AppTableColumn, type SortDirection } from '../common/AppTable';
-import type { DynamicExcelRow as DynamicExcelItem, DynamicExcelSearchReq } from '../../api/dynamicExcelApi';
+import { AppTable, type AppTableColumn, type SortDirection } from "../common/AppTable";
+import CommonDateText from "../common/CommonDateText";
+import CommonLabelText from "../common/CommonLabelText";
+import type {
+  DynamicExcelRow as DynamicExcelItem,
+  DynamicExcelSearchReq,
+} from "../../api/dynamicExcelApi";
 
-type SortField = NonNullable<DynamicExcelSearchReq['sortField']>;
+type SortField = NonNullable<DynamicExcelSearchReq["sortField"]>;
 
 interface DynamicExcelListTableProps {
   rows: DynamicExcelItem[];
   total: number;
-
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
-
   sortField: SortField;
   sortDirection: SortDirection;
   onSortChange: (field: SortField, direction: SortDirection) => void;
-
   onRowDoubleClick?: (row: DynamicExcelItem) => void;
-
   onView?: (row: DynamicExcelItem) => void;
   onEdit?: (row: DynamicExcelItem) => void;
+  onWrapAsForm?: (row: DynamicExcelItem) => void;
   onDelete?: (row: DynamicExcelItem) => void;
 }
 
@@ -53,15 +55,16 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
   onRowDoubleClick,
   onView,
   onEdit,
+  onWrapAsForm,
   onDelete,
 }) => {
   const columns: AppTableColumn<DynamicExcelItem>[] = useMemo(
     () => [
       {
-        field: 'actions',
-        header: 'Thao tác',
-        width: 120,
-        align: 'center',
+        field: "actions",
+        header: "Thao tác",
+        width: 152,
+        align: "center",
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
@@ -90,6 +93,18 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
               </IconButton>
             </Tooltip>
 
+            <Tooltip title="Tao Dynamic Form">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onWrapAsForm?.(row);
+                }}
+              >
+                <PostAddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
             <Tooltip title="Xóa">
               <IconButton
                 size="small"
@@ -104,11 +119,9 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
           </Stack>
         ),
       },
-
-      // ✅ Code: preview đẹp + copy
       {
-        field: 'code',
-        header: 'Mã',
+        field: "code",
+        header: "Mã",
         sortable: true,
         width: 190,
         render: (row) => (
@@ -122,11 +135,11 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
                   height: 24,
                   fontSize: 12,
                   maxWidth: 150,
-                  '& .MuiChip-label': {
+                  "& .MuiChip-label": {
                     px: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   },
                 }}
               />
@@ -146,26 +159,30 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
           </Stack>
         ),
       },
-
-      { field: 'name', header: 'Tên', sortable: true, width: '35%' },
-
       {
-        field: 'createdAtUtc',
-        header: 'Ngày tạo',
+        field: "name",
+        header: "Tên",
         sortable: true,
-        width: 160,
-        render: (row) => dayjs(row.createdAtUtc).format('DD/MM/YYYY'),
-        getSortValue: (row) => new Date(row.createdAtUtc),
+        width: "35%",
+        render: (row) => <CommonLabelText text={row.name} />,
       },
-
       {
-        field: 'createdByUsername',
-        header: 'Người tạo',
+        field: "createdAtUtc",
+        header: "Ngày tạo",
         sortable: true,
         width: 160,
+        render: (row) => <CommonDateText value={row.createdAtUtc} />,
+        getSortValue: (row) => row.createdAtUtc || "",
+      },
+      {
+        field: "createdByUsername",
+        header: "Người tạo",
+        sortable: true,
+        width: 160,
+        render: (row) => <CommonLabelText text={row.createdByUsername} />,
       },
     ],
-    [onRowDoubleClick, onView, onEdit, onDelete],
+    [onDelete, onEdit, onRowDoubleClick, onView, onWrapAsForm]
   );
 
   return (
@@ -188,7 +205,6 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
         onPageSizeChange={onPageSizeChange}
         onRowDoubleClick={onRowDoubleClick}
       />
-      {/* (không bắt buộc) */}
     </Box>
   );
 };

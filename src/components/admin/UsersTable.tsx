@@ -1,53 +1,46 @@
-import React, { useMemo } from 'react';
-import { Box, IconButton, Stack, Tooltip } from '@mui/material';
+import React, { useMemo } from "react";
+import { Box, IconButton, Stack, Tooltip } from "@mui/material";
 
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
-import { AppTable, type AppTableColumn } from '../common/AppTable';
-import { POSITION_NAME_BY_CODE } from '../../constants/position';
+import { AppTable, type AppTableColumn } from "../common/AppTable";
+import CommonLabelText from "../common/CommonLabelText";
+import BooleanChip from "../common/BooleanChip";
 
 export type AdminUserRow = {
   id: string;
   username: string;
   fullName: string;
-
   unitId: string;
   unitShortName: string;
   unitSymbol: string;
   unitCode: string;
-
   positionCode?: string;
+  positionName?: string;
   isDeleted: boolean;
   roles: string[];
 };
 
 interface UsersTableProps {
   rows: AdminUserRow[];
-
-  // permissions
   canUpdate: boolean;
   canDelete: boolean;
   meId?: string;
   meRoles?: string[];
-
-  // server paging/sort (AppTable server mode)
   page: number;
   pageSize: number;
   totalRows: number;
   sortField?: string;
-  sortDirection?: 'asc' | 'desc';
+  sortDirection?: "asc" | "desc";
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
-  onSortChange: (field: string, direction: 'asc' | 'desc') => void;
-
-  // actions
+  onSortChange: (field: string, direction: "asc" | "desc") => void;
   onEdit?: (row: AdminUserRow) => void;
   onDelete?: (row: AdminUserRow) => void;
   onResetPassword?: (row: AdminUserRow) => void;
-
   onRowDoubleClick?: (row: AdminUserRow) => void;
 }
 
@@ -73,27 +66,21 @@ export const UsersTable: React.FC<UsersTableProps> = ({
   const hasRole = (roles: string[] | undefined, r: string) =>
     (roles ?? []).some((x) => x.toUpperCase() === r.toUpperCase());
 
-  const meIsAdmin = hasRole(meRoles, 'ADMIN');
-  const meIsSys = hasRole(meRoles, 'SYSTEM_ADMIN');
+  const meIsAdmin = hasRole(meRoles, "ADMIN");
+  const meIsSys = hasRole(meRoles, "SYSTEM_ADMIN");
 
   const canEditRow = (row: AdminUserRow) => {
     if (row.id === meId) return false;
     if (!canUpdate) return false;
+    if (hasRole(row.roles, "ADMIN")) return false;
+    if (meIsAdmin) return hasRole(row.roles, "SYSTEM_ADMIN");
 
-    // nobody touches ADMIN
-    if (hasRole(row.roles, 'ADMIN')) return false;
-
-    // ADMIN: only manage SYSTEM_ADMIN
-    if (meIsAdmin) return hasRole(row.roles, 'SYSTEM_ADMIN');
-
-    // SYS_ADMIN: cannot manage other SYS_ADMIN (but allow self)
     if (meIsSys) {
-      if (hasRole(row.roles, 'SYSTEM_ADMIN') && row.id !== meId) return false;
+      if (hasRole(row.roles, "SYSTEM_ADMIN") && row.id !== meId) return false;
       return true;
     }
 
-    // managers/others: cannot manage SYSTEM_ADMIN/ADMIN
-    if (hasRole(row.roles, 'SYSTEM_ADMIN')) return false;
+    if (hasRole(row.roles, "SYSTEM_ADMIN")) return false;
     return true;
   };
 
@@ -106,61 +93,71 @@ export const UsersTable: React.FC<UsersTableProps> = ({
   const columns: AppTableColumn<AdminUserRow>[] = useMemo(
     () => [
       {
-        field: 'username',
-        header: 'Tài khoản',
+        field: "username",
+        header: "Tài khoản",
         sortable: true,
         width: 180,
-        render: (row) => <b>{row.username}</b>,
+        render: (row) => <CommonLabelText text={row.username} fontWeight={700} />,
       },
       {
-        field: 'fullName',
-        header: 'Họ tên',
+        field: "fullName",
+        header: "Họ tên",
         sortable: true,
         width: 220,
+        render: (row) => <CommonLabelText text={row.fullName} />,
       },
       {
-        field: 'positionCode',
-        header: 'Chức vụ',
+        field: "positionCode",
+        header: "Chức vụ",
         sortable: true,
         width: 240,
-        render: (row) => POSITION_NAME_BY_CODE[row.positionCode ?? ''] ?? '',
+        render: (row) => (
+          <CommonLabelText text={row.positionName || row.positionCode || ""} />
+        ),
       },
       {
-        field: 'unit',
-        header: 'Đơn vị',
+        field: "unit",
+        header: "Đơn vị",
         sortable: true,
-        width: '32%',
+        width: "32%",
         render: (row) => (
           <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {row.unitShortName ?? ''}
-            </span>
-            <Tooltip title={`${row.unitSymbol ? row.unitSymbol + ' - ' : ''}${row.unitShortName ?? ''}`}>
+            <CommonLabelText text={row.unitShortName ?? ""} sx={{ flex: 1, minWidth: 0 }} />
+            <Tooltip
+              title={`${row.unitSymbol ? `${row.unitSymbol} - ` : ""}${row.unitShortName ?? ""}`}
+            >
               <InfoOutlinedIcon fontSize="small" sx={{ opacity: 0.65 }} />
             </Tooltip>
           </Stack>
         ),
       },
       {
-        field: 'isDeleted',
-        header: 'Trạng thái',
+        field: "isDeleted",
+        header: "Trạng thái",
         sortable: true,
         width: 120,
-        render: (row) => (row.isDeleted ? 'Disabled' : 'Active'),
+        render: (row) => (
+          <BooleanChip
+            value={!row.isDeleted}
+            trueLabel="Đang dùng"
+            falseLabel="Ngừng dùng"
+            trueColor="success"
+          />
+        ),
       },
       {
-        field: 'actions',
-        header: 'Thao tác',
+        field: "actions",
+        header: "Thao tác",
         sortable: false,
         width: 140,
-        align: 'center',
+        align: "center",
         render: (row) => {
           const editOk = canEditRow(row) && !row.isDeleted;
           const delOk = canDeleteRow(row) && !row.isDeleted;
           const resetOk = editOk;
 
           return (
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ display: "flex", justifyContent: "center" }}>
               <Stack direction="row" spacing={0.5}>
                 <Tooltip title="Sửa">
                   <span>
@@ -172,7 +169,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                         if (!editOk) return;
                         onEdit?.(row);
                       }}
-                      sx={{ '&:hover': { transform: 'scale(1.05)' } }}
+                      sx={{ "&:hover": { transform: "scale(1.05)" } }}
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
@@ -189,14 +186,14 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                         if (!resetOk) return;
                         onResetPassword?.(row);
                       }}
-                      sx={{ '&:hover': { transform: 'scale(1.05)' } }}
+                      sx={{ "&:hover": { transform: "scale(1.05)" } }}
                     >
                       <RestartAltIcon fontSize="small" />
                     </IconButton>
                   </span>
                 </Tooltip>
 
-                <Tooltip title="Xóa">
+                <Tooltip title="Ngừng dùng">
                   <span>
                     <IconButton
                       size="small"
@@ -206,7 +203,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                         if (!delOk) return;
                         onDelete?.(row);
                       }}
-                      sx={{ '&:hover': { transform: 'scale(1.05)' } }}
+                      sx={{ "&:hover": { transform: "scale(1.05)" } }}
                     >
                       <DeleteOutlineIcon fontSize="small" />
                     </IconButton>
@@ -218,7 +215,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
         },
       },
     ],
-    [canUpdate, canDelete, meIsAdmin, meIsSys, meId, meRoles, onEdit, onDelete, onResetPassword],
+    [canDelete, canUpdate, meId, meRoles, meIsAdmin, meIsSys, onDelete, onEdit, onResetPassword]
   );
 
   return (

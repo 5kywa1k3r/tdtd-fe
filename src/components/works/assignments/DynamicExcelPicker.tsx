@@ -21,9 +21,7 @@ import PreviewIcon from "@mui/icons-material/Preview";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 
-import {
-  useSearchDynamicExcelMutation,
-} from "../../../api/dynamicExcelApi";
+import { useSearchDynamicExcelMutation } from "../../../api/dynamicExcelApi";
 
 type DynamicExcelOption = {
   id: string;
@@ -43,18 +41,23 @@ type DynamicExcelPickerProps = {
   onPreview?: (id: string) => void;
 };
 
-export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
+export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(function DynamicExcelPicker({
   value,
   valueCode,
   valueName,
   onChange,
   disabled,
   onPreview,
-}) => {
+}) {
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
   const [rows, setRows] = React.useState<DynamicExcelOption[]>([]);
   const [search, { isLoading }] = useSearchDynamicExcelMutation();
+
+  const displayValue = React.useMemo(
+    () => (value ? `${valueCode ?? ""} — ${valueName ?? ""}`.trim() : ""),
+    [value, valueCode, valueName]
+  );
 
   const doSearch = React.useCallback(async () => {
     const res = await search({
@@ -73,6 +76,19 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
     void doSearch();
   }, [open, doSearch]);
 
+  const handleOpen = React.useCallback(() => {
+    if (disabled) return;
+    setOpen(true);
+  }, [disabled]);
+
+  const handleClose = React.useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleClear = React.useCallback(() => {
+    onChange(null);
+  }, [onChange]);
+
   return (
     <>
       <Stack direction="row" spacing={1} alignItems="stretch">
@@ -81,20 +97,16 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
           size="small"
           label="Chọn biểu mẫu đã thiết kế"
           disabled={disabled}
-          value={value ? `${valueCode ?? ""} — ${valueName ?? ""}`.trim() : ""}
+          value={displayValue}
           placeholder="Chọn biểu mẫu"
-          onClick={() => !disabled && setOpen(true)}
+          onClick={handleOpen}
           slotProps={{ htmlInput: { readOnly: true } }}
         />
 
         {value && (
           <Tooltip title="Xem trước biểu mẫu">
             <span>
-              <IconButton
-                color="primary"
-                onClick={() => onPreview?.(value)}
-                disabled={disabled}
-              >
+              <IconButton color="primary" onClick={() => onPreview?.(value)} disabled={disabled}>
                 <PreviewIcon />
               </IconButton>
             </span>
@@ -104,10 +116,7 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
         {value && (
           <Tooltip title="Xóa chọn">
             <span>
-              <IconButton
-                onClick={() => onChange(null)}
-                disabled={disabled}
-              >
+              <IconButton onClick={handleClear} disabled={disabled}>
                 <ClearIcon />
               </IconButton>
             </span>
@@ -115,7 +124,7 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
         )}
       </Stack>
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
         <DialogTitle>Chọn biểu mẫu động</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
@@ -133,11 +142,7 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
                   }
                 }}
               />
-              <Button
-                variant="contained"
-                startIcon={<SearchIcon />}
-                onClick={() => void doSearch()}
-              >
+              <Button variant="contained" startIcon={<SearchIcon />} onClick={() => void doSearch()}>
                 Tìm
               </Button>
             </Stack>
@@ -161,12 +166,13 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
                   >
                     <ListItemText
                       primary={`${x.code} — ${x.name}`}
+                      secondaryTypographyProps={{ component: "div" }}
                       secondary={
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: "wrap" }}>
                           {(x.labels ?? []).slice(0, 4).map((lb) => (
                             <Chip key={lb} size="small" label={lb} />
                           ))}
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary" component="span">
                             {x.createdByUsername}
                           </Typography>
                         </Stack>
@@ -189,4 +195,4 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = ({
       </Dialog>
     </>
   );
-};
+});

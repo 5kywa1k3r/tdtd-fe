@@ -1,50 +1,49 @@
 // src/components/common/WorkStatusChip.tsx
-import * as React from 'react';
-import { Chip, type ChipProps } from '@mui/material';
+import * as React from "react";
+import { Chip, type ChipProps } from "@mui/material";
 
-type ChipColor = ChipProps['color'];
+type ChipColor = ChipProps["color"];
 
-// BE B1: status là số 1..5 (bệ hạ sẽ đổi label sau nếu cần)
 export type WorkStatusCode = 1 | 2 | 3 | 4 | 5;
 
 const STATUS_LABEL: Record<WorkStatusCode, string> = {
-  1: 'Chưa bắt đầu',
-  2: 'Đang thực hiện',
-  3: 'Có rủi ro',
-  4: 'Chậm tiến độ',
-  5: 'Hoàn thành',
+  1: "Chua bat dau",
+  2: "Dang thuc hien",
+  3: "Hoan thanh",
+  4: "Co nguy co qua han",
+  5: "Qua han",
 };
 
 const STATUS_COLOR: Record<WorkStatusCode, ChipColor> = {
-  1: 'default',
-  2: 'primary',
-  3: 'warning',
-  4: 'error',
-  5: 'success',
+  1: "default",
+  2: "primary",
+  3: "success",
+  4: "warning",
+  5: "error",
 };
 
 export interface WorkStatusChipProps {
   status?: number | null;
-  size?: ChipProps['size'];
+  size?: ChipProps["size"];
 }
 
-export const WorkStatusChip: React.FC<WorkStatusChipProps> = ({ status, size = 'small' }) => {
+export const WorkStatusChip: React.FC<WorkStatusChipProps> = ({ status, size = "small" }) => {
   if (!status) {
     return (
-      <Chip size={size} label="Chưa thiết lập" variant="outlined" color="default" />
+      <Chip size={size} label="Chua thiet lap" variant="outlined" color="default" />
     );
   }
 
   const s = status as WorkStatusCode;
-  const label = STATUS_LABEL[s] ?? `Trạng thái ${status}`;
-  const color = STATUS_COLOR[s] ?? 'default';
+  const label = STATUS_LABEL[s] ?? `Trang thai ${status}`;
+  const color = STATUS_COLOR[s] ?? "default";
 
   return (
     <Chip
       size={size}
       label={label}
       color={color}
-      variant={color === 'default' ? 'outlined' : 'filled'}
+      variant={color === "default" ? "outlined" : "filled"}
     />
   );
 };

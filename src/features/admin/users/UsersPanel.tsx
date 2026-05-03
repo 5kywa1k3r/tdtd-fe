@@ -1,22 +1,33 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
   Card,
   CardContent,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Snackbar,
+  Stack,
   TextField,
+  Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { Box } from '@mui/system';
 
 import {
   useSearchUsersQuery,
   useSoftDeleteUserMutation,
   useResetPasswordMutation,
+  useImportUsersMutation,
 } from '../../../api/adminUsersApi';
+import { api } from '../../../api/base/axios';
+import { type ImportResult } from '../../../api/adminUnitsApi';
 import { useGetMeQuery } from '../../../api/base/meApi';
 import { UserEditorDialog } from './UserEditorDialog';
 import { ResetPasswordDialog } from './ResetPasswordDialog';
@@ -30,6 +41,22 @@ import { Permission } from '../../../constants/permissions';
 import { hasPermission } from '../../../utils/rbac';
 
 const DEFAULT_PASSWORD = '123456@Aa';
+
+const toolbarButtonSx = {
+  height: 40,
+  px: 1.75,
+  whiteSpace: 'nowrap',
+};
+
+async function downloadTemplate(url: string, format: 'xlsx' | 'csv', fileName: string) {
+  const res = await api.get(url, { params: { format }, responseType: 'blob' });
+  const blobUrl = window.URL.createObjectURL(res.data);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fileName;
+  a.click();
+  window.URL.revokeObjectURL(blobUrl);
+}
 
 export function UsersPanel() {
   const { data: me } = useGetMeQuery();
@@ -57,6 +84,7 @@ export function UsersPanel() {
   const [qInput, setQInput] = useState('');
   const [selectedUnitIdInput, setSelectedUnitIdInput] = useState<string>('');
   const [unitCodePrefixInput, setUnitCodePrefixInput] = useState<string>('');
+  const [unitTypeCodeInput, setUnitTypeCodeInput] = useState<string>('');
   const [positionCodeInput, setPositionCodeInput] = useState<string>('');
 
   // ===== APPLIED FILTERS (bấm Tìm kiếm mới cập nhật) =====
@@ -78,7 +106,7 @@ export function UsersPanel() {
   const [sortField, setSortField] = useState<string | undefined>('positionCode');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  const { data, isFetching, refetch } = useSearchUsersQuery({
+  const { data, refetch } = useSearchUsersQuery({
     q: applied.q,
     isDeleted,
     unitCodePrefix: applied.unitCodePrefix,
@@ -112,6 +140,7 @@ export function UsersPanel() {
       unitSymbol: u.unitSymbol ?? '',
       unitCode: u.unitCode ?? u._unitCode ?? '',
       positionCode: u.positionCode ?? '',
+      positionName: u.positionName ?? '',
       isDeleted: !!u.isDeleted,
       roles: Array.isArray(u.roles) ? u.roles : [],
     }));
@@ -119,6 +148,9 @@ export function UsersPanel() {
 
   const [softDeleteUser, dState] = useSoftDeleteUserMutation();
   const [resetPassword, rState] = useResetPasswordMutation();
+  const [importUsers, importState] = useImportUsersMutation();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importPreview, setImportPreview] = useState<{ file: File; result: ImportResult } | null>(null);
 
   type Editor =
     | { mode: 'create' }
@@ -148,6 +180,7 @@ export function UsersPanel() {
     setQInput('');
     setSelectedUnitIdInput('');
     setUnitCodePrefixInput('');
+    setUnitTypeCodeInput('');
     setPositionCodeInput('');
 
     setApplied({ q: '', unitCodePrefix: undefined, positionCode: undefined });
@@ -162,7 +195,7 @@ export function UsersPanel() {
           sx={{
             display: 'flex',
             flexWrap: 'wrap',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             gap: 1,
             mb: 2,
           }}
@@ -172,6 +205,7 @@ export function UsersPanel() {
             sx={{
               display: 'flex',
               flexWrap: 'wrap',
+              alignItems: 'flex-start',
               gap: 1,
               flex: '1 1 720px',
               minWidth: 280,
@@ -194,11 +228,15 @@ export function UsersPanel() {
                 onChange={(v) => {
                   const id = v?.[0] ?? '';
                   setSelectedUnitIdInput(id);
-                  if (!id) setUnitCodePrefixInput('');
+                  if (!id) {
+                    setUnitCodePrefixInput('');
+                    setUnitTypeCodeInput('');
+                  }
                 }}
                 onChangeMeta={(selected) => {
                   const first = selected?.[0];
                   setUnitCodePrefixInput(first?.code ?? '');
+                  setUnitTypeCodeInput(first?.primaryUnitTypeCode ?? '');
                 }}
                 mode="single"
                 label="Đơn vị"
@@ -210,6 +248,7 @@ export function UsersPanel() {
                 value={positionCodeInput}
                 onChange={(v) => setPositionCodeInput(v)}
                 unitCode={unitCodePrefixInput || null}
+                unitTypeCode={unitTypeCodeInput || null}
                 label="Chức vụ"
               />
             </Box>
@@ -221,7 +260,7 @@ export function UsersPanel() {
                 size="small"
                 startIcon={<SearchIcon />}
                 onClick={applySearch}
-                sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}
+                sx={toolbarButtonSx}
               >
                 Tìm kiếm
               </Button>
@@ -231,7 +270,7 @@ export function UsersPanel() {
                 size="small"
                 startIcon={<ClearIcon />}
                 onClick={clearFilters}
-                sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}
+                sx={toolbarButtonSx}
               >
                 Xóa lọc
               </Button>
@@ -242,19 +281,70 @@ export function UsersPanel() {
           <Box
             sx={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
+              alignSelf: 'flex-start',
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'flex-start', lg: 'flex-end' },
               gap: 1,
               flex: '0 0 auto',
               marginLeft: { xs: 0, sm: 'auto' },
             }}
           >
             {canCreate && (
+              <>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  hidden
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (!file) return;
+                    try {
+                      const result = await importUsers({ file, dryRun: true }).unwrap();
+                      setImportPreview({ file, result });
+                    } catch (e: any) {
+                      notifyError(e, 'Kiểm tra file import thất bại.');
+                    }
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<FileDownloadIcon />}
+                  onClick={() => downloadTemplate('/admin/users/import-template', 'xlsx', 'user-import-template.xlsx')}
+                  sx={toolbarButtonSx}
+                >
+                  Mẫu XLSX
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<FileDownloadIcon />}
+                  onClick={() => downloadTemplate('/admin/users/import-template', 'csv', 'user-import-template.csv')}
+                  sx={toolbarButtonSx}
+                >
+                  Mẫu CSV
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<UploadFileIcon />}
+                  onClick={() => importInputRef.current?.click()}
+                  sx={toolbarButtonSx}
+                >
+                  Import
+                </Button>
+              </>
+            )}
+            {canCreate && (
               <Button
                 variant="contained"
                 size="small"
                 startIcon={<AddIcon />}
                 onClick={() => setEditor({ mode: 'create' })}
-                sx={{ height: 40, px: 2, whiteSpace: 'nowrap' }}
+                sx={toolbarButtonSx}
               >
                 <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
                   Tạo user
@@ -310,6 +400,52 @@ export function UsersPanel() {
           }}
         />
 
+        <Dialog open={!!importPreview} onClose={() => setImportPreview(null)} fullWidth maxWidth="md">
+          <DialogTitle>Kết quả kiểm tra import user</DialogTitle>
+          <DialogContent>
+            {importPreview && (
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                <Alert severity={importPreview.result.errorRows > 0 ? 'error' : 'success'}>
+                  Tổng {importPreview.result.totalRows} dòng, hợp lệ {importPreview.result.validRows}, lỗi {importPreview.result.errorRows}.
+                </Alert>
+                {importPreview.result.errors.slice(0, 50).map((err, idx) => (
+                  <Typography key={`${err.rowNumber}-${err.field}-${idx}`} variant="body2">
+                    Dòng {err.rowNumber}, cột {err.field}: {err.message}
+                  </Typography>
+                ))}
+              </Stack>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setImportPreview(null)}
+              sx={{ height: 36, px: 1.75 }}
+            >
+              Đóng
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!importPreview || importPreview.result.errorRows > 0 || importState.isLoading}
+              sx={{ height: 36, px: 1.75 }}
+              onClick={async () => {
+                if (!importPreview) return;
+                try {
+                  await importUsers({ file: importPreview.file, dryRun: false }).unwrap();
+                  setImportPreview(null);
+                  notifySuccess('Import user thành công.');
+                } catch (e: any) {
+                  notifyError(e, 'Import user thất bại.');
+                }
+              }}
+            >
+              Xác nhận import
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <ResetPasswordDialog
           open={!!resetTarget}
           target={resetTarget}
@@ -319,24 +455,24 @@ export function UsersPanel() {
         {/* Confirm delete */}
         <ConfirmDialog
           open={!!deleteTarget}
-          title="Xác nhận xóa"
+          title="Ngừng dùng user"
           message={
             <Box>
-              Bạn có chắc muốn <b>disable</b> user <b>{deleteTarget?.username}</b>?
+              Bạn có chắc muốn ngừng dùng user <b>{deleteTarget?.username}</b>?
             </Box>
           }
-          confirmText="Xóa"
+          confirmText="Ngừng dùng"
           cancelText="Hủy"
-          variant="danger"
+          variant="warning"
           confirmLoading={dState.isLoading}
           onClose={() => setDeleteTarget(null)}
           onConfirm={async () => {
             if (!deleteTarget) return;
             try {
               await softDeleteUser({ userId: deleteTarget.id }).unwrap();
-              notifySuccess('Xóa user thành công.');
+              notifySuccess('Đã ngừng dùng user.');
             } catch (e: any) {
-              setSnack({ type: 'error', message: e?.data?.title ?? e?.message ?? 'Xóa user thất bại.' });
+              setSnack({ type: 'error', message: e?.data?.title ?? e?.message ?? 'Ngừng dùng user thất bại.' });
             } finally {
               setDeleteTarget(null);
             }

@@ -1,30 +1,25 @@
 import React from "react";
 import { alpha, useTheme } from "@mui/material/styles";
 import {
+  Alert,
   Button,
   Card,
   CardContent,
   Chip,
   Divider,
   FormControlLabel,
-  IconButton,
   MenuItem,
   Stack,
   Switch,
   TextField,
-  Tooltip,
   Typography,
-  Alert,
 } from "@mui/material";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import EditIcon from "@mui/icons-material/Edit";
-import SaveIcon from "@mui/icons-material/Save";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import RestoreIcon from "@mui/icons-material/Restore";
 
 import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
-import { DynamicExcelPicker } from "./DynamicExcelPicker";
+import { DynamicFormPicker } from "./DynamicFormPicker";
 import { PeriodicScheduleEditor } from "./PeriodicScheduleEditor";
 import type { AssignmentDraft } from "../../../types/workAssignment";
 
@@ -38,10 +33,7 @@ type Props = {
   ) => boolean;
   onChange: (next: AssignmentDraft) => void;
   onSave: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
   onCancelCreate?: () => void;
-  onView: () => void;
   onPreviewDynamicExcel: (dynamicExcelId: string) => void;
   workStartDate?: string | null;
   workEndDate?: string | null;
@@ -54,23 +46,22 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
   workEndDate,
   onChange,
   onSave,
-  onDelete,
-  onEdit,
   onCancelCreate,
-  onView,
-  onPreviewDynamicExcel,
 }) => {
   const theme = useTheme();
 
-  const isView = draft.mode === "view";
-  const rowDisabled = !!disabled || isView;
-  const templateDisabled =
-    rowDisabled || !!draft.templateLocked || !!draft.hasData;
+  const isCreate = draft.mode === "create" && !draft.id;
+  const isExisting = !!draft.id;
+
+  const rowDisabled = !!disabled || isExisting;
+  const templateDisabled = rowDisabled;
+
+  const hasStatusChanged = isExisting && !!draft.isDirty;
 
   const cardSx = React.useMemo(
     () => ({
       border: `1px solid ${theme.palette.divider}`,
-      opacity: draft.isActive ? 1 : 0.55,
+      opacity: draft.isActive ? 1 : 0.62,
       bgcolor: draft.isActive
         ? "background.paper"
         : alpha(theme.palette.action.disabledBackground, 0.35),
@@ -96,8 +87,10 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               useFlexGap
             >
               <Typography variant="subtitle1" fontWeight={600}>
-                {draft.dynamicExcelName
-                  ? `${draft.dynamicExcelCode ?? ""} — ${draft.dynamicExcelName}`
+                {draft.dynamicFormTemplateName || draft.dynamicExcelName
+                  ? `${draft.dynamicFormTemplateCode || draft.dynamicExcelCode || ""} - ${draft.dynamicFormTemplateName || draft.dynamicExcelName}`
+                  : isCreate
+                  ? "Giao việc"
                   : "Cấu hình biểu mẫu"}
               </Typography>
 
@@ -105,7 +98,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 size="small"
                 label={
                   draft.assignmentType === "ONCE"
-                    ? "Tổng hợp"
+                    ? "Giao một lần"
                     : "Định kỳ báo cáo"
                 }
                 color={draft.assignmentType === "ONCE" ? "default" : "primary"}
@@ -119,39 +112,42 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 variant="outlined"
               />
 
-              {!draft.isActive && (
-                <Chip size="small" color="warning" label="Đang vô hiệu hóa" />
-              )}
-            </Stack>
+              <Chip
+                size="small"
+                color={draft.isActive ? "success" : "default"}
+                label={draft.isActive ? "Đang hiệu lực" : "Ngừng hiệu lực"}
+              />
 
-            <Stack direction="row" spacing={1}>
-              {isView ? (
-                <Tooltip title="Chuyển sang sửa">
-                  <span>
-                    <IconButton onClick={onEdit} disabled={disabled}>
-                      <EditIcon />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              ) : (
-                <Tooltip title="Xem">
-                  <span>
-                    <IconButton onClick={onView} disabled={disabled}>
-                      <VisibilityIcon />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+              {draft.hasData && (
+                <Chip size="small" color="info" variant="outlined" label="Đã có dữ liệu" />
               )}
 
-              <Tooltip title={draft.mode === "create" ? "Hủy bỏ" : "Xóa"}>
-                <span>
-                  <IconButton onClick={onDelete} disabled={disabled} color="error">
-                    <DeleteOutlineIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              {draft.templateLocked && (
+                <Chip
+                  size="small"
+                  color="info"
+                  variant="outlined"
+                  label="Khóa biểu mẫu"
+                />
+              )}
+
+              {hasStatusChanged && (
+                <Chip
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  label="Chưa lưu thay đổi"
+                />
+              )}
             </Stack>
           </Stack>
+
+          {isExisting && (
+            <Alert severity="info">
+              Assignment đã tạo không chỉnh sửa trực tiếp. Chỉ cho phép bật/tắt hiệu lực
+              rồi bấm <b>Lưu trạng thái</b>. Muốn đổi cấu hình, hãy giao công việc mới.
+            </Alert>
+          )}
 
           {(draft.hasData || draft.templateLocked) && (
             <Alert severity="info">
@@ -162,18 +158,20 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
           <Divider />
 
           <Stack spacing={2}>
-            <DynamicExcelPicker
-              value={draft.dynamicExcelId}
-              valueCode={draft.dynamicExcelCode}
-              valueName={draft.dynamicExcelName}
+            <DynamicFormPicker
+              value={draft.dynamicFormTemplateId}
+              valueCode={draft.dynamicFormTemplateCode}
+              valueName={draft.dynamicFormTemplateName}
               disabled={templateDisabled}
-              onPreview={onPreviewDynamicExcel}
               onChange={(item) =>
                 onChange({
                   ...draft,
-                  dynamicExcelId: item?.id ?? "",
-                  dynamicExcelCode: item?.code ?? "",
-                  dynamicExcelName: item?.name ?? "",
+                  dynamicFormTemplateId: item?.id ?? "",
+                  dynamicFormTemplateCode: item?.code ?? "",
+                  dynamicFormTemplateName: item?.name ?? "",
+                  dynamicExcelId: "",
+                  dynamicExcelCode: "",
+                  dynamicExcelName: "",
                   isDirty: true,
                 })
               }
@@ -196,6 +194,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                   onChange({
                     ...draft,
                     assignmentType: nextType,
+                    dueAtUtc: nextType === "ONCE" ? draft.dueAtUtc ?? null : null,
                     schedule:
                       nextType === "ONCE"
                         ? null
@@ -228,33 +227,12 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 <MenuItem value="UNIT_ROW_COL">UNIT_ROW_COL</MenuItem>
               </TextField>
 
-              {/* <TextField
-                select
-                size="small"
-                label="Phép tính"
-                value={draft.computationType}
-                disabled={rowDisabled}
-                onChange={(e) =>
-                  onChange({
-                    ...draft,
-                    computationType: e.target.value as AssignmentDraft["computationType"],
-                    isDirty: true,
-                  })
-                }
-                sx={{ minWidth: 180 }}
-              >
-                <MenuItem value="SUM">SUM</MenuItem>
-                <MenuItem value="MEAN">MEAN</MenuItem>
-                <MenuItem value="MAX">MAX</MenuItem>
-                <MenuItem value="MIN">MIN</MenuItem>
-              </TextField> */}
-
               <FormControlLabel
                 sx={{ ml: 0.5 }}
                 control={
                   <Switch
-                    checked={draft.isActive}
-                    disabled={rowDisabled}
+                    checked={!!draft.isActive}
+                    disabled={!!disabled}
                     onChange={(_, checked) =>
                       onChange({
                         ...draft,
@@ -264,7 +242,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                     }
                   />
                 }
-                label={draft.isActive ? "Đang kích hoạt" : "Đang vô hiệu hóa"}
+                label={draft.isActive ? "Đang hiệu lực" : "Ngừng hiệu lực"}
               />
             </Stack>
 
@@ -319,6 +297,25 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               }
             />
 
+            {draft.assignmentType === "ONCE" && (
+              <TextField
+                size="small"
+                type="datetime-local"
+                fullWidth
+                label="Hạn nộp"
+                value={draft.dueAtUtc ? draft.dueAtUtc.slice(0, 16) : ""}
+                disabled={rowDisabled}
+                onChange={(e) =>
+                  onChange({
+                    ...draft,
+                    dueAtUtc: e.target.value ? new Date(e.target.value).toISOString() : null,
+                    isDirty: true,
+                  })
+                }
+                InputLabelProps={{ shrink: true }}
+              />
+            )}
+
             {draft.assignmentType === "PERIODIC_REPORT" && (
               <PeriodicScheduleEditor
                 value={draft.schedule}
@@ -339,28 +336,37 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
           <Divider />
 
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            {draft.mode === "create" && (
-              <Button
-                variant="outlined"
-                color="inherit"
-                startIcon={<RestoreIcon />}
-                onClick={onCancelCreate}
-                disabled={disabled}
-              >
-                Hủy bỏ
-              </Button>
+            {isCreate && (
+              <>
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<RestoreIcon />}
+                  onClick={onCancelCreate}
+                  disabled={disabled}
+                >
+                  Hủy bỏ
+                </Button>
+
+                <Button
+                  variant="contained"
+                  startIcon={<AddCircleOutlineIcon />}
+                  onClick={onSave}
+                  disabled={disabled}
+                >
+                  Tạo mới
+                </Button>
+              </>
             )}
 
-            {!isView && (
+            {isExisting && (
               <Button
                 variant="contained"
-                startIcon={
-                  draft.mode === "create" ? <AddCircleOutlineIcon /> : <SaveIcon />
-                }
+                startIcon={<SaveOutlinedIcon />}
                 onClick={onSave}
-                disabled={disabled}
+                disabled={disabled || !hasStatusChanged}
               >
-                {draft.mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
+                Lưu trạng thái
               </Button>
             )}
           </Stack>

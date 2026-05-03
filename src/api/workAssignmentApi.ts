@@ -1,81 +1,125 @@
 import { baseApi } from "./base/baseApi";
 import type {
+  SaveWorkAssignmentRequest,
+  WorkAssignmentListResponse,
   WorkAssignmentResponse,
-  SaveWorkAssignmentReq,
 } from "../types/workAssignment";
 
+export type WorkAssignmentParentCandidateDto = WorkAssignmentListResponse;
+
+export type WorkAssignmentEvaluationLogRow = {
+  id: string;
+  assignmentId: string;
+  evaluationCode?: string | null;
+  evaluationLabel?: string | null;
+  comment?: string | null;
+  reason?: string | null;
+  createdAtUtc?: string | null;
+  createdByUserId?: string | null;
+  createdByUserName?: string | null;
+};
+
 export const workAssignmentApi = baseApi.injectEndpoints({
-  endpoints: (b) => ({
-    getWorkAssignmentsByWork: b.query<WorkAssignmentResponse[], { workId: string }>({
+  endpoints: (build) => ({
+    getWorkAssignmentsByWork: build.query<WorkAssignmentListResponse[], { workId: string }>({
       query: ({ workId }) => ({
-        url: `/works/${workId}/assignments`,
+        url: `works/${workId}/assignments`,
         method: "GET",
       }),
-      providesTags: (_r, _e, arg) => [
-        { type: "WorkAssignment", id: `WORK:${arg.workId}` },
+      providesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
       ],
-      keepUnusedDataFor: 30,
     }),
 
-    getWorkAssignment: b.query<WorkAssignmentResponse, { id: string }>({
+    getWorkAssignmentById: build.query<WorkAssignmentResponse, { id: string }>({
       query: ({ id }) => ({
-        url: `/work-assignments/${id}`,
+        url: `work-assignments/${id}`,
         method: "GET",
       }),
-      providesTags: (_r, _e, arg) => [{ type: "WorkAssignment", id: arg.id }],
-      keepUnusedDataFor: 30,
+      providesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: arg.id },
+      ],
     }),
 
-    createWorkAssignment: b.mutation<
+    getChildrenAssignments: build.query<
+      WorkAssignmentListResponse[],
+      { parentAssignmentId: string }
+    >({
+      query: ({ parentAssignmentId }) => ({
+        url: `work-assignments/${parentAssignmentId}/children`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, arg) => [
+        { type: "WorkAssignmentChildren" as const, id: arg.parentAssignmentId },
+      ],
+    }),
+
+    getMyParentCandidates: build.query<
+      WorkAssignmentParentCandidateDto[],
+      { workId: string }
+    >({
+      query: ({ workId }) => ({
+        url: `works/${workId}/assignment-parent-candidates`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `PARENT_CANDIDATES_${arg.workId}` },
+      ],
+    }),
+
+    createWorkAssignment: build.mutation<
       WorkAssignmentResponse,
-      { workId: string; body: SaveWorkAssignmentReq }
+      { workId: string; body: SaveWorkAssignmentRequest }
     >({
       query: ({ workId, body }) => ({
-        url: `/works/${workId}/assignments`,
+        url: `works/${workId}/assignments`,
         method: "POST",
         data: body,
       }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "WorkAssignment", id: `WORK:${arg.workId}` },
-        { type: "Work", id: arg.workId },
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
+        { type: "WorkAssignment" as const, id: `PARENT_CANDIDATES_${arg.workId}` },
       ],
     }),
 
-    updateWorkAssignment: b.mutation<
-      WorkAssignmentResponse,
-      { id: string; body: SaveWorkAssignmentReq; workId: string }
-    >({
-      query: ({ id, body }) => ({
-        url: `/work-assignments/${id}`,
-        method: "PUT",
-        data: body,
-      }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "WorkAssignment", id: arg.id },
-        { type: "WorkAssignment", id: `WORK:${arg.workId}` },
-        { type: "Work", id: arg.workId },
-      ],
-    }),
-
-    deleteWorkAssignment: b.mutation<void, { id: string; workId: string }>({
+    deactivateWorkAssignment: build.mutation<void, { id: string; workId: string }>({
       query: ({ id }) => ({
-        url: `/work-assignments/${id}`,
-        method: "DELETE",
+        url: `work-assignments/${id}/deactivate`,
+        method: "POST",
       }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "WorkAssignment", id: arg.id },
-        { type: "WorkAssignment", id: `WORK:${arg.workId}` },
-        { type: "Work", id: arg.workId },
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
+        { type: "WorkAssignment" as const, id: arg.id },
+        { type: "Work" as const, id: arg.workId },
+        { type: "ReviewSummary" as const, id: "LIST" },
+        { type: "ReviewReport" as const, id: "LIST" },
       ],
     }),
+
+    activateWorkAssignment: build.mutation<void, { id: string; workId: string }>({
+      query: ({ id }) => ({
+        url: `work-assignments/${id}/activate`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
+        { type: "WorkAssignment" as const, id: arg.id },
+        { type: "Work" as const, id: arg.workId },
+        { type: "ReviewSummary" as const, id: "LIST" },
+        { type: "ReviewReport" as const, id: "LIST" },
+      ],
+    }),
+
   }),
   overrideExisting: true,
 });
 
 export const {
   useGetWorkAssignmentsByWorkQuery,
-  useGetWorkAssignmentQuery,
+  useGetWorkAssignmentByIdQuery,
+  useGetChildrenAssignmentsQuery,
+  useGetMyParentCandidatesQuery,
   useCreateWorkAssignmentMutation,
-  useUpdateWorkAssignmentMutation,
-  useDeleteWorkAssignmentMutation,
+  useDeactivateWorkAssignmentMutation,
+  useActivateWorkAssignmentMutation,
 } = workAssignmentApi;

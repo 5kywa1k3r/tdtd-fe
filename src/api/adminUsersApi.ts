@@ -1,5 +1,6 @@
 import { baseApi } from './base/baseApi';
 import { type PagedResult } from '../types/pagedResult';
+import { type ImportResult } from './adminUnitsApi';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -12,6 +13,7 @@ export type UserSearchRow = {
   unitSymbol?: string | null;
   unitCode?: string | null;
   positionCode?: string | null;
+  positionName?: string | null;
   isDeleted: boolean;
   roles: string[]; //  NEW: dùng để disable nút theo target role
 };
@@ -21,9 +23,14 @@ export type UserDto = {
   username: string;
   fullName: string;
   unitId: string;
-  unitName: string;
+  unitSymbol?: string | null;
+  unitName?: string | null;
+  unitCode?: string | null;
   roles: string[];
   positionCode: string; // ✅ giữ nguyên (required)
+  positionName?: string | null;
+  isDeleted?: boolean;
+  accountKind?: string | null;
   note?: string;
   createdAtUtc?: string;
   updatedAtUtc?: string;
@@ -35,7 +42,7 @@ export type CreateUserReq = {
   fullName: string;
   unitId: string;
   positionCode: string; // ✅ giữ nguyên
-  roles: string[];
+  roles?: string[];
 };
 
 export type UpdateUserReq = {
@@ -107,6 +114,7 @@ export const adminUsersApi = baseApi.injectEndpoints({
 
           // ✅ NEW
           positionCode: r.positionCode ?? r._positionCode ?? null,
+          positionName: r.positionName ?? null,
 
           isDeleted: !!r.isDeleted,
           roles: Array.isArray(r.roles) ? r.roles : [],
@@ -169,6 +177,22 @@ export const adminUsersApi = baseApi.injectEndpoints({
         return tags;
       },
     }),
+
+    importUsers: b.mutation<ImportResult, { file: File; dryRun?: boolean }>({
+      query: ({ file, dryRun = true }) => {
+        const form = new FormData();
+        form.append('file', file);
+        return {
+          url: '/admin/users/import',
+          method: 'POST',
+          data: form,
+          params: { dryRun },
+          headers: { 'Content-Type': 'multipart/form-data' },
+        };
+      },
+      invalidatesTags: (_res, _err, arg): Tag[] =>
+        arg.dryRun === false ? [{ type: 'Users', id: 'SEARCH_ALL' }] : [],
+    }),
   }),
   overrideExisting: true,
 });
@@ -182,4 +206,5 @@ export const {
   useUpdateUserMutation,
   useSoftDeleteUserMutation,
   useResetPasswordMutation,
+  useImportUsersMutation,
 } = adminUsersApi;

@@ -1,23 +1,27 @@
 // src/types/report.ts
-import type { WorkAssignmentReportStatus } from "./reportStatus";
+import type {
+  WorkAssignmentReportStatus,
+  WorkReportPeriodStatus,
+} from "./reportStatus";
 
 export interface PagedResult<T> {
   rows: T[];
   totalRows: number;
-  page: number; // 0-based
+  page: number;
   pageSize: number;
 }
 
 /* =========================
- * Outer list: group theo template
+ * Outer list: template groups
  * ========================= */
 
 export interface MyReportTemplateSearchRequest {
-  page: number; // 0-based
+  page: number;
   pageSize: number;
   q?: string | null;
   isActive?: boolean | null;
   hasReport?: boolean | null;
+  hasOverduePeriod?: boolean | null;
   sortField?: string | null;
   sortDirection?: "asc" | "desc" | string | null;
 }
@@ -27,77 +31,116 @@ export interface MyReportTemplateRow {
   dynamicExcelCode: string;
   dynamicExcelName: string;
 
-  assignmentCount: number;
+  bindingCount: number;
+  periodCount: number;
   reportCount: number;
 
   latestPeriodKey?: string | null;
-  latestReportStatus?: WorkAssignmentReportStatus | null;
-  latestUpdatedAtUtc?: string | null;
+  latestPeriodStatus?: WorkReportPeriodStatus | null;
+  latestDueAtUtc?: string | null;
+
   latestReportId?: string | null;
+  latestPeriodId?: string | null;
+  latestUpdatedAtUtc?: string | null;
+
+  hasOverduePeriod?: boolean | null;
 }
 
 /* =========================
- * Inner list: report theo assignment
+ * Template detail + periods
  * ========================= */
 
-export interface WorkAssignmentReportListRow {
+export interface WorkReportPeriodRow {
   id: string;
   workId: string;
   workAssignmentId: string;
+  workTemplateAssigneeId: string;
+
+  dynamicExcelId: string;
+  dynamicExcelCode: string;
+  dynamicExcelName: string;
+
+  assigneeUserId?: string | null;
 
   periodKey: string;
-  status: WorkAssignmentReportStatus;
+  periodInstanceKey?: string | null;
+  periodKind?: string | null;
+  reportTitle?: string | null;
+  reportDate?: string | null;
+  linkedScheduledPeriodId?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  dueAtUtc?: string | null;
 
-  versionNo: number;
-  isCurrent: boolean;
+  status: WorkReportPeriodStatus;
+  isOverdue: boolean;
 
-  dynamicExcelTemplateId: string;
-  dynamicExcelTemplateCode: string;
-  dynamicExcelTemplateName: string;
+  currentReportId?: string | null;
+  reportVersionCount: number;
 
-  submittedAtUtc?: string | null;
-  updatedAtUtc: string;
+  lastDraftSavedAtUtc?: string | null;
+  lastSubmittedAtUtc?: string | null;
+  lastReviewedAtUtc?: string | null;
+
+  currentProgressStatus?: string | null;
+  reportReason?: string | null;
+  difficulties?: string | null;
+  proposedSolution?: string | null;
+
+  lateReason?: string | null;
+  reviewerComment?: string | null;
+  returnReason?: string | null;
 }
 
-export interface WorkAssignmentReportSearchRequest {
-  page: number; // 0-based
-  pageSize: number;
+export interface MyReportTemplateDetailResponse {
+  workId: string;
+  dynamicExcelId: string;
+  dynamicExcelCode: string;
+  dynamicExcelName: string;
 
-  workId?: string | null;
-  workAssignmentId?: string | null;
+  workTemplateAssigneeId: string;
+  workAssignmentId: string;
 
-  q?: string | null;
-  periodKey?: string | null;
-  status?: WorkAssignmentReportStatus | null;
-  isCurrent?: boolean | null;
+  specJson: string;
+  templateWorkbookJson: string;
 
-  sortField?: string | null;
-  sortDirection?: "asc" | "desc" | string | null;
+  periods: WorkReportPeriodRow[];
 }
 
 /* =========================
- * Detail report
+ * Report detail / editor
  * ========================= */
 
 export interface WorkAssignmentReportResponse {
   id: string;
   workId: string;
   workAssignmentId: string;
+  workReportPeriodId: string;
+  assigneeUserId?: string | null;
 
   periodKey: string;
+  periodInstanceKey?: string | null;
+  periodKind?: string | null;
+  reportTitle?: string | null;
+  reportDate?: string | null;
+  linkedScheduledPeriodId?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
+  dueAtUtc?: string | null;
 
-  status: WorkAssignmentReportStatus;
+  status: WorkAssignmentReportStatus | number;
+  reportStatus?: WorkAssignmentReportStatus | number | null;
+  periodStatus?: WorkReportPeriodStatus | number | null;
 
-  templateSnapshotJson: string;
-  scheduleSnapshotJson: string;
+  templateSnapshotJson?: string | null;
+  scheduleSnapshotJson?: string | null;
 
-  dynamicExcelTemplateId: string;
-  dynamicExcelTemplateCode: string;
-  dynamicExcelTemplateName: string;
-
-  rawWorkbookDataJson: string;
+  dynamicExcelTemplateId?: string | null;
+  dynamicExcelTemplateCode?: string | null;
+  dynamicExcelTemplateName?: string | null;
+  dynamicFormTemplateId?: string | null;
+  dynamicFormTemplateCode?: string | null;
+  dynamicFormTemplateName?: string | null;
   specJson: string;
 
   dataRectR0: number;
@@ -108,8 +151,20 @@ export interface WorkAssignmentReportResponse {
   w: number;
   h: number;
 
-  values1DJson: string;
-  note?: string | null;
+  values1DJson?: string | null;
+  fieldValuesJson?: string | null;
+  tableValuesJson?: string | null;
+
+  currentProgressStatus?: string | null;
+  reportReason?: string | null;
+  difficulties?: string | null;
+  proposedSolution?: string | null;
+
+  isLateSubmission: boolean;
+  lateReason?: string | null;
+
+  reviewerComment?: string | null;
+  returnReason?: string | null;
 
   versionNo: number;
   isCurrent: boolean;
@@ -117,45 +172,159 @@ export interface WorkAssignmentReportResponse {
   submittedAtUtc?: string | null;
   submittedByUserId?: string | null;
 
+  returnedAtUtc?: string | null;
+  returnedByUserId?: string | null;
+
+  approvedAtUtc?: string | null;
+  approvedByUserId?: string | null;
+
   createdAtUtc: string;
   updatedAtUtc: string;
 }
 
 /* =========================
- * Init draft / Save draft
+ * Search sâu / quản trị / history
  * ========================= */
 
-export interface InitWorkAssignmentReportRequest {
+export interface WorkAssignmentReportListRow {
+  id: string;
+  workId: string;
+  workAssignmentId: string;
+  workReportPeriodId: string;
+  assigneeUserId?: string | null;
+
   periodKey: string;
+  periodInstanceKey?: string | null;
+  periodKind?: string | null;
+  reportTitle?: string | null;
+  reportDate?: string | null;
+  linkedScheduledPeriodId?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
+  dueAtUtc?: string | null;
+
+  status: WorkAssignmentReportStatus | number;
+  periodStatus?: WorkReportPeriodStatus | number | null;
+
+  isLateSubmission: boolean;
+  lateReason?: string | null;
+
+  dynamicExcelTemplateId?: string | null;
+  dynamicExcelTemplateCode?: string | null;
+  dynamicExcelTemplateName?: string | null;
+  dynamicFormTemplateId?: string | null;
+  dynamicFormTemplateCode?: string | null;
+  dynamicFormTemplateName?: string | null;
+
+  currentProgressStatus?: string | null;
+  reportReason?: string | null;
+  difficulties?: string | null;
+  proposedSolution?: string | null;
+
+  versionNo: number;
+  isCurrent: boolean;
+
+  submittedAtUtc?: string | null;
+  submittedByUserId?: string | null;
+
+  approvedAtUtc?: string | null;
+  approvedByUserId?: string | null;
+
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface WorkAssignmentReportSearchRequest {
+  page: number;
+  pageSize: number;
+
+  workId?: string | null;
+  workAssignmentId?: string | null;
+  workReportPeriodId?: string | null;
+  assigneeUserId?: string | null;
+
+  q?: string | null;
+  periodKey?: string | null;
+  status?: WorkAssignmentReportStatus | number | null;
+
+  isCurrent?: boolean | null;
+  isLateSubmission?: boolean | null;
+
+  dueFromUtc?: string | null;
+  dueToUtc?: string | null;
+  submittedFromUtc?: string | null;
+  submittedToUtc?: string | null;
+
+  sortField?: string | null;
+  sortDirection?: "asc" | "desc" | string | null;
+}
+
+/* =========================
+ * Save / submit/ return
+ * ========================= */
+
+export interface SaveWorkAssignmentReportDraftRequest {
+  values1D: Array<string | number | null>;
+  fieldValuesJson?: string | null;
+  tableValuesJson?: string | null;
+
+  currentProgressStatus?: string | null;
+  reportReason?: string | null;
+  difficulties?: string | null;
+  proposedSolution?: string | null;
+  lateReason?: string | null;
+
   note?: string | null;
 }
 
-export interface SaveWorkAssignmentReportDraftRequest {
-  rawWorkbookDataJson: string;
-  values1D: Array<number | null>;
+export interface ReturnWorkAssignmentReportRequest {
+  returnReason: string;
+  reviewerComment?: string | null;
+}
+
+export interface SubmitWorkAssignmentReportRequest {
+  values1D?: Array<string | number | null>;
+  fieldValuesJson?: string | null;
+  tableValuesJson?: string | null;
+
+  currentProgressStatus?: string | null;
+  reportReason?: string | null;
+  difficulties?: string | null;
+  proposedSolution?: string | null;
+  lateReason?: string | null;
+
   note?: string | null;
 }
 
 /* =========================
- * Optional FE helper types
+ * Logs
  * ========================= */
 
-export interface ReportDataRect {
-  r0: number;
-  c0: number;
-  r1: number;
-  c1: number;
+export interface WorkAssignmentReportLogRow {
+  id: string;
+  workId: string;
+  workAssignmentId: string;
+  workReportPeriodId: string;
+  workAssignmentReportId: string;
+
+  action: string;
+  fromStatus: string;
+  toStatus: string;
+
+  actionByUserId: string;
+  actionAtUtc: string;
+
+  reason?: string | null;
+  comment?: string | null;
+  snapshotJson?: string | null;
 }
 
-export interface ParsedWorkAssignmentReportDetail
-  extends Omit<
-    WorkAssignmentReportResponse,
-    "rawWorkbookDataJson" | "specJson" | "values1DJson"
-  > {
-  rawWorkbookData: any[];
-  spec: any;
-  values1D: Array<number | null>;
-  dataRect: ReportDataRect;
+export interface CreateUserCreatedReportRequest {
+  periodKey?: string | null;
+  reportTitle?: string | null;
+  reportDate?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  dueAtUtc?: string | null;
+  linkedScheduledPeriodId?: string | null;
 }

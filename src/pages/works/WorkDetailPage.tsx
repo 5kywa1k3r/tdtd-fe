@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Box,
@@ -14,11 +14,16 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 
 import { WorkForm } from "../../components/works/workform/WorkForm";
-import { WorkAssignTab } from "../../components/works/assignments/WorkAssignTab";
+import WorkAssignTab from "../../components/works/assignments/WorkAssignTab";
+import type { AssignmentTableRow } from "../../components/works/assignments/WorkAssignmentTable";
 import { useGetWorkQuery } from "../../api/workApi";
 
 import WorkReportTemplateGroupsPage from "./report/WorkReportTemplateGroupsPage";
+import WorkReportTemplateDetailPage from "./report/WorkReportTemplateDetailPage";
+import WorkAggregationTab from "./aggregation/WorkAggregationTab";
 import type { MyReportTemplateRow } from "../../types/report";
+import WorkReviewTab from "../../components/works/review/WorkReviewTab";
+import { getMeSnapshot } from "../../stores/authStorage";
 
 type WorkType = "TASK" | "INDICATOR";
 
@@ -26,37 +31,94 @@ interface WorkDetailPageProps {
   type: WorkType;
 }
 
-type DetailTab = "COMMON" | "ASSIGN" | "AGGREGATE" | "REPORT";
-
-// COMMON: view/edit trong cùng 1 page
+type DetailTab = "COMMON" | "ASSIGN" | "REPORT" | "AGGREGATION" | "REVIEW";
 type CommonMode = "view" | "edit";
+type AggregationSeed = {
+  parentAssignmentId: string;
+  dynamicExcelId?: string | null;
+  dynamicExcelCode?: string | null;
+  dynamicExcelName?: string | null;
+  dynamicFormTemplateId?: string | null;
+  dynamicFormTemplateCode?: string | null;
+  dynamicFormTemplateName?: string | null;
+};
 
 const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const me = getMeSnapshot();
 
   const [tab, setTab] = useState<DetailTab>("COMMON");
   const [commonMode, setCommonMode] = useState<CommonMode>("view");
   const [selectedReportTemplateGroup, setSelectedReportTemplateGroup] =
-  useState<MyReportTemplateRow | null>(null);
+    useState<MyReportTemplateRow | null>(null);
+  const [aggregationSeed, setAggregationSeed] = useState<AggregationSeed | null>(null);
 
   const workId = id ?? "";
-  const { data: detail, isLoading, isError, refetch } = useGetWorkQuery(workId, { skip: !id });
+
+  const {
+    data: detail,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetWorkQuery(workId, { skip: !id });
 
   const title = type === "TASK" ? "Chi tiết nhiệm vụ" : "Chi tiết chỉ tiêu";
   const assignTabLabel = type === "TASK" ? "Giao nhiệm vụ" : "Giao chỉ tiêu";
 
-  // title line dưới header (autoCode/code)
   const subtitle = useMemo(() => {
     if (!detail) return "";
     const code = (detail.autoCode || detail.code || "").trim();
-    return code ? `${code} • ${detail.name}` : detail.name;
-  }, [detail]);
+    const name = (detail.name || "").trim();
+    if (code && name) return `${code} • ${name}`;
+    return code || name || workId;
+  }, [detail, workId]);
 
   const handleBack = () => navigate(-1);
 
-  const canEdit = true; // TODO: sau này ràng theo role/permission
-  const isEdit = commonMode === "edit";
+  const handleOpenAggregation = (row: AssignmentTableRow) => {
+    setAggregationSeed({
+      parentAssignmentId: row.id,
+      dynamicExcelId: row.dynamicExcelId ?? null,
+      dynamicExcelCode: row.dynamicExcelCode ?? null,
+      dynamicExcelName: row.dynamicExcelName ?? null,
+      dynamicFormTemplateId: row.dynamicFormTemplateId ?? null,
+      dynamicFormTemplateCode: row.dynamicFormTemplateCode ?? null,
+      dynamicFormTemplateName: row.dynamicFormTemplateName ?? null,
+    });
+    setSelectedReportTemplateGroup(null);
+    setCommonMode("view");
+    setTab("AGGREGATION");
+  };
+
+  const isWorkOwner = Boolean(
+    detail?.owner?.userId &&
+      me?.id &&
+      detail.owner.userId === me.id
+  );
+
+  const detailCanEdit =
+    typeof (detail as { canEdit?: unknown }).canEdit === "boolean"
+      ? (detail as { canEdit?: boolean }).canEdit
+      : false;
+
+  const canEditCommon = Boolean(isWorkOwner || detailCanEdit);
+
+  const effectiveCommonMode: CommonMode =
+    canEditCommon && commonMode === "edit" ? "edit" : "view";
+
+  const isEdit = effectiveCommonMode === "edit";
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setSelectedReportTemplateGroup(null);
+      setAggregationSeed(null);
+      setTab("COMMON");
+      setCommonMode("view");
+    }, 0);
+
+    return () => window.clearTimeout(handle);
+  }, [workId]);
 
   if (!id) {
     return (
@@ -79,7 +141,11 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
               Đang tải dữ liệu...
             </Typography>
           </Stack>
-          <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={handleBack}>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowBackIcon />}
+            onClick={handleBack}
+          >
             Quay lại
           </Button>
         </Stack>
@@ -97,7 +163,11 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           <Typography variant="body2" sx={{ opacity: 0.75 }}>
             Không tìm thấy dữ liệu với id: {id}
           </Typography>
-          <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={handleBack}>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowBackIcon />}
+            onClick={handleBack}
+          >
             Quay lại
           </Button>
         </Stack>
@@ -117,7 +187,6 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
       }}
     >
       <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
-        {/* Header */}
         <Box
           sx={{
             display: "flex",
@@ -146,53 +215,72 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           </Stack>
 
           <Stack direction="row" spacing={1} alignItems="center">
-            {tab === "COMMON" && canEdit && (
-              <>
-                {isEdit ? (
-                  <Button
-                    variant="outlined"
-                    color="inherit"
-                    startIcon={<VisibilityOutlinedIcon />}
-                    onClick={() => setCommonMode("view")}
-                  >
-                    Xem
-                  </Button>
-                ) : (
-                  <Button
-                    variant="contained"
-                    startIcon={<EditOutlinedIcon />}
-                    onClick={() => setCommonMode("edit")}
-                  >
-                    Chỉnh sửa
-                  </Button>
-                )}
-              </>
+            {tab === "COMMON" && canEditCommon && (
+              isEdit ? (
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<VisibilityOutlinedIcon />}
+                  onClick={() => setCommonMode("view")}
+                >
+                  Xem
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  startIcon={<EditOutlinedIcon />}
+                  onClick={() => setCommonMode("edit")}
+                >
+                  Chỉnh sửa
+                </Button>
+              )
             )}
 
-            <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={handleBack}>
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              onClick={handleBack}
+            >
               Quay lại
             </Button>
           </Stack>
         </Box>
 
-        {/* Tabs */}
         <Tabs
           value={tab}
-          onChange={(_, v) => setTab(v as DetailTab)}
+          onChange={(_, v) => {
+            const next = v as DetailTab;
+            setTab(next);
+
+            if (next !== "REPORT") {
+              setSelectedReportTemplateGroup(null);
+            }
+
+            if (next !== "COMMON") {
+              setCommonMode("view");
+            }
+          }}
           sx={{ borderBottom: 1, borderColor: "divider", flexShrink: 0 }}
         >
           <Tab value="COMMON" label="Thuộc tính chung" />
           <Tab value="ASSIGN" label={assignTabLabel} />
-          <Tab value="AGGREGATE" label="Tự động tổng hợp" />
           <Tab value="REPORT" label="Báo cáo" />
+          <Tab value="AGGREGATION" label="Tổng hợp" />
+          <Tab value="REVIEW" label="Duyệt báo cáo" />
         </Tabs>
 
-        {/* Tab content */}
-        <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {tab === "COMMON" && (
             <WorkForm
               type={type}
-              mode={commonMode}
+              mode={effectiveCommonMode}
               initialData={detail}
               onCancel={() => {
                 if (isEdit) setCommonMode("view");
@@ -206,36 +294,89 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           )}
 
           {tab === "ASSIGN" && (
-            <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <WorkAssignTab
                 workId={workId}
                 workStartDate={detail.startDate ?? null}
                 workEndDate={detail.endDate ?? null}
+                isWorkOwner={isWorkOwner}
+                onOpenAggregation={handleOpenAggregation}
               />
             </Box>
           )}
 
-          {tab === "AGGREGATE" && (
-            <Box sx={{ p: 2, opacity: 0.6 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                Tự động tổng hợp
-              </Typography>
-              <Typography variant="body2">
-                Placeholder – sẽ gắn Aggregation Builder sau.
-              </Typography>
+          {tab === "REPORT" && workId && !selectedReportTemplateGroup && (
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <WorkReportTemplateGroupsPage
+                workId={workId}
+                onOpenGroup={(row: MyReportTemplateRow) => setSelectedReportTemplateGroup(row)}
+              />
             </Box>
           )}
 
-          {tab === "REPORT" && workId && !selectedReportTemplateGroup && (
-            <WorkReportTemplateGroupsPage
-              workId={workId}
-              onOpenGroup={(row) => setSelectedReportTemplateGroup(row)}
-            />
+          {tab === "REPORT" && workId && selectedReportTemplateGroup && (
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <WorkReportTemplateDetailPage
+                workId={workId}
+                group={selectedReportTemplateGroup}
+                onBack={() => setSelectedReportTemplateGroup(null)}
+              />
+            </Box>
           )}
 
-          {tab === "REPORT" && workId && selectedReportTemplateGroup && (
-            <Box>
-              Đã chọn nhóm biểu mẫu: {selectedReportTemplateGroup.dynamicExcelName}
+          {tab === "AGGREGATION" && (
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <WorkAggregationTab
+                workId={workId}
+                parentAssignmentId={aggregationSeed?.parentAssignmentId ?? null}
+                defaultDynamicExcelId={aggregationSeed?.dynamicExcelId ?? null}
+                defaultDynamicExcelCode={aggregationSeed?.dynamicExcelCode ?? null}
+                defaultDynamicExcelName={aggregationSeed?.dynamicExcelName ?? null}
+                defaultDynamicFormTemplateId={aggregationSeed?.dynamicFormTemplateId ?? null}
+                defaultDynamicFormTemplateCode={aggregationSeed?.dynamicFormTemplateCode ?? null}
+                defaultDynamicFormTemplateName={aggregationSeed?.dynamicFormTemplateName ?? null}
+              />
+            </Box>
+          )}
+
+          {tab === "REVIEW" && (
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <WorkReviewTab workId={workId} />
             </Box>
           )}
         </Box>

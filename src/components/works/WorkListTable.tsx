@@ -1,45 +1,42 @@
-import React, { useMemo } from 'react';
-import dayjs from 'dayjs';
-import { IconButton, Stack, Tooltip } from '@mui/material';
+import React, { useMemo } from "react";
+import { Chip, IconButton, Stack, Tooltip } from "@mui/material";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import { AppTable, type AppTableColumn, type SortDirection } from "../common/AppTable";
+import type { WorkListRow } from "../../types/work";
+import { WorkStatusChip } from "../common/WorkStatusChip";
+import CommonDateText from "../common/CommonDateText";
+import CommonLabelText from "../common/CommonLabelText";
 
-import { AppTable, type AppTableColumn, type SortDirection } from '../common/AppTable';
-import type { ParentWork } from '../../types/work';
-import { WorkStatusChip } from '../common/WorkStatusChip';
-
-/** ✅ NEW */
-export type WorkSortField = 'autoCode' | 'name' | 'dueDate' | 'createdAtUtc' | 'priority';
+export type WorkSortField = "autoCode" | "name" | "dueDate" | "createdAtUtc" | "priority";
 
 interface WorkListTableProps {
-  rows: ParentWork[];
+  rows: WorkListRow[];
   total: number;
-
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
-
   sortField: WorkSortField;
   sortDirection: SortDirection;
   onSortChange: (field: WorkSortField, direction: SortDirection) => void;
-
-  onRowDoubleClick?: (row: ParentWork) => void;
-
-  onEdit?: (row: ParentWork) => void;
-  onDelete?: (row: ParentWork) => void;
-
+  onRowDoubleClick?: (row: WorkListRow) => void;
+  onEdit?: (row: WorkListRow) => void;
+  onDelete?: (row: WorkListRow) => void;
   nameColumnHeader: string;
 }
 
-/** ✅ NEW: label hiển thị */
-const typeLabel = (t?: string | null) => (t === 'INDICATOR' ? 'Chỉ tiêu' : 'Nhiệm vụ');
-const priorityLabel = (p?: string | null) => {
-  if (p === 'HIGH') return 'Cao';
-  if (p === 'LOW') return 'Thấp';
-  return 'Trung bình';
+const typeLabel = (t?: number | null) => (t === 2 ? "Chỉ tiêu" : "Nhiệm vụ");
+const priorityLabel = (p?: number | null) => {
+  if (p === 3) return "Cao";
+  if (p === 1) return "Thấp";
+  return "Trung bình";
+};
+
+const manualEvalLabel = (row: WorkListRow) => {
+  if ((row.evaluatedAssignmentCount ?? 0) <= 0) return "Chưa đánh giá";
+  return row.worstEvaluationLabel || row.worstEvaluationCode || "Đã đánh giá";
 };
 
 export const WorkListTable: React.FC<WorkListTableProps> = ({
@@ -53,17 +50,16 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
   sortDirection,
   onSortChange,
   onRowDoubleClick,
-  onEdit,
   onDelete,
   nameColumnHeader,
 }) => {
-  const columns: AppTableColumn<ParentWork>[] = useMemo(
+  const columns: AppTableColumn<WorkListRow>[] = useMemo(
     () => [
       {
-        field: 'actions',
-        header: 'Thao tác',
+        field: "actions",
+        header: "Thao tác",
         width: 120,
-        align: 'center',
+        align: "center",
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
@@ -78,19 +74,6 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
                 <VisibilityIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-
-            <Tooltip title="Sửa">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit?.(row);
-                }}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-
             <Tooltip title="Xóa">
               <IconButton
                 size="small"
@@ -105,58 +88,83 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
           </Stack>
         ),
       },
-
-      { field: 'autoCode', header: 'Mã', sortable: true, width: 160 },
-
-      { field: 'name', header: nameColumnHeader, sortable: true, width: '40%' },
-
       {
-        field: 'status',
-        header: 'Trạng thái',
+        field: "autoCode",
+        header: "Mã",
+        sortable: true,
+        width: 160,
+        render: (row) => <CommonLabelText text={row.autoCode} fontWeight={600} />,
+      },
+      {
+        field: "name",
+        header: nameColumnHeader,
+        sortable: true,
+        width: "28%",
+        render: (row) => <CommonLabelText text={row.name} />,
+      },
+      {
+        field: "status",
+        header: "Tiến độ",
         sortable: false,
-        width: 180,
+        width: 170,
         render: (row) => <WorkStatusChip status={row.status} />,
       },
-
-      /** ✅ NEW */
       {
-        field: 'type',
-        header: 'Loại',
+        field: "evaluationTemplateLabel",
+        header: "Bộ tiêu chí",
+        sortable: false,
+        width: 180,
+        render: (row) => (
+          <CommonLabelText text={row.evaluationTemplateLabel || row.evaluationTemplateCode || "-"} />
+        ),
+      },
+      {
+        field: "worstEvaluationLabel",
+        header: "Đánh giá thủ công",
+        sortable: false,
+        width: 160,
+        render: (row) => (
+          <Chip
+            size="small"
+            variant={(row.evaluatedAssignmentCount ?? 0) > 0 ? "filled" : "outlined"}
+            label={manualEvalLabel(row)}
+          />
+        ),
+      },
+      {
+        field: "type",
+        header: "Loại",
         sortable: true,
         width: 110,
-        render: (row) => typeLabel((row as any).type),
+        render: (row) => typeLabel(row.type),
       },
-
-      /** ✅ NEW */
       {
-        field: 'priority',
-        header: 'Ưu tiên',
+        field: "priority",
+        header: "Ưu tiên",
         sortable: true,
         width: 120,
-        render: (row) => priorityLabel((row as any).priority),
+        render: (row) => priorityLabel(row.priority),
       },
-
       {
-        field: 'dueDate',
-        header: 'Hạn',
+        field: "dueDate",
+        header: "Hạn",
         sortable: true,
         width: 120,
-        render: (row) => (row.dueDate ? dayjs(row.dueDate).format('DD/MM/YYYY') : ''),
+        render: (row) => <CommonDateText value={row.dueDate} />,
       },
-
       {
-        field: 'createdAtUtc',
-        header: 'Ngày tạo',
+        field: "createdAtUtc",
+        header: "Ngày tạo",
         sortable: true,
         width: 130,
-        render: (row) => dayjs(row.createdAtUtc).format('DD/MM/YYYY'),
+        render: (row) => <CommonDateText value={row.createdAtUtc} />,
       },
     ],
-    [onRowDoubleClick, onEdit, onDelete, nameColumnHeader],
+    [nameColumnHeader, onDelete, onRowDoubleClick]
   );
 
   return (
-    <AppTable<ParentWork, WorkSortField>
+    <AppTable<WorkListRow, WorkSortField>
       rows={rows}
       columns={columns}
       rowKey={(row) => row.id}

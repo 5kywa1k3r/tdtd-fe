@@ -49,7 +49,8 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
   workId,
   disabled,
   title = "Tệp đính kèm",
-  accept = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg",
+  helperText,
+  accept = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.zip,.rar",
 }) => {
   const tus = useTusUpload();
 
@@ -208,6 +209,11 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
             <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
               <Stack spacing={0.25}>
                 <Typography sx={{ fontWeight: 600 }}>{title}</Typography>
+                {helperText ? (
+                  <Typography variant="body2" sx={{ opacity: 0.72 }}>
+                    {helperText}
+                  </Typography>
+                ) : null}
               </Stack>
 
               <Box>

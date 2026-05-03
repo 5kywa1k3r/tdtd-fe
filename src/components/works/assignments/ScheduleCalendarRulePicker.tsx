@@ -34,7 +34,7 @@ type Props = {
 
 function helperTextByCycle(cycleType?: string | null) {
   switch (cycleType) {
-    case "DAILY": 
+    case "DAILY":
       return "Hằng ngày";
     case "WEEKLY":
       return "Chọn một ngày trên lịch để bật/tắt thứ tương ứng. Các ngày cùng thứ hợp lệ sẽ được chọn.";
@@ -49,14 +49,14 @@ function helperTextByCycle(cycleType?: string | null) {
   }
 }
 
-export const ScheduleCalendarRulePicker: React.FC<Props> = ({
+export const ScheduleCalendarRulePicker: React.FC<Props> = React.memo(function ScheduleCalendarRulePicker({
   value,
   onChange,
   disabled,
   workStartDate,
   workEndDate,
   showStartDateSummary = false,
-}) => {
+}) {
   const { from, to } = React.useMemo(
     () => ensureRange(workStartDate, workEndDate, value.startDate),
     [workStartDate, workEndDate, value.startDate]
@@ -68,9 +68,39 @@ export const ScheduleCalendarRulePicker: React.FC<Props> = ({
   );
 
   const selectedSet = React.useMemo(() => new Set(selectedIsoList), [selectedIsoList]);
+
   const ruleText = React.useMemo(
     () => buildRuleSummaryText(value, workStartDate, workEndDate),
     [value, workStartDate, workEndDate]
+  );
+
+  const defaultDate = React.useMemo(
+    () => (from ? from.format("YYYY-MM-DD") : undefined),
+    [from]
+  );
+
+  const minDate = React.useMemo(
+    () => (from ? from.format("YYYY-MM-DD") : undefined),
+    [from]
+  );
+
+  const maxDate = React.useMemo(
+    () => (to ? to.format("YYYY-MM-DD") : undefined),
+    [to]
+  );
+
+  const handleDayClick = React.useCallback(
+    (date: string, event: React.MouseEvent) => {
+      const d = dayjs(date);
+      const inRange = !d.isBefore(from, "day") && !d.isAfter(to, "day");
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (disabled || !inRange) return;
+      onChange(toggleRuleFromDate(value, d));
+    },
+    [disabled, from, to, onChange, value]
   );
 
   if (!from || !to) {
@@ -108,27 +138,20 @@ export const ScheduleCalendarRulePicker: React.FC<Props> = ({
           locale="vi"
           numberOfColumns={2}
           value={selectedIsoList}
-          defaultDate={from.format("YYYY-MM-DD")}
-          minDate={from.format("YYYY-MM-DD")}
-          maxDate={to.format("YYYY-MM-DD")}
+          defaultDate={defaultDate}
+          minDate={minDate}
+          maxDate={maxDate}
           onChange={() => {}}
           getDayProps={(date) => {
             const d = dayjs(date);
             const iso = toIsoDate(d);
             const isSelected = selectedSet.has(iso);
-            const inRange =
-              !d.isBefore(from, "day") &&
-              !d.isAfter(to, "day");
+            const inRange = !d.isBefore(from, "day") && !d.isAfter(to, "day");
 
             return {
               disabled: disabled || !inRange,
               selected: isSelected,
-              onClick: (event: React.MouseEvent) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (disabled || !inRange) return;
-                onChange(toggleRuleFromDate(value, d));
-              },
+              onClick: (event: React.MouseEvent) => handleDayClick(date, event),
             };
           }}
         />
@@ -155,4 +178,4 @@ export const ScheduleCalendarRulePicker: React.FC<Props> = ({
       </Stack>
     </Stack>
   );
-};
+});

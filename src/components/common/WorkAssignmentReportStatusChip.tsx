@@ -1,44 +1,63 @@
-// src/components/common/WorkAssignmentReportStatusChip.tsx
-import { Chip } from "@mui/material";
-import type { ChipProps } from "@mui/material";
-
+// src/components/reports/WorkAssignmentReportStatusChip.tsx
+import React from "react";
+import { Chip, type ChipProps } from "@mui/material";
 import {
-  WorkAssignmentReportStatus,
   getWorkAssignmentReportStatusLabel,
+  WorkAssignmentReportStatus,
 } from "../../types/reportStatus";
 
-interface WorkAssignmentReportStatusChipProps {
+export interface WorkAssignmentReportStatusChipProps {
   status?: number | null;
   size?: ChipProps["size"];
   variant?: ChipProps["variant"];
 }
 
-function getChipColor(status?: number | null): ChipProps["color"] {
-  switch (status) {
-    case WorkAssignmentReportStatus.Draft:
-      return "default";
-    case WorkAssignmentReportStatus.Submitted:
-      return "primary";
-    case WorkAssignmentReportStatus.Approved:
-      return "success";
-    case WorkAssignmentReportStatus.Rejected:
-      return "error";
-    default:
-      return "default";
-  }
-}
+export const WorkAssignmentReportStatusChip: React.FC<
+  WorkAssignmentReportStatusChipProps
+> = ({ status, size = "small", variant }) => {
+  const label = getWorkAssignmentReportStatusLabel(status);
 
-export function WorkAssignmentReportStatusChip({
-  status,
-  size = "small",
-  variant = "outlined",
-}: WorkAssignmentReportStatusChipProps) {
+  if (status === WorkAssignmentReportStatus.Approved) {
+    return (
+      <Chip
+        size={size}
+        color="success"
+        variant={variant ?? "filled"}
+        label={label}
+      />
+    );
+  }
+
+  if (status === WorkAssignmentReportStatus.Submitted) {
+    return (
+      <Chip
+        size={size}
+        color="info"
+        variant={variant ?? "filled"}
+        label={label}
+      />
+    );
+  }
+
+  if (status === WorkAssignmentReportStatus.Draft) {
+    return (
+      <Chip
+        size={size}
+        color="warning"
+        variant={variant ?? "filled"}
+        label={label}
+      />
+    );
+  }
+
   return (
     <Chip
       size={size}
-      variant={variant}
-      color={getChipColor(status)}
-      label={getWorkAssignmentReportStatusLabel(status)}
+      color="default"
+      variant={variant ?? "outlined"}
+      label={label}
     />
   );
-}
+};
+
+export default WorkAssignmentReportStatusChip;

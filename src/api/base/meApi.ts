@@ -7,6 +7,8 @@ export type MeDto = {
   unitId: string;
   unitName: string;
   unitCode: string;
+  unitTypeCodes?: string[];
+  positionCode?: string;
   roles: string[];
   isDeleted: boolean;
 };

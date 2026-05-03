@@ -1,5 +1,5 @@
-// src/types/work.ts
 import { type UserRefDTO } from "./userRefDto";
+
 export const WORK_STATUS = {
   S1: 1,
   S2: 2,
@@ -13,7 +13,6 @@ export const WORK_TYPE = {
   TASK: 1,
   INDICATOR: 2,
 } as const;
-
 export type WorkTypeCore = typeof WORK_TYPE[keyof typeof WORK_TYPE];
 
 export const WORK_PRIORITY = {
@@ -36,11 +35,21 @@ export interface WorkListRow {
   createdByUserId?: string | null;
   ownerName?: string | null;
 
-  leaderDirectiveUserId: string;
+  leaderDirectiveUserId?: string | null;
   leaderWatchCount: number;
+
+  evaluationTemplateId?: string | null;
+  evaluationTemplateCode?: string | null;
+  evaluationTemplateLabel?: string | null;
+
+  hasManualEvaluations?: boolean;
+  evaluatedAssignmentCount?: number;
+  worstEvaluationCode?: string | null;
+  worstEvaluationLabel?: string | null;
 
   dueDate?: string | null;
   createdAtUtc: string;
+  attachmentCount?: number;
 }
 
 export interface WorkDetail {
@@ -52,17 +61,25 @@ export interface WorkDetail {
   note?: string | null;
 
   status: WorkStatusCore;
-  createdByUserId?: string | null;
+  priority: WorkPriorityCore;
+  type: WorkTypeCore;
 
-  leaderDirectiveUserId: string;
+  createdByUserId?: string | null;
+  leaderDirectiveUserId?: string | null;
   leaderWatchUserIds: string[];
+
+  evaluationTemplateId?: string | null;
+  evaluationTemplateCode?: string | null;
+  evaluationTemplateLabel?: string | null;
+
+  hasManualEvaluations?: boolean;
+  evaluatedAssignmentCount?: number;
+  worstEvaluationCode?: string | null;
+  worstEvaluationLabel?: string | null;
 
   startDate?: string | null;
   endDate?: string | null;
   dueDate?: string | null;
-
-  priority: WorkPriorityCore;
-  type: WorkTypeCore;
 
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -72,22 +89,8 @@ export interface WorkDetail {
   leaderWatch?: UserRefDTO[];
 }
 
-export interface ParentWork {
-  id: string;
-  autoCode: string;
-  code?: string | null;
-  name: string;
-
-  startDate?: string | null;
-  endDate?: string | null;
-  dueDate?: string | null;
-
-  leaderDirectiveUserId: string;
-  leaderWatchCount: number;
-  createdAtUtc: string;
-
+export interface ParentWork extends WorkListRow {
   parentId?: string | null;
-  status: WorkStatusCore;
 }
 
 export const WORK_TYPE_OPTIONS = [
@@ -102,69 +105,26 @@ export const WORK_PRIORITY_OPTIONS = [
 ] as const;
 
 export const WORK_STATUS_OPTIONS = [
-  { value: WORK_STATUS.S1, label: "Trạng thái 1" },
-  { value: WORK_STATUS.S2, label: "Trạng thái 2" },
-  { value: WORK_STATUS.S3, label: "Trạng thái 3" },
-  { value: WORK_STATUS.S4, label: "Trạng thái 4" },
-  { value: WORK_STATUS.S5, label: "Trạng thái 5" },
+  { value: WORK_STATUS.S1, label: "Chưa bắt đầu" },
+  { value: WORK_STATUS.S2, label: "Đang thực hiện" },
+  { value: WORK_STATUS.S3, label: "Hoàn thành" },
+  { value: WORK_STATUS.S4, label: "Có nguy cơ quá hạn" },
+  { value: WORK_STATUS.S5, label: "Quá hạn" },
 ] as const;
 
-export interface WorkListRow {
-  id: string;
-  autoCode: string;
-  code?: string | null;
-  name: string;
-  status: WorkStatusCore;
-
-  leaderDirectiveUserId: string;
-  leaderWatchCount: number;
-
-  dueDate?: string | null;
-  createdAtUtc: string;
-
-  attachmentCount: number;
-}
-
-export interface WorkDetail {
-  id: string;
-  autoCode: string;
-  code?: string | null;
-  name: string;
-  description?: string | null;
-  note?: string | null;
-
-  status: WorkStatusCore;
-  priority: WorkPriorityCore;
-  type: WorkTypeCore;
-
-  createdByUserId?: string | null;
-
-  leaderDirectiveUserId: string;
-  leaderWatchUserIds: string[];
-
-  startDate?: string | null;
-  endDate?: string | null;
-  dueDate?: string | null;
-
-  createdAtUtc: string;
-  updatedAtUtc: string;
-
-  owner?: UserRefDTO | null;
-  leaderDirective?: UserRefDTO | null;
-  leaderWatch?: UserRefDTO[];
-}
-
-export interface ParentWork {
-  id: string;
-  autoCode: string;
-  code?: string | null;
-  name: string;
-  startDate?: string | null;
-  endDate?: string | null;
-  dueDate?: string | null;
-  leaderDirectiveUserId: string;
-  leaderWatchCount: number;
-  createdAtUtc: string;
-  parentId?: string | null;
-  status: WorkStatusCore;
+export function getWorkStatusLabel(status?: WorkStatusCore | null): string {
+  switch (status) {
+    case WORK_STATUS.S1:
+      return "Chưa bắt đầu";
+    case WORK_STATUS.S2:
+      return "Đang thực hiện";
+    case WORK_STATUS.S3:
+      return "Hoàn thành";
+    case WORK_STATUS.S4:
+      return "Có nguy cơ quá hạn";
+    case WORK_STATUS.S5:
+      return "Quá hạn";
+    default:
+      return "Chưa rõ";
+  }
 }

@@ -1,20 +1,22 @@
 import {
-  Box, Button, Divider, Drawer, Stack, TextField, Typography,
+  Box, Button, Divider, Drawer, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useCreateUnitMutation,
   useUpdateUnitMutation,
-  useSoftDeleteUnitMutation,
   useGetUnitHistoryQuery,
 } from '../../../api/adminUnitsApi';
+import { useListUnitTypesQuery } from '../../../api/adminCatalogApi';
 
 type ParentDisplay = {
   fullName: string;
   code: string;
   shortName?: string;
   symbol?: string;
+  primaryUnitTypeCode?: string | null;
   unitTypeCodes?: string[];
+  isVirtual?: boolean;
 };
 
 type SelectedDisplay = {
@@ -23,7 +25,15 @@ type SelectedDisplay = {
   fullName: string;
   shortName?: string | null;
   symbol?: string | null;
+  primaryUnitTypeCode?: string | null;
   unitTypeCodes?: string[] | null;
+  isVirtual?: boolean;
+};
+
+const actionButtonSx = {
+  height: 36,
+  px: 1.75,
+  whiteSpace: 'nowrap',
 };
 
 export function UnitEditorDrawer(props: {
@@ -45,19 +55,12 @@ export function UnitEditorDrawer(props: {
   const [fullName, setFullName] = useState('');
   const [shortName, setShortName] = useState('');
   const [symbol, setSymbol] = useState('');
-  const [unitTypeCodesText, setUnitTypeCodesText] = useState('');
-
-  const parsedUnitTypeCodes = useMemo(() => {
-    const xs = unitTypeCodesText
-      .split(',')
-      .map((x) => x.trim())
-      .filter(Boolean);
-    return xs.length ? xs : undefined;
-  }, [unitTypeCodesText]);
+  const [primaryUnitTypeCode, setPrimaryUnitTypeCode] = useState('');
+  const [isVirtual, setIsVirtual] = useState(false);
+  const { data: unitTypes = [] } = useListUnitTypesQuery({ isDeleted: false });
 
   const [createUnit, cState] = useCreateUnitMutation();
   const [updateUnit, uState] = useUpdateUnitMutation();
-  const [deleteUnit, dState] = useSoftDeleteUnitMutation();
 
   const { data: history } = useGetUnitHistoryQuery(
     isEdit ? { unitId: editor!.unitId!, take: 50 } : (undefined as any),
@@ -72,12 +75,14 @@ export function UnitEditorDrawer(props: {
       setFullName(s?.fullName ?? '');
       setShortName((s?.shortName ?? '') || '');
       setSymbol((s?.symbol ?? '') || '');
-      setUnitTypeCodesText((s?.unitTypeCodes ?? []).join(', '));
+      setPrimaryUnitTypeCode(s?.primaryUnitTypeCode ?? s?.unitTypeCodes?.[0] ?? '');
+      setIsVirtual(!!s?.isVirtual);
     } else {
       setFullName('');
       setShortName('');
       setSymbol('');
-      setUnitTypeCodesText('');
+      setPrimaryUnitTypeCode('');
+      setIsVirtual(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
@@ -90,6 +95,8 @@ export function UnitEditorDrawer(props: {
 
     const sname = shortName.trim() || null;
     const sym = symbol.trim() || null;
+    const typeCode = primaryUnitTypeCode.trim();
+    if (!typeCode) return;
 
     if (editor.mode === 'create') {
       //  KHÔNG quên khai báo created
@@ -98,7 +105,9 @@ export function UnitEditorDrawer(props: {
         shortName: sname,
         symbol: sym,
         parentUnitId: parentUnitId ?? null,
-        unitTypeCodes: parsedUnitTypeCodes, //  khớp BE DTO
+        primaryUnitTypeCode: typeCode,
+        isVirtual,
+        unitTypeCodes: [],
       } as any).unwrap();
 
       props.onCreated?.({ id: created.id }); // hoặc props.onCreated?.(created)
@@ -112,7 +121,9 @@ export function UnitEditorDrawer(props: {
         fullName: name,
         shortName: sname,
         symbol: sym,
-        unitTypeCodes: parsedUnitTypeCodes ?? [], //  khớp BE DTO (List<string>)
+        primaryUnitTypeCode: typeCode,
+        isVirtual,
+        unitTypeCodes: [],
         // note: note?.trim() ?? null (nếu có field note trong UI)
       } as any,
     }).unwrap();
@@ -121,11 +132,6 @@ export function UnitEditorDrawer(props: {
     props.onClose();
   };
 
-  const onDelete = async () => {
-    if (!isEdit) return;
-    await deleteUnit({ unitId: editor!.unitId! } as any).unwrap();
-    props.onClose();
-  };
   const selected = props.selectedDisplay;
   const parent = props.parentDisplay;
 
@@ -180,20 +186,33 @@ export function UnitEditorDrawer(props: {
           <TextField label="Tên rút gọn" value={shortName} onChange={(e) => setShortName(e.target.value)} />
           <TextField label="Ký hiệu" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
           <TextField
-            label="Hệ lực lượng"
-            placeholder="VD: TYPE_A, TYPE_B"
-            value={unitTypeCodesText}
-            onChange={(e) => setUnitTypeCodesText(e.target.value)}
+            select
+            label="Loại đơn vị"
+            value={primaryUnitTypeCode}
+            onChange={(e) => setPrimaryUnitTypeCode(e.target.value)}
+            required
+          >
+            <MenuItem value="">-- Chọn loại đơn vị --</MenuItem>
+            {unitTypes.map((type) => (
+              <MenuItem key={type.code} value={type.code}>
+                {type.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <FormControlLabel
+            control={<Switch checked={isVirtual} onChange={(e) => setIsVirtual(e.target.checked)} />}
+            label="Unit ao gom nhom, khong tao user truc tiep"
           />
 
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            {isEdit && (
-              <Button color="error" variant="outlined" onClick={onDelete} disabled={dState.isLoading}>
-                Xoá
-              </Button>
-            )}
-            <Button onClick={props.onClose}>Huỷ</Button>
-            <Button variant="contained" onClick={onSubmit} disabled={cState.isLoading || uState.isLoading}>
+            <Button size="small" variant="outlined" onClick={props.onClose} sx={actionButtonSx}>Huỷ</Button>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={onSubmit}
+              disabled={cState.isLoading || uState.isLoading}
+              sx={actionButtonSx}
+            >
               Lưu
             </Button>
           </Stack>

@@ -15,7 +15,9 @@ export type UnitDto = {
   code: string; // "" is system root
   level: number;
   version?: number;
+  primaryUnitTypeCode?: string | null;
   unitTypeCodes?: string[];
+  isVirtual?: boolean;
   note?: string | null;
 
   /** Soft delete flags (tuỳ BE trả field nào) */
@@ -28,6 +30,8 @@ export type CreateUnitReq = {
   shortName?: string | null;
   symbol?: string | null;
   parentUnitId?: string | null;
+  primaryUnitTypeCode: string;
+  isVirtual?: boolean;
   unitTypeCodes?: string[];
 };
 
@@ -39,6 +43,9 @@ export type UpdateUnitReq = {
   fullName: string;
   shortName?: string | null;
   symbol?: string | null;
+  primaryUnitTypeCode: string;
+  isVirtual?: boolean;
+  unitTypeCodes?: string[];
   note?: string | null;
 };
 
@@ -49,6 +56,8 @@ export type UnitPickNode = {
   level: number;
   shortName: string;
   symbol: string;
+  primaryUnitTypeCode?: string | null;
+  isVirtual?: boolean;
 };
 
 export type UnitHistoryDto = {
@@ -58,14 +67,39 @@ export type UnitHistoryDto = {
   snapshot: UnitDto;
 };
 
+export type ImportRowError = {
+  rowNumber: number;
+  field: string;
+  code: string;
+  message: string;
+};
+
+export type ImportResult = {
+  totalRows: number;
+  validRows: number;
+  errorRows: number;
+  errors: ImportRowError[];
+  createdIds: string[];
+};
+
 type Tag =
   | { type: 'Units'; id: string }
   | { type: 'UnitHistory'; id: string };
 
 // ===== Helper filters =====
 
-// FE filter system root (code=="") nếu BE vẫn trả
-const filterSystemRoot = (xs: UnitDto[]) => xs.filter((x) => x.code !== '');
+function isHiddenRootUnit(x: Pick<UnitDto, 'code' | 'fullName' | 'shortName' | 'symbol'>) {
+  const code = (x.code ?? '').trim().toUpperCase();
+  const fullName = (x.fullName ?? '').trim().toUpperCase();
+  const shortName = (x.shortName ?? '').trim().toUpperCase();
+  const symbol = (x.symbol ?? '').trim().toUpperCase();
+
+  if (!code || code === 'ROOT') return true;
+  return [fullName, shortName, symbol].some((value) => value === 'ROOT' || value === 'ROOT UNIT');
+}
+
+// FE filter system/bootstrap root if BE still returns it.
+const filterSystemRoot = (xs: UnitDto[]) => xs.filter((x) => !isHiddenRootUnit(x));
 
 // FE filter soft-deleted (hỗ trợ cả isDeleted hoặc deletedAt)
 const filterSoftDeleted = (xs: UnitDto[]) =>
@@ -97,14 +131,18 @@ export const adminUnitsApi = baseApi.injectEndpoints({
         params: { parentId: parentId ?? '' }, //  '' = level 0
       }),
       transformResponse: (res: any[]): UnitPickNode[] =>
-        (res ?? []).map((x) => ({
-          id: x.id,
-          fullName: x.fullName,
-          code: x.code ?? '',
-          level: x.level ?? 0,
-          shortName: x.shortName ?? '',
-          symbol: x.symbol ?? '',
-        })),
+        (res ?? [])
+          .map((x) => ({
+            id: x.id,
+            fullName: x.fullName,
+            code: x.code ?? '',
+            level: x.level ?? 0,
+            shortName: x.shortName ?? '',
+            symbol: x.symbol ?? '',
+            primaryUnitTypeCode: x.primaryUnitTypeCode ?? null,
+            isVirtual: !!x.isVirtual,
+          }))
+          .filter((x) => !isHiddenRootUnit(x)),
       providesTags: (_res, _err, arg) => [
         { type: 'Units', id: `CHILDREN:${arg.parentId ?? 'ROOT'}` },
       ],
@@ -198,11 +236,29 @@ export const adminUnitsApi = baseApi.injectEndpoints({
             parentUnitId: h.parentUnitId ?? null,
             code: h.code ?? '',
             level: h.level ?? 0,
+            primaryUnitTypeCode: h.primaryUnitTypeCode ?? null,
             unitTypeCodes: h.unitTypeCodes ?? [],
+            isVirtual: !!h.isVirtual,
             note: h.note ?? null,
           } as any,
         })),
       providesTags: (_res, _err, arg) => [{ type: 'UnitHistory', id: arg.unitId }],
+    }),
+
+    importUnits: b.mutation<ImportResult, { file: File; dryRun?: boolean }>({
+      query: ({ file, dryRun = true }) => {
+        const form = new FormData();
+        form.append('file', file);
+        return {
+          url: '/admin/units/import',
+          method: 'POST',
+          data: form,
+          params: { dryRun },
+          headers: { 'Content-Type': 'multipart/form-data' },
+        };
+      },
+      invalidatesTags: (_res, _err, arg): Tag[] =>
+        arg.dryRun === false ? [{ type: 'Units', id: 'TREE' }, { type: 'Units', id: 'ROOTS' }] : [],
     }),
   }),
   overrideExisting: true,
@@ -212,8 +268,10 @@ export const {
   useGetUnitRootsQuery,
   useGetUnitChildrenQuery,
   useSearchSubtreeByCodePrefixQuery,
+  useLazySearchSubtreeByCodePrefixQuery,
   useCreateUnitMutation,
   useUpdateUnitMutation,
   useSoftDeleteUnitMutation,
   useGetUnitHistoryQuery,
+  useImportUnitsMutation,
 } = adminUnitsApi;

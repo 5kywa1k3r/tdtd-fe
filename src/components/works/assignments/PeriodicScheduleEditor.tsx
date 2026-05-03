@@ -12,6 +12,10 @@ import type {
   AssignmentScheduleDto,
   ReportCycleType,
 } from "../../../types/workAssignment";
+import SingleDayKeyField, {
+  dayKeyToIsoDate,
+  isoDateToDayKey,
+} from "../../common/SingleDayKeyField";
 import { parseIsoDate } from "./scheduleCalendarUtils";
 import { ScheduleCalendarRulePicker } from "./ScheduleCalendarRulePicker";
 
@@ -61,18 +65,65 @@ function resetByCycle(
   };
 }
 
-export const PeriodicScheduleEditor: React.FC<Props> = ({
+export const PeriodicScheduleEditor: React.FC<Props> = React.memo(function PeriodicScheduleEditor({
   value,
   onChange,
   disabled,
   workStartDate,
   workEndDate,
-}) => {
-  const s = ensureSchedule(value, workStartDate);
+}) {
+  const s = React.useMemo(
+    () => ensureSchedule(value, workStartDate),
+    [value, workStartDate]
+  );
 
-  const setPartial = (patch: Partial<AssignmentScheduleDto>) => {
-    onChange({ ...s, ...patch });
-  };
+  const setPartial = React.useCallback(
+    (patch: Partial<AssignmentScheduleDto>) => {
+      onChange({ ...s, ...patch });
+    },
+    [onChange, s]
+  );
+
+  const displayCycleType = React.useMemo(() => {
+    return s.cycleType === "WEEKLY" &&
+      ((s.weekDays ?? []).length === 7 || (s.weekDays ?? []).length === 0)
+      ? "DAILY"
+      : (s.cycleType ?? "WEEKLY");
+  }, [s.cycleType, s.weekDays]);
+
+  const handleCycleChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const v = e.target.value;
+
+      if (v === "DAILY") {
+        onChange({
+          ...resetByCycle("WEEKLY", workStartDate),
+          weekDays: [1, 2, 3, 4, 5, 6, 7],
+        });
+        return;
+      }
+
+      if (v === "WEEKLY") {
+        onChange({
+          ...resetByCycle("WEEKLY", workStartDate),
+          weekDays: [1],
+        });
+        return;
+      }
+
+      onChange(resetByCycle(v as ReportCycleType, workStartDate));
+    },
+    [onChange, workStartDate]
+  );
+
+  const handleStartDateChange = React.useCallback(
+    (dayKey: string) => {
+      setPartial({
+        startDate: dayKey ? `${dayKeyToIsoDate(dayKey)}T00:00:00.000Z` : null,
+      });
+    },
+    [setPartial]
+  );
 
   return (
     <Card variant="outlined">
@@ -87,33 +138,9 @@ export const PeriodicScheduleEditor: React.FC<Props> = ({
               select
               size="small"
               label="Loại kỳ"
-              value={
-                s.cycleType === "WEEKLY" &&
-                ((s.weekDays ?? []).length === 7 || (s.weekDays ?? []).length === 0)
-                  ? "DAILY"
-                  : (s.cycleType ?? "WEEKLY")
-              }
+              value={displayCycleType}
               disabled={disabled}
-              onChange={(e) => {
-                const v = e.target.value;
-
-                if (v === "DAILY") {
-                  onChange({
-                    ...resetByCycle("WEEKLY", workStartDate),
-                    weekDays: [1, 2, 3, 4, 5, 6, 7],
-                  });
-                  return;
-                }
-                if (v === "WEEKLY") {
-                  onChange({
-                    ...resetByCycle("WEEKLY", workStartDate),
-                    weekDays: [1], // ✅ mặc định thứ 2
-                  });
-                  return;
-                }
-
-                onChange(resetByCycle(v as ReportCycleType, workStartDate));
-              }}
+              onChange={handleCycleChange}
               sx={{ minWidth: 220 }}
             >
               <MenuItem value="DAILY">Hàng ngày</MenuItem>
@@ -123,24 +150,14 @@ export const PeriodicScheduleEditor: React.FC<Props> = ({
               <MenuItem value="SEMI_ANNUAL">Nửa năm</MenuItem>
             </TextField>
 
-            <TextField
-              size="small"
-              type="date"
+            <SingleDayKeyField
               label="Ngày bắt đầu áp dụng"
-              value={s.startDate ? String(s.startDate).slice(0, 10) : ""}
+              value={s.startDate ? isoDateToDayKey(String(s.startDate).slice(0, 10)) : ""}
               disabled={disabled}
-              onChange={(e) =>
-                setPartial({
-                  startDate: e.target.value
-                    ? new Date(e.target.value).toISOString()
-                    : null,
-                })
-              }
-              InputLabelProps={{ shrink: true }}
-              inputProps={{
-                min: workStartDate ? String(workStartDate).slice(0, 10) : undefined,
-                max: workEndDate ? String(workEndDate).slice(0, 10) : undefined,
-              }}
+              fullWidth
+              minDayKey={workStartDate ? isoDateToDayKey(String(workStartDate).slice(0, 10)) : ""}
+              maxDayKey={workEndDate ? isoDateToDayKey(String(workEndDate).slice(0, 10)) : ""}
+              onChange={handleStartDateChange}
             />
           </Stack>
 
@@ -155,4 +172,4 @@ export const PeriodicScheduleEditor: React.FC<Props> = ({
       </CardContent>
     </Card>
   );
-};
+});

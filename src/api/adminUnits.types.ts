@@ -2,11 +2,17 @@ export type UnitDto = {
   id: string;
   fullName: string;
   shortName?: string;
+  symbol?: string | null;
   parentUnitId?: string | null;
   code: string; // "" is system root
   level: number;
+  version?: number;
+  primaryUnitTypeCode?: string | null;
+  isVirtual?: boolean;
   unitTypeCodes?: string[];
-  note?: string;
+  note?: string | null;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
 };
 
 export type UnitHistoryDto = {
@@ -18,16 +24,20 @@ export type UnitHistoryDto = {
 
 export type CreateUnitReq = {
   fullName: string;
-  shortName?: string;
+  shortName?: string | null;
+  symbol?: string | null;
   parentUnitId?: string | null;
+  primaryUnitTypeCode: string;
+  isVirtual?: boolean;
   unitTypeCodes?: string[];
 };
 
 export type UpdateUnitReq = {
   fullName: string;
-  shortName?: string;
-  parentUnitId?: string | null;
+  shortName?: string | null;
+  symbol?: string | null;
+  primaryUnitTypeCode: string;
+  isVirtual?: boolean;
   unitTypeCodes?: string[];
-  note?: string;
-  saveHistoryForWholeSubtree?: boolean;
+  note?: string | null;
 };

@@ -1,0 +1,39 @@
+import React from "react";
+import { Box, Typography } from "@mui/material";
+import type { Sheet } from "@fortune-sheet/core";
+import WorkbookDataGrid from "../../excel/fortune/WorkbookDataGrid";
+import type { DynamicExcelSpecLike, ReportRect } from "../../../types/aggregateTypes";
+
+export type AggregateWorkbookPreviewProps = {
+  title?: string;
+  workbook: Sheet[];
+  previewRect: ReportRect;
+  spec?: DynamicExcelSpecLike | null;
+};
+
+const AggregateWorkbookPreview: React.FC<AggregateWorkbookPreviewProps> = ({
+  title = "Biểu mẫu tổng hợp",
+  workbook,
+  previewRect,
+  spec,
+}) => {
+  if (!workbook.length) return null;
+
+  return (
+    <Box>
+      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 700 }}>
+        {title}
+      </Typography>
+      <WorkbookDataGrid
+        initialSpec={spec ?? {}}
+        initialWorkbookData={workbook}
+        dataRect={previewRect}
+        mode="view"
+        readOnly
+        showActions={false}
+      />
+    </Box>
+  );
+};
+
+export default AggregateWorkbookPreview;

@@ -55,7 +55,7 @@ export const ActionResultDialog: React.FC<ActionResultDialogProps> = ({
       </DialogContent>
 
       <DialogActions>
-        <Button variant="contained" onClick={onClose}>
+        <Button size="small" variant="contained" onClick={onClose} sx={{ height: 36, px: 1.75 }}>
           {okText}
         </Button>
       </DialogActions>

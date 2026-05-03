@@ -48,8 +48,6 @@ export type HybridUnitUserPickerProps = {
   value: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
-
-  // ✅ NEW: snapshot từ BE để render chip/tooltip đẹp khi vào edit/view
   valueRefs?: UserRefDTO[];
 };
 
@@ -86,7 +84,7 @@ type UnitNodeProps = {
   expandedSet: Set<string>;
 };
 
-function UnitNode({
+const UnitNode = React.memo(function UnitNode({
   unit,
   level,
   open,
@@ -186,7 +184,7 @@ function UnitNode({
       )}
     </Box>
   );
-}
+});
 
 export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.memo(function HybridUnitUserPicker({
   kind,
@@ -196,7 +194,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
   value,
   onChange,
   disabled,
-  valueRefs, // ✅ NEW
+  valueRefs,
 }) {
   const theme = useTheme();
 
@@ -241,7 +239,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
   const rootRaw = rootQ.data ?? [];
   const rootUnits = React.useMemo(() => rootRaw.filter((u) => !isHiddenRootUnit(u)), [rootRaw]);
 
-  // default unit
   React.useEffect(() => {
     if (!open) return;
     if (rootQ.isFetching) return;
@@ -277,11 +274,8 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
   const selectedSet = React.useMemo(() => new Set(selected), [selected]);
 
   const userMapRef = React.useRef<Map<string, UserPickRow>>(new Map());
-
-  // ✅ force re-render khi prime map (ref không trigger render)
   const [, bump] = React.useState(0);
 
-  // ✅ PRIME: bơm snapshot refs vào userMapRef + unitMapRef để render chip/tooltip đẹp khi edit
   React.useEffect(() => {
     if (!valueRefs || valueRefs.length === 0) return;
 
@@ -290,7 +284,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
     for (const r of valueRefs) {
       if (!r?.userId) continue;
 
-      // prime unitMapRef: để unitSymbolByUnitId / unitShortNameByUnitId vẫn có data
       if (r.unitId) {
         const existedUnit = unitMapRef.current.get(r.unitId);
         if (!existedUnit) {
@@ -304,12 +297,12 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
           } as UnitPickRow);
           changed = true;
         } else {
-          // fill thiếu nhẹ, không overwrite dữ liệu thật
           const patch: Partial<UnitPickRow> = {};
           if (!existedUnit.symbol && r.unitSymbol) patch.symbol = r.unitSymbol as any;
           if (!existedUnit.shortName && r.unitShortName) patch.shortName = r.unitShortName as any;
-          if (!existedUnit.fullName && (r.unitName || r.unitShortName || r.unitSymbol))
+          if (!existedUnit.fullName && (r.unitName || r.unitShortName || r.unitSymbol)) {
             patch.fullName = (r.unitName ?? r.unitShortName ?? r.unitSymbol) as any;
+          }
 
           if (Object.keys(patch).length > 0) {
             unitMapRef.current.set(r.unitId, { ...existedUnit, ...patch } as UnitPickRow);
@@ -318,7 +311,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
         }
       }
 
-      // prime userMapRef
       const existedUser = userMapRef.current.get(r.userId);
       if (!existedUser) {
         userMapRef.current.set(r.userId, {
@@ -329,12 +321,14 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
         } as UserPickRow);
         changed = true;
       } else {
-        // fill thiếu nhẹ
         const patch: Partial<UserPickRow> = {};
         if (!existedUser.username && r.username) patch.username = r.username as any;
-        if (!existedUser.fullName && (r.fullName || r.username))
+        if (!existedUser.fullName && (r.fullName || r.username)) {
           patch.fullName = (r.fullName ?? r.username) as any;
-        if ((!existedUser.unitId || existedUser.unitId === "") && r.unitId) patch.unitId = r.unitId as any;
+        }
+        if ((!existedUser.unitId || existedUser.unitId === "") && r.unitId) {
+          patch.unitId = r.unitId as any;
+        }
 
         if (Object.keys(patch).length > 0) {
           userMapRef.current.set(r.userId, { ...existedUser, ...patch } as UserPickRow);
@@ -360,6 +354,10 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
   const [lookupAssignee] = useLazyLookupPickerAssigneeByUsernameQuery();
 
   const lastEmitRef = React.useRef<string[]>([]);
+  React.useEffect(() => {
+    lastEmitRef.current = normalizeIds(value ?? [], mode);
+  }, [value, mode]);
+
   const emit = React.useCallback(
     (ids: string[]) => {
       const out = normalizeIds(ids, mode);
@@ -370,11 +368,12 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
     [onChange, mode]
   );
 
-  const openPopover = (e: React.MouseEvent<HTMLElement>) => {
+  const openPopover = React.useCallback((e: React.MouseEvent<HTMLElement>) => {
     if (disabled) return;
     setAnchorEl(e.currentTarget);
-  };
-  const closePopover = () => setAnchorEl(null);
+  }, [disabled]);
+
+  const closePopover = React.useCallback(() => setAnchorEl(null), []);
 
   const fetchUsers = React.useCallback(
     async (opts: { page: number; username?: string }) => {
@@ -383,9 +382,11 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
         setTotalRows(0);
         return;
       }
+
       setLoadingUsers(true);
       setRows([]);
       setTotalRows(0);
+
       try {
         const arg = {
           unitId: activeUnitId,
@@ -417,11 +418,11 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
     void fetchUsers({ page: 0, username: usernameText.trim() || undefined });
   }, [open, activeUnitId, kind, fetchUsers, usernameText]);
 
-  const handleSearchClick = () => {
+  const handleSearchClick = React.useCallback(() => {
     if (!open) return;
     setPage(0);
     void fetchUsers({ page: 0, username: usernameText.trim() || undefined });
-  };
+  }, [fetchUsers, open, usernameText]);
 
   const handleLookup = React.useCallback(async () => {
     const uname = usernameText.trim();
@@ -434,17 +435,19 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
 
     if (!res) return;
     userMapRef.current.set(res.id, res);
+    bump((x) => x + 1);
 
     if (mode === "single") {
       emit([res.id]);
       return;
     }
+
     const next = new Set(selected);
     next.add(res.id);
     emit(Array.from(next));
   }, [usernameText, kind, lookupLeader, lookupAssignee, mode, selected, emit]);
 
-  const toggleUser = (id: string) => {
+  const toggleUser = React.useCallback((id: string) => {
     if (mode === "single") {
       emit(selectedSet.has(id) ? [] : [id]);
       return;
@@ -453,31 +456,30 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
     if (next.has(id)) next.delete(id);
     else next.add(id);
     emit(Array.from(next));
-  };
+  }, [emit, mode, selected, selectedSet]);
 
-  const toggleExpand = (unitId: string) => {
+  const toggleExpand = React.useCallback((unitId: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(unitId)) next.delete(unitId);
       else next.add(unitId);
       return next;
     });
-  };
+  }, []);
 
-  const handleSelectUnit = (unitId: string) => {
+  const handleSelectUnit = React.useCallback((unitId: string) => {
     setActiveUnitId(unitId);
     setPage(0);
-    void fetchUsers({ page: 0, username: usernameText.trim() || undefined });
-  };
+  }, []);
 
-  const renderChipLabel = (u: UserPickRow) => {
+  const renderChipLabel = React.useCallback((u: UserPickRow) => {
     const sym = unitSymbolByUnitId(u.unitId);
     return sym ? `${u.fullName} - ${sym}` : `${u.fullName}`;
-  };
+  }, [unitSymbolByUnitId]);
 
   const selectedUsers = React.useMemo(
     () => selected.map((id) => userMapRef.current.get(id)).filter(Boolean) as UserPickRow[],
-    [selected]
+    [selected, rows]
   );
 
   const tooltipText = React.useMemo(() => {
@@ -502,7 +504,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
         slotProps={{
           htmlInput: {
             readOnly: true,
-            style: { pointerEvents: "none" }, // ✅ tránh input đè hover tooltip
+            style: { pointerEvents: "none" },
           },
           input: {
             sx: {
@@ -598,7 +600,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
           },
         }}
       >
-        {/* ===== Selected bar (cuộn ngang) ===== */}
         <Box sx={{ px: 1, pt: 0.5, pb: 0.75 }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <Typography variant="caption" sx={{ color: "text.secondary", mr: 0.5, flexShrink: 0 }}>
@@ -620,7 +621,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
                         key={id}
                         size="small"
                         label={label2}
-                        onDelete={() => toggleUser(id)} // ✅ tắt/bỏ chọn từng người ở đây
+                        onDelete={() => toggleUser(id)}
                         sx={{ maxWidth: 260, flexShrink: 0, ...chipSx }}
                       />
                     );
@@ -646,7 +647,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
 
         <Divider />
 
-        {/* ===== Search ===== */}
         <Box sx={{ p: 1 }}>
           <TextField
             size="small"
@@ -688,9 +688,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
 
         <Divider />
 
-        {/* ===== Body: 2 cột, mỗi cột scroll riêng ===== */}
         <Stack direction="row" spacing={1} sx={{ flex: 1, minHeight: 0, p: 1 }}>
-          {/* LEFT: Unit tree */}
           <Box
             sx={{
               width: 350,
@@ -736,7 +734,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
             </Box>
           </Box>
 
-          {/* RIGHT: Users */}
           <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {!activeUnitId ? (
@@ -794,7 +791,6 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
 
             <Divider />
 
-            {/* footer fixed */}
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 1 }}>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
                 {totalRows > 0

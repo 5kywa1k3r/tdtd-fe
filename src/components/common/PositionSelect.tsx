@@ -1,34 +1,32 @@
-import * as React from 'react';
 import { MenuItem, TextField } from '@mui/material';
-import { getPositionsByUnitCode, POSITION_NAME_BY_CODE, POSITIONS} from '../../constants/position';
+import { useListPositionsQuery } from '../../api/adminCatalogApi';
 
 type Props = {
-  value: string; // positionCode | ''
+  value: string;
   onChange: (code: string) => void;
   label?: string;
   size?: 'small' | 'medium';
   disabled?: boolean;
-
-  /** dùng để lọc theo level (unitCode.length/3). Nếu không truyền -> show all */
+  unitTypeCode?: string | null;
   unitCode?: string | null;
-
-  /** allow empty option */
   allowEmpty?: boolean;
 };
 
-export function PositionSelect({
-  value,
-  onChange,
-  label = 'Chức vụ',
-  size = 'small',
-  disabled,
-  unitCode,
-  allowEmpty = true,
-}: Props) {
-  const options = React.useMemo(() => {
-    if (unitCode != null) return getPositionsByUnitCode(unitCode);
-    return POSITIONS;
-  }, [unitCode]);
+export function PositionSelect(props: Props) {
+  const {
+    value,
+    onChange,
+    label = 'Chức vụ',
+    size = 'small',
+    disabled,
+    unitTypeCode,
+    allowEmpty = true,
+  } = props;
+
+  const { data: options = [], isFetching } = useListPositionsQuery({
+    unitTypeCode: unitTypeCode || undefined,
+    isDeleted: false,
+  });
 
   return (
     <TextField
@@ -37,10 +35,11 @@ export function PositionSelect({
       size={size}
       label={label}
       value={value ?? ''}
-      disabled={disabled}
+      disabled={disabled || isFetching}
       onChange={(e) => onChange(e.target.value)}
     >
       {allowEmpty && <MenuItem value="">-- Tất cả --</MenuItem>}
+      {!allowEmpty && <MenuItem value="">-- Chọn chức vụ --</MenuItem>}
       {options.map((p) => (
         <MenuItem key={p.code} value={p.code}>
           {p.name}
@@ -50,9 +49,7 @@ export function PositionSelect({
   );
 }
 
-/** helper label: "username - chức vụ" */
 export function formatUserLabel(username: string, fullName: string, positionCode?: string | null) {
-  const posName = positionCode ? POSITION_NAME_BY_CODE[positionCode] : '';
-  if (!posName) return `${username} - ${fullName}`;
-  return `${username} - ${posName}`;
+  if (!positionCode) return `${username} - ${fullName}`;
+  return `${username} - ${positionCode}`;
 }

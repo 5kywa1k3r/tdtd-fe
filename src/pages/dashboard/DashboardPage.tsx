@@ -1,357 +1,343 @@
-// src/pages/DashboardPage.tsx
-import { useEffect, useMemo, useState } from 'react';
-import { MissionDashboardTable } from '../../components/dashboard/MissionDashboardTable';
-
+import React from "react";
 import {
+  Alert,
   Box,
+  CircularProgress,
+  Dialog,
+  DialogContent,
+  Grid,
   Paper,
-  Typography,
   Stack,
-  Checkbox,
-  FormControlLabel,
-} from '@mui/material';
+  Typography,
+} from "@mui/material";
+import { useSearchParams } from "react-router-dom";
 
-import {
-  MantineDateHierarchyFilter,
-  type DateHierarchyFilterValue,
-} from '../../components/common/MantineDateHierarchyFilter';
-
-import { UnitMultiSelect } from '../../components/common/UnitMultiSelect';
-
-import { SummaryCard } from '../../components/dashboard/SummaryCard';
-import {
-  StatusPieChart,
-  StatusBreakdownBarChart,
-} from '../../components/charts';
+import { useLazyGetDashboardOverviewQuery } from "../../api/dashboardApi";
 import type {
-  StatusPieItem,
-  StatusBreakdownItem,
-} from '../../components/charts';
-
-import type { WorkStatusCore } from '../../constants/status';
+  DashboardOverviewMode,
+  DashboardOverviewResponse,
+  DashboardPageFilters,
+} from "../../types/dashboard";
 import {
-  STATUS_LABELS,
-  WORK_STATUS_CORE_LIST,
-} from '../../constants/status';
+  dateInputToUtcEnd,
+  dateInputToUtcStart,
+} from "../../utils/dashboardUi";
+import DashboardPieChart from "../../components/dashboard/charts/DashboardPieChart";
+import DashboardUnitBarChart from "../../components/dashboard/charts/DashboardUnitBarChart";
+import DashboardSummaryCards from "../../components/dashboard/summary/DashboardSummaryCards";
+import DashboardSummaryFilters from "../../components/dashboard/summary/DashboardSummaryFilters";
+import DashboardWorksTable from "../../components/dashboard/summary/DashboardWorksTable";
+import WorkMindMapLaunchDialog from "../../components/dashboard/mindmap/WorkMindMapLaunchDialog";
 
-import type {
-  DashboardMockData,
-  MissionItem,
-  MissionType,
-} from '../../data/dashboardMock';
-import { getDashboardMockData } from '../../data/dashboardMock';
+const WorkMindMapPage = React.lazy(() => import("./mindmap/WorkMindMapPage"));
 
-import { UNIT_LABEL_MAP, type UnitId } from '../../data/unitMock';
+const DEFAULT_FILTERS: DashboardPageFilters = {
+  mode: "WORK_TASK",
+  fromDate: "",
+  toDate: "",
+  unitIds: [],
+  assignmentId: "",
+};
 
-const PAGE_SIZE = 10;
+const MODE_TITLES: Record<DashboardOverviewMode, string> = {
+  WORK_TASK: "Bảng thống kê tổng hợp công việc",
+  WORK_TARGET: "Bảng thống kê chỉ tiêu",
+  ASSIGNMENT_RECEIVED: "Bảng thống kê công việc được giao",
+  ASSIGNMENT_CREATED: "Bảng thống kê công việc đã giao",
+  REPORT: "Bảng thống kê báo cáo",
+};
 
-export function DashboardPage() {
-  const [dateFilter, setDateFilter] = useState<DateHierarchyFilterValue>();
-  const [data, setData] = useState<DashboardMockData | null>(null);
-  const [selectedStatus, setSelectedStatus] =
-    useState<WorkStatusCore | null>(null);
+const MODE_DESCRIPTIONS: Record<DashboardOverviewMode, string> = {
+  WORK_TASK:
+    "Hiển thị các nhiệm vụ do chính bạn tạo. Biểu đồ tròn mô tả cơ cấu nhiệm vụ, còn nhóm thẻ trạng thái mô tả công việc được giao.",
+  WORK_TARGET:
+    "Hiển thị các chỉ tiêu do chính bạn tạo. Biểu đồ tròn mô tả cơ cấu chỉ tiêu, còn nhóm thẻ trạng thái mô tả các công việc đã giao.",
+  ASSIGNMENT_RECEIVED:
+    "Hiển thị các công việc thuộc nhánh được giao. Biểu đồ tròn mô tả cơ cấu báo cáo hoặc kỳ trong nhánh được giao.",
+  ASSIGNMENT_CREATED:
+    "Hiển thị các công việc thuộc nhánh do bạn giao. Biểu đồ tròn mô tả cơ cấu công việc đã giao, còn nhóm thẻ trạng thái mô tả báo cáo hoặc kỳ trong nhánh.",
+  REPORT:
+    "Hiển thị trực tiếp danh sách kỳ báo cáo trong các nhánh công việc mà bạn có quyền tổng hợp.",
+};
 
-  const [typeFilter, setTypeFilter] = useState<MissionType[]>([
-    'MISSION',
-    'TARGET',
-  ]);
+const PIE_TITLES: Record<DashboardOverviewMode, string> = {
+  WORK_TASK: "Cơ cấu trạng thái công việc",
+  WORK_TARGET: "Cơ cấu trạng thái công việc được giao",
+  ASSIGNMENT_RECEIVED: "Cơ cấu trạng thái báo cáo / kỳ",
+  ASSIGNMENT_CREATED: "Cơ cấu trạng thái công việc đã giao",
+  REPORT: "Cơ cấu trạng thái kỳ báo cáo",
+};
 
-  const [unitFilter, setUnitFilter] = useState<UnitId[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+const PIE_HELPERS: Record<DashboardOverviewMode, string> = {
+  WORK_TASK:
+    "Biểu đồ tròn biểu diễn trạng thái của nhiệm vụ, chỉ tiêu. Bấm lát cắt để xem đơn vị có giá trị cao nhất theo trạng thái công việc đã giao.",
+  WORK_TARGET:
+    "Biểu đồ tròn biểu diễn trạng thái của nhiệm vụ, chỉ tiêu. Bấm lát cắt để xem top đơn vị theo trạng thái công việc đã giao gốc.",
+  ASSIGNMENT_RECEIVED:
+    "Biểu đồ tròn  biểu diễn trạng thái của báo cáo hoặc kỳ trong nhánh công việc được giao.",
+  ASSIGNMENT_CREATED:
+    "Biểu đồ tròn đang biểu diễn trạng thái công việc đã giao. Nhóm thẻ phía trên đang mô tả báo cáo hoặc kỳ trong nhánh.",
+  REPORT:
+    "Biểu đồ tròn đang biểu diễn trạng thái của kỳ báo cáo trong phạm vi lọc.",
+};
 
-  const handleTypeToggle = (type: MissionType) => {
-    setTypeFilter((prev) => {
-      const exists = prev.includes(type);
-      if (exists) {
-        if (prev.length === 1) return prev;
-        return prev.filter((t) => t !== type);
-      }
-      return [...prev, type];
-    });
-    setPage(1);
+function readFiltersFromSearchParams(
+  searchParams: URLSearchParams
+): DashboardPageFilters {
+  const mode = (searchParams.get("mode") || DEFAULT_FILTERS.mode) as DashboardOverviewMode;
+
+  return {
+    mode,
+    fromDate: searchParams.get("fromDate") ?? "",
+    toDate: searchParams.get("toDate") ?? "",
+    unitIds: searchParams
+      .getAll("unitIds")
+      .map((x) => x.trim())
+      .filter(Boolean),
+    assignmentId: searchParams.get("assignmentId") ?? "",
   };
+}
 
-  const handleDateFilterChange = (v: DateHierarchyFilterValue) => {
-    setDateFilter(v);
-    setPage(1);
+function buildSearchParams(filters: DashboardPageFilters): URLSearchParams {
+  const params = new URLSearchParams();
+
+  params.set("mode", filters.mode);
+  if (filters.fromDate) params.set("fromDate", filters.fromDate);
+  if (filters.toDate) params.set("toDate", filters.toDate);
+  if (filters.assignmentId) params.set("assignmentId", filters.assignmentId);
+
+  for (const unitId of filters.unitIds) {
+    if (unitId?.trim()) params.append("unitIds", unitId.trim());
+  }
+
+  return params;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+
+  const e = error as {
+    data?: { message?: string; error?: string };
+    error?: string;
+    message?: string;
   };
+  return e?.data?.message || e?.data?.error || e?.error || e?.message || fallback;
+}
 
-  useEffect(() => {
-    if (!dateFilter) return;
+export default function DashboardPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFiltersRef = React.useRef<DashboardPageFilters | null>(null);
 
-    const load = async () => {
-      const res = await getDashboardMockData(dateFilter);
-      setData(res);
+  if (!initialFiltersRef.current) {
+    initialFiltersRef.current = {
+      ...DEFAULT_FILTERS,
+      ...readFiltersFromSearchParams(searchParams),
+    };
+  }
 
-      if (!selectedStatus) {
-        setSelectedStatus('COMPLETED');
+  const [triggerOverview] = useLazyGetDashboardOverviewQuery();
+
+  const [draftFilters, setDraftFilters] = React.useState<DashboardPageFilters>(
+    initialFiltersRef.current
+  );
+  const [appliedFilters, setAppliedFilters] = React.useState<DashboardPageFilters>(
+    initialFiltersRef.current
+  );
+  const [data, setData] = React.useState<DashboardOverviewResponse | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [selectedPieKey, setSelectedPieKey] = React.useState<string | null>(null);
+  const [mindMapPickerOpen, setMindMapPickerOpen] = React.useState(false);
+  const [mindMapCanvasOpen, setMindMapCanvasOpen] = React.useState(false);
+
+  const requestIdRef = React.useRef(0);
+
+  const runLoad = React.useCallback(
+    async (filters: DashboardPageFilters) => {
+      const requestId = ++requestIdRef.current;
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const result = await triggerOverview({
+          mode: filters.mode,
+          fromUtc: dateInputToUtcStart(filters.fromDate),
+          toUtc: dateInputToUtcEnd(filters.toDate),
+          unitIds: filters.unitIds,
+          assignmentId: filters.mode === "REPORT" ? filters.assignmentId || null : null,
+          topUnitCount: 3,
+          forceRefresh: false,
+        }).unwrap();
+
+        if (requestId !== requestIdRef.current) return;
+        setData(result);
+        setSelectedPieKey(result.pie[0]?.key ?? null);
+      } catch (err) {
+        if (requestId !== requestIdRef.current) return;
+        setError(getErrorMessage(err, "Không tải được dashboard."));
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
-    };
-
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFilter]);
-
-  const unitOptions = data?.units ?? [];
-
-  const filteredMissions: MissionItem[] = useMemo(() => {
-    if (!data) return [];
-
-    return data.missions.filter((m) => {
-      const okType = typeFilter.includes(m.type);
-      const okUnit =
-        unitFilter.length === 0 || unitFilter.includes(m.unitId);
-      return okType && okUnit;
-    });
-  }, [data, typeFilter, unitFilter]);
-
-  const summary = useMemo(() => {
-    const byStatus: Record<WorkStatusCore, number> = {
-      NOT_STARTED: 0,
-      IN_PROGRESS: 0,
-      AT_RISK: 0,
-      DELAYED: 0,
-      COMPLETED: 0,
-    };
-
-    filteredMissions.forEach((m) => {
-      byStatus[m.status] += 1;
-    });
-
-    return {
-      total: filteredMissions.length,
-      byStatus,
-    };
-  }, [filteredMissions]);
-
-  const pieData: StatusPieItem[] = useMemo(() => {
-    const map: Record<WorkStatusCore, number> = {
-      NOT_STARTED: 0,
-      IN_PROGRESS: 0,
-      AT_RISK: 0,
-      DELAYED: 0,
-      COMPLETED: 0,
-    };
-
-    filteredMissions.forEach((m) => {
-      map[m.status] += 1;
-    });
-
-    return WORK_STATUS_CORE_LIST.map((s) => ({
-      status: s,
-      label: STATUS_LABELS[s],
-      value: map[s],
-    }));
-  }, [filteredMissions]);
-
-  const barData: StatusBreakdownItem[] = useMemo(() => {
-    if (!selectedStatus) return [];
-
-    const unitMap = new Map<UnitId, number>();
-
-    filteredMissions
-      .filter((m) => m.status === selectedStatus)
-      .forEach((m) => {
-        unitMap.set(m.unitId, (unitMap.get(m.unitId) ?? 0) + 1);
-      });
-
-    return Array.from(unitMap.entries()).map(([unitId, count]) => ({
-      unit: UNIT_LABEL_MAP[unitId] ?? unitId,
-      count,
-    }));
-  }, [filteredMissions, selectedStatus]);
-
-  const paginatedMissions: MissionItem[] = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredMissions.slice(start, start + PAGE_SIZE);
-  }, [filteredMissions, page]);
-
-  const pageCount = Math.max(
-    1,
-    Math.ceil(filteredMissions.length / PAGE_SIZE)
+    },
+    [triggerOverview]
   );
 
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
+  React.useEffect(() => {
+    void runLoad(appliedFilters);
+  }, [appliedFilters, runLoad]);
+
+  React.useEffect(() => {
+    setSearchParams(buildSearchParams(appliedFilters), { replace: true });
+  }, [appliedFilters, setSearchParams]);
+
+  const handleApply = React.useCallback(() => {
+    setAppliedFilters({
+      ...draftFilters,
+      unitIds: [...draftFilters.unitIds],
+      assignmentId: draftFilters.mode === "REPORT" ? draftFilters.assignmentId : "",
+    });
+  }, [draftFilters]);
+
+  const handleReset = React.useCallback(() => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+  }, []);
+
+  const pieData = data?.pie ?? [];
+  const selectedPie = pieData.find((item) => item.key === selectedPieKey) ?? pieData[0] ?? null;
+  const unitChartRows = selectedPie ? data?.unitCharts?.[selectedPie.key] ?? [] : [];
+  const showUnitChart = true;
 
   return (
-    <Box
-      sx={{
-        px: 2,          // giữ ngang
-        pt: 0,         
-        pb: 3,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1.5,         // khoảng cách giữa filter và table = 16px
-      }}
-    >
-      {/* ============================ BỘ LỌC ============================ */}
+    <Stack spacing={2.5}>
       <Paper
+        variant="outlined"
         sx={{
-          p: 1.5,                    // 12px
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          boxShadow: 'none',         // cho nhẹ, tránh đè lên header
+          p: { xs: 2, md: 2.5 },
+          borderRadius: 3,
+          background:
+            "linear-gradient(180deg, rgba(248,250,252,0.95) 0%, rgba(255,255,255,1) 100%)",
         }}
       >
         <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          spacing={2}
-          alignItems="stretch"
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          spacing={1.5}
         >
-          {/* Cột trái: Loại + Đơn vị */}
-          <Box
-            sx={{
-              flex: 1,
-              minWidth: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 1,
-            }}
-          >
-            <Stack direction="row" spacing={2}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={typeFilter.includes('MISSION')}
-                    onChange={() => handleTypeToggle('MISSION')}
-                  />
-                }
-                label="Nhiệm vụ"
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={typeFilter.includes('TARGET')}
-                    onChange={() => handleTypeToggle('TARGET')}
-                  />
-                }
-                label="Chỉ tiêu"
-              />
-            </Stack>
-
-            <UnitMultiSelect
-              options={unitOptions}
-              value={unitFilter}
-              onChange={(v) => {
-                setUnitFilter(v);
-                setPage(1);
-              }}
-            />
+          <Box>
+            <Typography variant="h5" fontWeight={800}>
+              {MODE_TITLES[appliedFilters.mode]}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 980 }}>
+              {MODE_DESCRIPTIONS[appliedFilters.mode]}
+            </Typography>
           </Box>
 
-          {/* Cột phải: Thời gian (không còn chữ "Thời gian") */}
-          <Box
-            sx={{
-              flex: 1,
-              minWidth: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-end', // canh đáy cho thẳng hàng ô đơn vị
-            }}
-          >
-            <MantineDateHierarchyFilter onChange={handleDateFilterChange} />
-          </Box>
         </Stack>
       </Paper>
 
-      {/* ============================ SUMMARY ============================ */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-          <Box sx={{ flex: '1 1 260px', minWidth: 260 }}>
-            <SummaryCard
-              title="Tổng số nhiệm vụ / chỉ tiêu"
-              value={summary.total}
-              valueColor="primary.main"
-            />
-          </Box>
-        </Box>
+      <DashboardSummaryFilters
+        value={draftFilters}
+        onChange={setDraftFilters}
+        onApply={handleApply}
+        onReset={handleReset}
+        onOpenMindMap={() => setMindMapPickerOpen(true)}
+        loading={loading}
+        assignmentRequest={{
+          fromUtc: dateInputToUtcStart(draftFilters.fromDate),
+          toUtc: dateInputToUtcEnd(draftFilters.toDate),
+          unitIds: draftFilters.unitIds,
+        }}
+      />
 
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-          {WORK_STATUS_CORE_LIST.map((s) => (
-            <Box key={s} sx={{ flex: '1 1 200px', minWidth: 200 }}>
-              <SummaryCard
-                title={STATUS_LABELS[s]}
-                value={summary.byStatus[s]}
-                valueColor={
-                  s === 'COMPLETED'
-                    ? 'success.main'
-                    : s === 'DELAYED'
-                    ? 'error.main'
-                    : s === 'AT_RISK'
-                    ? 'warning.main'
-                    : 'primary.main'
-                }
-              />
-            </Box>
-          ))}
-        </Box>
-      </Box>
+      {error ? <Alert severity="error">{error}</Alert> : null}
 
-      {/* ============================ PIE + BAR ============================ */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-        <Paper
-          sx={{
-            p: 2,
-            flex: '1 1 360px',
-            minWidth: 360,
-            height: 360,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-            Cơ cấu trạng thái
-          </Typography>
-          <Box sx={{ flex: 1, minHeight: 0 }}>
-            <StatusPieChart
+      <DashboardSummaryCards cards={data?.cards ?? []} loading={loading && !data} />
+
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: showUnitChart ? 4 : 12 }}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, height: "100%" }}>
+            <DashboardPieChart
+              title={PIE_TITLES[appliedFilters.mode]}
+              helperText={PIE_HELPERS[appliedFilters.mode]}
               data={pieData}
-              selected={selectedStatus}
-              onSelect={setSelectedStatus}
+              selectedKey={selectedPie?.key ?? null}
+              onSelect={showUnitChart ? setSelectedPieKey : undefined}
+              height={300}
+              emptyText="Chưa có dữ liệu cơ cấu để hiển thị."
             />
-          </Box>
-        </Paper>
+          </Paper>
+        </Grid>
 
-        <Paper
-          sx={{
-            p: 2,
-            flex: '1 1 360px',
-            minWidth: 360,
-            height: 360,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-            Chi tiết theo đơn vị
-            {selectedStatus ? ` – ${STATUS_LABELS[selectedStatus]}` : ''}
+        {showUnitChart ? (
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, height: "100%" }}>
+              <DashboardUnitBarChart
+                title="3 đơn vị có giá trị cao nhất"
+                rows={unitChartRows}
+                selectedLabel={selectedPie?.label ?? null}
+                height={300}
+                emptyText="Chưa có dữ liệu đơn vị cho lát cắt đang chọn."
+              />
+            </Paper>
+          </Grid>
+        ) : null}
+      </Grid>
+
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+        <Stack spacing={0.75}>
+          <Typography variant="h6" fontWeight={700}>
+            Bảng dữ liệu
           </Typography>
-          <Box sx={{ flex: 1, minHeight: 0 }}>
-            <StatusBreakdownBarChart data={barData} status={selectedStatus} />
-          </Box>
-        </Paper>
-      </Box>
+          <Typography variant="body2" color="text.secondary">
+            {data?.range?.label || "Toàn bộ khoảng thời gian"}
+          </Typography>
+        </Stack>
+      </Paper>
 
-      {/* ============================ LIST ============================ */}
-        <MissionDashboardTable
-          rows={paginatedMissions}        // dữ liệu của trang hiện tại
-          total={filteredMissions.length} // tổng số dòng
-          page={page - 1}                 // AppTable dùng 0-based
-          pageSize={PAGE_SIZE}
-          onPageChange={(p) => setPage(p + 1)}       // chuyển về 1-based cho state hiện tại
-          onPageSizeChange={(size) => {
-            setPage(1);                   // reset về trang đầu
-            setPageSize(size);            // nếu muốn cho đổi size
-          }}
-        />
-    </Box>
+      {loading && !data ? (
+        <Paper variant="outlined" sx={{ p: 6, textAlign: "center", borderRadius: 3 }}>
+          <CircularProgress size={30} />
+        </Paper>
+      ) : (
+        <DashboardWorksTable mode={appliedFilters.mode} rows={data?.rows ?? []} />
+      )}
+
+      <WorkMindMapLaunchDialog
+        open={mindMapPickerOpen}
+        onClose={() => setMindMapPickerOpen(false)}
+        onOpenCanvas={() => {
+          setMindMapPickerOpen(false);
+          setMindMapCanvasOpen(true);
+        }}
+      />
+
+      <Dialog
+        fullScreen
+        open={mindMapCanvasOpen}
+        onClose={() => setMindMapCanvasOpen(false)}
+        PaperProps={{
+          sx: {
+            bgcolor: "#f8fafc",
+          },
+        }}
+      >
+        <DialogContent sx={{ p: 0, overflow: "hidden" }}>
+          <React.Suspense
+            fallback={(
+              <Box sx={{ display: "grid", minHeight: "100vh", placeItems: "center" }}>
+                <CircularProgress size={30} />
+              </Box>
+            )}
+          >
+            <WorkMindMapPage embedded canvasOnly />
+          </React.Suspense>
+        </DialogContent>
+      </Dialog>
+    </Stack>
   );
 }

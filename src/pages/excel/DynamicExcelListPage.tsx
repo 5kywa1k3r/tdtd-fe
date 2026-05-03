@@ -1,11 +1,11 @@
-import { Box, Button, Stack, TextField, Typography } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import SearchIcon from "@mui/icons-material/Search";
-import ClearIcon from "@mui/icons-material/Clear";
+import { Box, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { DynamicExcelListTable } from "../../components/excel/DynamicExcelListTable";
+import DynamicExcelFilterBar, {
+  type DynamicExcelFilterValue,
+} from "../../components/excel/DynamicExcelFilterBar";
 import type { SortDirection } from "../../components/common/AppTable";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
 
@@ -13,101 +13,82 @@ import {
   useDeleteDynamicExcelMutation,
   useSearchDynamicExcelMutation,
 } from "../../api/dynamicExcelApi";
+import { useWrapDynamicExcelAsFormMutation } from "../../api/dynamicFormApi";
 import type {
   DynamicExcelRow,
   DynamicExcelSearchReq,
 } from "../../api/dynamicExcelApi";
 
-// ✅ dùng Mantine date range (hiển thị DD/MM/YYYY, to=endOf(day))
-import {
-  MantineDateRangeFilter,
-  type DateRangeFilterValue,
-} from "../../components/common/MantineDateRangeFilter";
+const defaultFilterValue = (): DynamicExcelFilterValue => ({
+  code: "",
+  name: "",
+  dateRange: {
+    from: null,
+    to: null,
+  },
+});
 
 export default function DynamicExcelListPage() {
   const navigate = useNavigate();
 
-  // server state
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [sortField, setSortField] =
     useState<DynamicExcelSearchReq["sortField"]>("createdAtUtc");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // ===== DRAFT (đang gõ) =====
-  const [codeDraft, setCodeDraft] = useState("");
-  const [nameDraft, setNameDraft] = useState("");
-  const [dateDraft, setDateDraft] = useState<DateRangeFilterValue>({
-    from: null,
-    to: null,
-  });
-
-  // ===== APPLIED (đã bấm search) =====
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [dateApplied, setDateApplied] = useState<DateRangeFilterValue>({
-    from: null,
-    to: null,
-  });
+  const [filterValue, setFilterValue] = useState<DynamicExcelFilterValue>(defaultFilterValue());
+  const [appliedFilterValue, setAppliedFilterValue] =
+    useState<DynamicExcelFilterValue>(defaultFilterValue());
 
   const [search, searchState] = useSearchDynamicExcelMutation();
   const [del] = useDeleteDynamicExcelMutation();
+  const [wrapAsForm, wrapState] = useWrapDynamicExcelAsFormMutation();
   const rows = searchState.data?.rows ?? [];
   const total = searchState.data?.totalRows ?? 0;
 
   const req = useMemo<DynamicExcelSearchReq>(
     () => ({
-      code: code.trim() || undefined,
-      name: name.trim() || undefined,
-
-      // ✅ inclusive: from=startOf(day), to=endOf(day) đã được MantineDateRangeFilter đảm bảo
-      createdFromUtc: dateApplied.from ? dateApplied.from.toISOString() : null,
-      createdToUtc: dateApplied.to ? dateApplied.to.toISOString() : null,
-
+      code: appliedFilterValue.code.trim() || undefined,
+      name: appliedFilterValue.name.trim() || undefined,
+      createdFromUtc: appliedFilterValue.dateRange.from
+        ? appliedFilterValue.dateRange.from.toISOString()
+        : null,
+      createdToUtc: appliedFilterValue.dateRange.to
+        ? appliedFilterValue.dateRange.to.toISOString()
+        : null,
       q: undefined,
       createdBy: undefined,
       labels: null,
-
       page,
       pageSize,
       sortField: sortField ?? "createdAtUtc",
       sortDirection: sortDirection ?? "desc",
     }),
-    [code, name, dateApplied.from, dateApplied.to, page, pageSize, sortField, sortDirection]
+    [appliedFilterValue, page, pageSize, sortDirection, sortField]
   );
 
-  // ✅ chỉ search khi req đổi
   useEffect(() => {
     search(req);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req]);
 
   const doSearch = () => {
-    setCode(codeDraft);
-    setName(nameDraft);
-    setDateApplied(dateDraft);
+    setAppliedFilterValue(filterValue);
     setPage(0);
   };
 
   const clearFilters = () => {
-    setCodeDraft("");
-    setNameDraft("");
-    setDateDraft({ from: null, to: null });
-
-    setCode("");
-    setName("");
-    setDateApplied({ from: null, to: null });
-
+    const next = defaultFilterValue();
+    setFilterValue(next);
+    setAppliedFilterValue(next);
     setPage(0);
   };
 
-  const onEnterSearch = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") doSearch();
-  };
-
-  // delete confirm
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DynamicExcelRow | null>(null);
+  const [wrapConfirmOpen, setWrapConfirmOpen] = useState(false);
+  const [wrapTarget, setWrapTarget] = useState<DynamicExcelRow | null>(null);
 
   const openCreate = () => navigate("/dynamic-excel/create");
   const openView = (row: DynamicExcelRow) => navigate(`/dynamic-excel/${row.id}`);
@@ -116,72 +97,20 @@ export default function DynamicExcelListPage() {
     setDeleteTarget(row);
     setConfirmOpen(true);
   };
+  const askWrapAsForm = (row: DynamicExcelRow) => {
+    setWrapTarget(row);
+    setWrapConfirmOpen(true);
+  };
 
   return (
     <Box sx={{ p: 2 }}>
-      {/* Search bar */}
-      <Stack
-        direction="row"
-        spacing={1}
-        mb={2}
-        flexWrap="wrap"
-        useFlexGap
-        alignItems="center"
-      >
-        <TextField
-          size="small"
-          label="Mã"
-          value={codeDraft}
-          onChange={(e) => setCodeDraft(e.target.value)}
-          onKeyDown={onEnterSearch}
-          sx={{ minWidth: 180, flex: "1 1 200px" }}
-        />
-
-        <TextField
-          size="small"
-          label="Tên"
-          value={nameDraft}
-          onChange={(e) => setNameDraft(e.target.value)}
-          onKeyDown={onEnterSearch}
-          sx={{ minWidth: 220, flex: "1 1 260px" }}
-        />
-
-        {/* ✅ 1 ô chọn khoảng ngày (dd/MM/yyyy) */}
-        <Box sx={{ minWidth: 320, flex: "1 1 360px" }}>
-          <MantineDateRangeFilter
-            value={dateDraft}
-            onChange={(v) => setDateDraft(v)}
-            placeholder="Chọn khoảng ngày"
-          />
-        </Box>
-
-        <Button
-          variant="contained"
-          startIcon={<SearchIcon />}
-          onClick={doSearch}
-          sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
-        >
-          Tìm kiếm
-        </Button>
-
-        <Button
-          variant="outlined"
-          startIcon={<ClearIcon />}
-          onClick={clearFilters}
-          sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
-        >
-          Xóa lọc
-        </Button>
-
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={openCreate}
-          sx={{ height: 40, flexShrink: 0, whiteSpace: "nowrap" }}
-        >
-          Tạo mới
-        </Button>
-      </Stack>
+      <DynamicExcelFilterBar
+        value={filterValue}
+        onChange={setFilterValue}
+        onSearch={doSearch}
+        onReset={clearFilters}
+        onCreate={openCreate}
+      />
 
       <DynamicExcelListTable
         rows={rows as any}
@@ -203,7 +132,34 @@ export default function DynamicExcelListPage() {
         onRowDoubleClick={openView as any}
         onView={openView as any}
         onEdit={openEdit as any}
+        onWrapAsForm={askWrapAsForm as any}
         onDelete={askDelete as any}
+      />
+
+      <ConfirmDialog
+        open={wrapConfirmOpen}
+        title="Tao Dynamic Form"
+        message={
+          <Typography variant="body2">
+            Tao hoac mo Dynamic Form boc bang <b>{wrapTarget?.code}</b>.
+          </Typography>
+        }
+        confirmText="Tao form"
+        cancelText="Huy"
+        variant="info"
+        confirmLoading={wrapState.isLoading}
+        onConfirm={async () => {
+          if (!wrapTarget) return;
+          const form = await wrapAsForm({ dynamicExcelTemplateId: wrapTarget.id }).unwrap();
+          setWrapConfirmOpen(false);
+          setWrapTarget(null);
+          navigate(`/dynamic-forms/${form.id}`);
+        }}
+        onClose={() => {
+          if (wrapState.isLoading) return;
+          setWrapConfirmOpen(false);
+          setWrapTarget(null);
+        }}
       />
 
       <ConfirmDialog

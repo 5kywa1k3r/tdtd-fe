@@ -21,7 +21,9 @@ export type MeSnapshot = {
   roles: string[];
   unitId?: string;
   unitCode?: string;
+  unitSymbol?: string;
   unitName?: string;
+  positionCode?: string;
   cachedAt: number;
 };
 
