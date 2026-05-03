@@ -49,8 +49,7 @@ const getFileIcon = (file: File) => {
 
 
 const genId = () =>
-  // @ts-ignore
-  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `att_${Date.now()}_${Math.random()}`;
+  globalThis.crypto?.randomUUID?.() ?? `att_${Date.now()}_${Math.random()}`;
 
 export const AttachmentPicker: React.FC<AttachmentPickerProps> = ({
   title = 'Tệp đính kèm',

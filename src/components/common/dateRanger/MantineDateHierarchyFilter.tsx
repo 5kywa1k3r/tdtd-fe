@@ -78,7 +78,7 @@ export const MantineDateHierarchyFilter: React.FC<Props> = ({
   };
 
   const handleInnerChange = (next: { from: dayjs.Dayjs | null; to: dayjs.Dayjs | null }) => {
-    let from = next.from;
+    const from = next.from;
     let to = next.to;
 
     if (isAfterByType(draft.type, from, to)) {

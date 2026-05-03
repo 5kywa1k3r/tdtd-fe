@@ -16,7 +16,7 @@ export function normalizeRange(
   from: Dayjs | null,
   to: Dayjs | null
 ): HierarchyRangeValue {
-  let f = from;
+  const f = from;
   let t = to;
 
   if (f && t && f.isAfter(t)) {

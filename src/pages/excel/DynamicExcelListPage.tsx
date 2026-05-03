@@ -70,7 +70,7 @@ export default function DynamicExcelListPage() {
 
   useEffect(() => {
     search(req);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [req]);
 
   const doSearch = () => {

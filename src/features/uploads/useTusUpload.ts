@@ -38,7 +38,9 @@ export function useTusUpload() {
 
     // reset previous upload instance
     if (uploadRef.current) {
-      try { await uploadRef.current.abort(); } catch {}
+      try { await uploadRef.current.abort(); } catch {
+        // Ignore cleanup failures from a previous upload instance.
+      }
       uploadRef.current = null;
     }
 

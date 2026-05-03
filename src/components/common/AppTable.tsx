@@ -85,7 +85,7 @@ function assertServerPaginationProps<T, F extends string>(props: AppTableProps<T
   if (props.paginationMode !== 'server') return;
   // server-mode nên truyền đủ để tránh UI tự “đoán”
   if (props.page == null || props.pageSize == null || props.totalRows == null) {
-    // eslint-disable-next-line no-console
+
     console.warn(
       '[AppTable] paginationMode="server" requires page, pageSize, totalRows to be provided.',
     );
@@ -95,7 +95,7 @@ function assertServerPaginationProps<T, F extends string>(props: AppTableProps<T
 function assertServerSortProps<T, F extends string>(props: AppTableProps<T, F>) {
   if (props.sortMode !== 'server') return;
   if (props.sortField == null || props.sortDirection == null) {
-    // eslint-disable-next-line no-console
+
     console.warn(
       '[AppTable] sortMode="server" requires sortField and sortDirection to be provided.',
     );
@@ -319,8 +319,7 @@ export function AppTable<T, F extends string = string>(props: AppTableProps<T, F
   };
 
   // ================== THEME → CSS VARIABLES ==================
-  const wrapperStyle: React.CSSProperties = {
-    // @ts-ignore – dùng CSS variables
+  const wrapperStyle: React.CSSProperties & Record<string, string> = {
     '--app-table-bg': theme.palette.background.paper,
 
     '--app-table-border-color': isDark

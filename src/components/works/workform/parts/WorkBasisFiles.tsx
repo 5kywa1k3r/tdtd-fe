@@ -119,7 +119,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
 
     if (st.status === "error") {
       pendingRef.current = null;
-      // eslint-disable-next-line no-console
+
       console.error(st.error);
       alert(st.error || "Upload thất bại.");
       return;
@@ -143,7 +143,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
 
           await refetchFiles();
         } catch (err: any) {
-          // eslint-disable-next-line no-console
+
           console.error(err);
           alert(err?.message || "Verify thất bại.");
         } finally {
@@ -166,7 +166,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
     try {
       await uploadOne(f);
     } catch (err: any) {
-      // eslint-disable-next-line no-console
+
       console.error(err);
       pendingRef.current = null;
       alert(err?.message || "Upload thất bại.");
@@ -182,7 +182,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
       await deleteFile({ workId, fileId }).unwrap();
       await refetchFiles();
     } catch (err: any) {
-      // eslint-disable-next-line no-console
+
       console.error(err);
       alert(err?.message || "Xóa file thất bại.");
     }
@@ -195,7 +195,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
       if (!url) throw new Error("Không lấy được presign url.");
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
-      // eslint-disable-next-line no-console
+
       console.error(err);
       alert(err?.message || "Tải xuống thất bại.");
     }

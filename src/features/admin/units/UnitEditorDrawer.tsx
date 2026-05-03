@@ -84,7 +84,7 @@ export function UnitEditorDrawer(props: {
       setPrimaryUnitTypeCode('');
       setIsVirtual(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [editor]);
 
   const onSubmit = async () => {
@@ -143,7 +143,7 @@ export function UnitEditorDrawer(props: {
         </Typography>
 
       {/*  box biết đang sửa cái nào */}
-      
+
       {isEdit && (
         selected ? (
           <Box sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
