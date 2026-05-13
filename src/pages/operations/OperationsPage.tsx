@@ -107,6 +107,34 @@ const jobRunDefaultFilters: JobRunFilters = {
   pageSize: 25,
 };
 
+const operationsFilterRowSx = {
+  display: "flex",
+  flexWrap: { xs: "wrap", xl: "nowrap" },
+  alignItems: "center",
+  gap: 1.5,
+  width: "100%",
+};
+
+const operationsFilterFieldSx = {
+  flex: "1 1 0",
+  minWidth: { xs: "100%", sm: 220, xl: 0 },
+};
+
+const operationsFilterButtonSx = {
+  height: 40,
+  px: 2,
+  minWidth: { xs: "100%", sm: 120 },
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const operationsSwitchSx = {
+  height: 40,
+  m: 0,
+  px: 1,
+  flexShrink: 0,
+};
+
 const actionOptions = [
   ["", "Tất cả thao tác"],
   ["WORK_CREATED", "Tạo đầu việc"],
@@ -516,7 +544,7 @@ function HistoryPanel() {
   return (
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} alignItems={{ lg: "center" }}>
+        <Box sx={operationsFilterRowSx}>
           <TextField
             size="small"
             label={uiText(UITextKey.TextTimKiem)}
@@ -525,7 +553,7 @@ function HistoryPanel() {
             onKeyDown={(event) => {
               if (event.key === "Enter") applyFilters();
             }}
-            sx={{ minWidth: 240 }}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 1.4 }}
           />
           <TextField
             select
@@ -533,7 +561,7 @@ function HistoryPanel() {
             label={uiText(UITextKey.TextThaoTac)}
             value={draft.action}
             onChange={(event) => setDraft((current) => ({ ...current, action: event.target.value }))}
-            sx={{ minWidth: 190 }}
+            sx={operationsFilterFieldSx}
           >
             {actionOptions.map(([value, label]) => (
               <MenuItem key={value} value={value}>
@@ -547,7 +575,7 @@ function HistoryPanel() {
             label={uiText(UITextKey.TextScope)}
             value={draft.scope}
             onChange={(event) => setDraft((current) => ({ ...current, scope: event.target.value }))}
-            sx={{ minWidth: 150 }}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.8 }}
           >
             {scopeOptions.map(([value, label]) => (
               <MenuItem key={value} value={value}>
@@ -560,19 +588,19 @@ function HistoryPanel() {
             label={uiText(UITextKey.TextUnitID)}
             value={draft.unitId}
             onChange={(event) => setDraft((current) => ({ ...current, unitId: event.target.value }))}
-            sx={{ minWidth: 220 }}
+            sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
             label={uiText(UITextKey.TextUserID)}
             value={draft.userId}
             onChange={(event) => setDraft((current) => ({ ...current, userId: event.target.value }))}
-            sx={{ minWidth: 220 }}
+            sx={operationsFilterFieldSx}
           />
-          <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters}>
+          <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters} sx={operationsFilterButtonSx}>
             Lọc
           </Button>
-        </Stack>
+        </Box>
       </Paper>
 
       <PagedTable
@@ -780,7 +808,7 @@ function JobRunsPanel() {
   return (
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} alignItems={{ lg: "center" }}>
+        <Box sx={operationsFilterRowSx}>
           <TextField
             size="small"
             label={uiText(UITextKey.TextTimKiem)}
@@ -789,7 +817,7 @@ function JobRunsPanel() {
             onKeyDown={(event) => {
               if (event.key === "Enter") applyFilters();
             }}
-            sx={{ minWidth: 220 }}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 1.3 }}
           />
           <TextField
             select
@@ -797,7 +825,7 @@ function JobRunsPanel() {
             label={uiText(UITextKey.TextStatusResult)}
             value={draft.status}
             onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}
-            sx={{ minWidth: 170 }}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.9 }}
           >
             {statusOptions.map(([value, label]) => (
               <MenuItem key={value} value={value}>
@@ -810,28 +838,28 @@ function JobRunsPanel() {
             label={uiText(UITextKey.TextActionOperation)}
             value={draft.action}
             onChange={(event) => setDraft((current) => ({ ...current, action: event.target.value }))}
-            sx={{ minWidth: 190 }}
+            sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
             label="Mã đầu việc"
             value={draft.workId}
             onChange={(event) => setDraft((current) => ({ ...current, workId: event.target.value }))}
-            sx={{ minWidth: 190 }}
+            sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
             label={uiText(UITextKey.TextAssignmentID)}
             value={draft.workAssignmentId}
             onChange={(event) => setDraft((current) => ({ ...current, workAssignmentId: event.target.value }))}
-            sx={{ minWidth: 210 }}
+            sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
             label={uiText(UITextKey.TextUserID)}
             value={draft.userId}
             onChange={(event) => setDraft((current) => ({ ...current, userId: event.target.value }))}
-            sx={{ minWidth: 180 }}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.9 }}
           />
           <FormControlLabel
             control={
@@ -843,11 +871,12 @@ function JobRunsPanel() {
               />
             }
             label={uiText(UITextKey.TextInactive)}
+            sx={operationsSwitchSx}
           />
-          <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters}>
+          <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters} sx={operationsFilterButtonSx}>
             Lọc
           </Button>
-        </Stack>
+        </Box>
       </Paper>
 
       <Paper variant="outlined">
@@ -857,7 +886,11 @@ function JobRunsPanel() {
               <Tab key={value} value={value} label={label} />
             ))}
           </Tabs>
-          <Stack direction="row" spacing={1} sx={{ p: 1 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ p: 1, flexWrap: "wrap", "& .MuiButton-root": { minWidth: 132, height: 36 } }}
+          >
             {jobTab === "projectionRetry" && (
               <Button
                 size="small"

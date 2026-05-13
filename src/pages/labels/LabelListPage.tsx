@@ -26,6 +26,7 @@ import SearchIcon from "@mui/icons-material/Search";
 
 import { AppTable, type AppTableColumn, type SortDirection } from "../../components/common/AppTable";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import { listToolbarButtonSx } from "../../components/common/ListPageToolbar";
 import { useGetMeQuery } from "../../api/base/meApi";
 import {
   type CreateLabelReq,
@@ -360,12 +361,12 @@ export default function LabelListPage() {
               Nhãn dùng để chuẩn hóa biểu mẫu động, bảng Excel và thống kê cơ cấu/lũy kế.
             </Typography>
           </Box>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ display: "none" }}>
             Tạo nhãn
           </Button>
         </Stack>
 
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+        <Stack direction="row" spacing={1} flexWrap={{ xs: "wrap", lg: "nowrap" }} useFlexGap alignItems="center">
           <TextField
             size="small"
             label={uiText(UITextKey.TextTimNhan2)}
@@ -374,7 +375,7 @@ export default function LabelListPage() {
             onKeyDown={(event) => {
               if (event.key === "Enter") applySearch();
             }}
-            sx={{ minWidth: 220, flex: "1 1 260px" }}
+            sx={{ minWidth: 220, flex: "1 1 300px" }}
           />
           <TextField
             size="small"
@@ -384,7 +385,7 @@ export default function LabelListPage() {
             onKeyDown={(event) => {
               if (event.key === "Enter") applySearch();
             }}
-            sx={{ minWidth: 180 }}
+            sx={{ minWidth: 170, flex: "0 1 190px" }}
           />
           <TextField
             select
@@ -392,17 +393,20 @@ export default function LabelListPage() {
             label={uiText(UITextKey.TextTrangThai)}
             value={active}
             onChange={(event) => setActive(event.target.value as typeof active)}
-            sx={{ minWidth: 150 }}
+            sx={{ minWidth: 150, flex: "0 0 150px" }}
           >
             <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
             <MenuItem value="ACTIVE">{uiText(UITextKey.TextActive)}</MenuItem>
             <MenuItem value="INACTIVE">{uiText(UITextKey.TextInactive)}</MenuItem>
           </TextField>
-          <Button variant="contained" startIcon={<SearchIcon />} onClick={applySearch}>
+          <Button variant="contained" startIcon={<SearchIcon />} onClick={applySearch} sx={listToolbarButtonSx}>
             Tìm
           </Button>
-          <Button variant="outlined" startIcon={<ClearIcon />} onClick={resetSearch}>
-            Reset
+          <Button variant="outlined" startIcon={<ClearIcon />} onClick={resetSearch} sx={listToolbarButtonSx}>
+            Xóa lọc
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ ...listToolbarButtonSx, ml: { xs: 0, lg: "auto" } }}>
+            {uiText(UITextKey.TextTaoNhanMoi)}
           </Button>
         </Stack>
 

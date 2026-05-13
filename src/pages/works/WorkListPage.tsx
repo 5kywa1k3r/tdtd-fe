@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Dialog, DialogContent } from '@mui/material';
+import { Box, Button, Dialog, DialogContent } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 
 import { WorkListTable, type WorkSortField } from '../../components/works/WorkListTable';
 import type { SortDirection } from '../../components/common/AppTable';
 
 import { WorkForm } from '../../components/works/workform/WorkForm';
 import { WorkFilter, type WorkFilterValues } from '../../components/works/WorkFilter';
-import { WorkListToolbar } from '../../components/common/WorkListToolbar';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { listToolbarButtonSx } from '../../components/common/ListPageToolbar';
 
 import type { WorkListRow } from '../../types/work';
 import { useSearchWorksQuery, useDeleteWorkMutation } from '../../api/workApi';
@@ -115,10 +116,6 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
   return (
     <Box sx={{ flex: 1, p: 2, pt: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
-        <WorkListToolbar type={type} onCreate={() => setOpenCreate(true)} />
-      </Box>
-
-      <Box>
         <WorkFilter
           value={filter}
           onChange={(v) => setFilter(v)}
@@ -126,6 +123,16 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
           leaderOptions={[]}
           onSubmit={() => setPage(0)}
           onReset={() => setPage(0)}
+          primaryActions={
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenCreate(true)}
+              sx={listToolbarButtonSx}
+            >
+              {type === 'TASK' ? 'Tạo nhiệm vụ mới' : 'Tạo chỉ tiêu mới'}
+            </Button>
+          }
         />
       </Box>
 

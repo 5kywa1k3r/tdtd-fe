@@ -82,7 +82,7 @@ export default function DashboardWorksTable({ mode, rows }: Props) {
           },
           {
             field: "workStatus",
-            header: "Trạng thái work",
+            header: "Trạng thái",
             width: 160,
             sortable: true,
             render: (row) => <StatusChip status={toStatusCore(row.workStatus)} />,

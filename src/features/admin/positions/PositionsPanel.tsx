@@ -70,7 +70,7 @@ export function PositionsPanel() {
     () => [
       {
         field: 'code',
-        header: 'Ma',
+        header: 'Mã',
         sortable: true,
         width: 140,
         render: (row) => <CommonLabelText text={row.code} fontWeight={700} />,
@@ -91,14 +91,14 @@ export function PositionsPanel() {
       },
       {
         field: 'rank',
-        header: 'Rank',
+        header: 'Thứ hạng',
         sortable: true,
         width: 90,
         align: 'center',
       },
       {
         field: 'actions',
-        header: 'Thao tac',
+        header: 'Thao tác',
         sortable: false,
         width: 120,
         align: 'center',

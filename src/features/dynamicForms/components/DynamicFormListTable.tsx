@@ -144,7 +144,7 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
       },
       {
         field: "code",
-        header: "Ma",
+        header: "Mã",
         sortable: true,
         width: 230,
         render: (row) => (

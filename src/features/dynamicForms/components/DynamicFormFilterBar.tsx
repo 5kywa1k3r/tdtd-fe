@@ -4,7 +4,6 @@ import {
   Button,
   MenuItem,
   Select,
-  Stack,
   TextField,
   type SelectChangeEvent,
 } from "@mui/material";
@@ -16,6 +15,7 @@ import {
   MantineDateRangeFilter,
   type DateRangeFilterValue,
 } from "../../../components/common/dateRanger/MantineDateRangeFilter";
+import { ListPageToolbar, listToolbarButtonSx } from "../../../components/common/ListPageToolbar";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type DynamicFormFilterValue = {
@@ -47,15 +47,15 @@ export default function DynamicFormFilterBar({
     if (e.key === "Enter") onSearch();
   };
 
-  return (
-    <Stack direction="row" spacing={1} mb={2} flexWrap="wrap" useFlexGap alignItems="center">
+  const filters = (
+    <>
       <TextField
         size="small"
         label={uiText(UITextKey.TextMa2)}
         value={value.code}
         onChange={(e) => emit({ code: e.target.value })}
         onKeyDown={onEnterSearch}
-        sx={{ minWidth: 180, flex: "1 1 200px" }}
+        sx={{ minWidth: 150, flex: "0 1 170px" }}
       />
 
       <TextField
@@ -64,7 +64,7 @@ export default function DynamicFormFilterBar({
         value={value.name}
         onChange={(e) => emit({ name: e.target.value })}
         onKeyDown={onEnterSearch}
-        sx={{ minWidth: 220, flex: "1 1 260px" }}
+        sx={{ minWidth: 200, flex: "1 1 230px" }}
       />
 
       <Select
@@ -73,7 +73,7 @@ export default function DynamicFormFilterBar({
         onChange={(event: SelectChangeEvent) =>
           emit({ status: event.target.value as DynamicFormFilterValue["status"] })
         }
-        sx={{ minWidth: 150 }}
+        sx={{ minWidth: 132, flex: "0 0 132px" }}
       >
         <MenuItem value="ALL">{uiText(UITextKey.TextTatCa3)}</MenuItem>
         <MenuItem value="DRAFT">{uiText(UITextKey.TextDraft)}</MenuItem>
@@ -86,47 +86,42 @@ export default function DynamicFormFilterBar({
         onChange={(event: SelectChangeEvent) =>
           emit({ active: event.target.value as DynamicFormFilterValue["active"] })
         }
-        sx={{ minWidth: 150 }}
+        sx={{ minWidth: 142, flex: "0 0 142px" }}
       >
         <MenuItem value="ALL">{uiText(UITextKey.TextMoiTrangThai)}</MenuItem>
         <MenuItem value="ACTIVE">{uiText(UITextKey.TextActive)}</MenuItem>
         <MenuItem value="INACTIVE">{uiText(UITextKey.TextInactive)}</MenuItem>
       </Select>
 
-      <Box sx={{ minWidth: 300, flex: "1 1 340px" }}>
+      <Box sx={{ minWidth: 280, flex: "1 1 300px" }}>
         <MantineDateRangeFilter
           value={value.dateRange}
           onChange={(next) => emit({ dateRange: next })}
           placeholder={uiText(UITextKey.TextKhoangNgayTao)}
         />
       </Box>
+    </>
+  );
 
-      <Button
-        variant="contained"
-        startIcon={<SearchIcon />}
-        onClick={onSearch}
-        sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
-      >
-        {uiText(UITextKey.TextTimKiem)}
-      </Button>
-
-      <Button
-        variant="outlined"
-        startIcon={<ClearIcon />}
-        onClick={onReset}
-        sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
-      >
-        Xóa lọc
-      </Button>
-
-      <Button
-        variant="contained"
-        startIcon={<AddIcon />}
-        onClick={onCreate}
-        sx={{ height: 40, flexShrink: 0, whiteSpace: "nowrap" }}
-      >
-        Tạo mới
-      </Button>
-    </Stack>
+  return (
+    <ListPageToolbar
+      sx={{ mb: 2 }}
+      filters={filters}
+      filterActions={
+        <>
+          <Button variant="contained" startIcon={<SearchIcon />} onClick={onSearch} sx={listToolbarButtonSx}>
+            {uiText(UITextKey.TextTimKiem)}
+          </Button>
+          <Button variant="outlined" startIcon={<ClearIcon />} onClick={onReset} sx={listToolbarButtonSx}>
+            Xóa lọc
+          </Button>
+        </>
+      }
+      primaryActions={
+        <Button variant="contained" startIcon={<AddIcon />} onClick={onCreate} sx={listToolbarButtonSx}>
+          {uiText(UITextKey.CommonCreate)}
+        </Button>
+      }
+    />
   );
 }

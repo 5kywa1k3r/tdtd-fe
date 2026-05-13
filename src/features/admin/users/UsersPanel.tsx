@@ -8,16 +8,19 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Snackbar,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import { Box } from '@mui/system';
 
 import {
@@ -36,6 +39,10 @@ import { UsersTable, type AdminUserRow } from '../../../components/admin/UsersTa
 import { LazyUnitMultiSelect, type UnitPickMeta } from '../../../components/common/LazyUnitMultiSelect';
 import { PositionSelect } from '../../../components/common/PositionSelect';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
+import {
+  listToolbarButtonSx,
+  listToolbarIconButtonSx,
+} from '../../../components/common/ListPageToolbar';
 
 import { Permission } from '../../../constants/permissions';
 import { hasPermission } from '../../../utils/rbac';
@@ -44,15 +51,6 @@ import { UITextKey, uiText } from '../../../constants/uiText';
 import { getApiErrorMessage } from '../../../utils/apiError';
 
 const DEFAULT_PASSWORD = '123456@Aa';
-
-const toolbarButtonSx = {
-  height: 40,
-  px: 1.5,
-  whiteSpace: 'nowrap',
-  flexShrink: 0,
-  minWidth: 'max-content',
-};
-
 async function downloadTemplate(url: string, format: 'xlsx' | 'csv', fileName: string) {
   const res = await api.get(url, { params: { format }, responseType: 'blob' });
   const blobUrl = window.URL.createObjectURL(res.data);
@@ -266,9 +264,9 @@ export function UsersPanel() {
         <Box
           sx={{
             display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'flex-start',
-            gap: 1.25,
+            flexWrap: { xs: 'wrap', xl: 'nowrap' },
+            alignItems: 'center',
+            gap: 1,
             mb: 1.5,
           }}
         >
@@ -280,11 +278,11 @@ export function UsersPanel() {
                 xs: '1fr',
                 md: 'minmax(220px, 1.1fr) minmax(220px, 1fr)',
                 lg: 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(220px, 0.8fr)',
-                xl: 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(220px, 0.8fr) auto',
+                xl: 'minmax(220px, 1.15fr) minmax(220px, 1fr) minmax(180px, 0.8fr) auto',
               },
-              alignItems: 'flex-start',
+              alignItems: 'center',
               gap: 1,
-              flex: '1 1 760px',
+              flex: '1 1 auto',
               minWidth: { xs: '100%', md: 0 },
             }}
           >
@@ -333,11 +331,11 @@ export function UsersPanel() {
               }}
             >
               <Button
-                variant="outlined"
+                variant="contained"
                 size="small"
                 startIcon={<SearchIcon />}
                 onClick={applySearch}
-                sx={toolbarButtonSx}
+                sx={listToolbarButtonSx}
               >
                 Tìm kiếm
               </Button>
@@ -347,7 +345,7 @@ export function UsersPanel() {
                 size="small"
                 startIcon={<ClearIcon />}
                 onClick={clearFilters}
-                sx={toolbarButtonSx}
+                sx={listToolbarButtonSx}
               >
                 Xóa lọc
               </Button>
@@ -358,18 +356,29 @@ export function UsersPanel() {
           <Box
             sx={{
               display: 'flex',
-              alignItems: 'flex-start',
-              alignSelf: 'flex-start',
-              flexWrap: 'wrap',
+              alignItems: 'center',
+              alignSelf: 'center',
+              flexWrap: 'nowrap',
               justifyContent: { xs: 'flex-start', sm: 'flex-end' },
               gap: 1,
-              flex: '1 1 420px',
+              flex: '0 0 auto',
               minWidth: 0,
-              marginLeft: 0,
+              marginLeft: { xs: 0, xl: 'auto' },
             }}
           >
             {canCreate && (
               <>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={handleOpenCreate}
+                  sx={listToolbarButtonSx}
+                >
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                    Tạo người dùng
+                  </Box>
+                </Button>
                 <input
                   ref={importInputRef}
                   type="file"
@@ -388,50 +397,40 @@ export function UsersPanel() {
                     }
                   }}
                 />
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<FileDownloadIcon />}
-                  onClick={() => downloadTemplate('/admin/users/import-template', 'xlsx', 'user-import-template.xlsx')}
-                  sx={toolbarButtonSx}
-                >
-                  Mẫu XLSX
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<FileDownloadIcon />}
-                  onClick={() => downloadTemplate('/admin/users/import-template', 'csv', 'user-import-template.csv')}
-                  sx={toolbarButtonSx}
-                >
-                  Mẫu CSV
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<UploadFileIcon />}
-                  onClick={(event) => {
-                    releaseFocusBeforeModal(event);
-                    importInputRef.current?.click();
-                  }}
-                  sx={toolbarButtonSx}
-                >
-                  Nhập dữ liệu
-                </Button>
+                <Tooltip title="Tải mẫu XLSX">
+                  <IconButton
+                    size="small"
+                    aria-label="Tải mẫu XLSX"
+                    onClick={() => downloadTemplate('/admin/users/import-template', 'xlsx', 'user-import-template.xlsx')}
+                    sx={listToolbarIconButtonSx}
+                  >
+                    <TableChartOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Tải mẫu CSV">
+                  <IconButton
+                    size="small"
+                    aria-label="Tải mẫu CSV"
+                    onClick={() => downloadTemplate('/admin/users/import-template', 'csv', 'user-import-template.csv')}
+                    sx={listToolbarIconButtonSx}
+                  >
+                    <DescriptionOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Nhập dữ liệu (.xlsx hoặc .csv)">
+                  <IconButton
+                    size="small"
+                    aria-label="Nhập dữ liệu từ tệp .xlsx hoặc .csv"
+                    onClick={(event) => {
+                      releaseFocusBeforeModal(event);
+                      importInputRef.current?.click();
+                    }}
+                    sx={listToolbarIconButtonSx}
+                  >
+                    <UploadFileOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </>
-            )}
-            {canCreate && (
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon />}
-                onClick={handleOpenCreate}
-                sx={toolbarButtonSx}
-              >
-                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                  Tạo người dùng
-                </Box>
-              </Button>
             )}
           </Box>
         </Box>

@@ -1,8 +1,9 @@
 // src/components/works/WorkFilter.tsx
 import React from 'react';
-import { TextField, MenuItem, Button, Box } from '@mui/material';
+import { TextField, MenuItem, Button } from '@mui/material';
 import type { WorkPriorityCore, WorkStatusCore } from '../../types/work';
 import { WORK_PRIORITY_OPTIONS } from '../../types/work';
+import { ListPageToolbar, listToolbarButtonSx } from '../common/ListPageToolbar';
 import { UITextKey, uiText } from '../../constants/uiText';
 
 export interface WorkFilterValues {
@@ -24,6 +25,7 @@ interface WorkFilterProps {
   onSubmit?: (v: WorkFilterValues) => void;
   onReset?: () => void;
   leaderOptions: { id: string; name: string }[];
+  primaryActions?: React.ReactNode;
 }
 
 export const WorkFilter: React.FC<WorkFilterProps> = ({
@@ -33,6 +35,7 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
   onSubmit,
   onReset,
   leaderOptions,
+  primaryActions,
 }) => {
   const setField = (field: keyof WorkFilterValues, val: any) => onChange({ ...value, [field]: val });
 
@@ -41,83 +44,84 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
     onReset?.();
   };
 
+  const filters = (
+    <>
+      <TextField
+        fullWidth
+        size="small"
+        label={uiText(UITextKey.TextTuKhoaMaTen)}
+        value={value.q}
+        onChange={(e) => setField('q', e.target.value)}
+        sx={{ minWidth: 220, flex: '1 1 300px' }}
+      />
+
+      <TextField
+        select
+        fullWidth
+        size="small"
+        label={uiText(UITextKey.TextLanhDaoChiDao)}
+        value={value.leaderDirectiveUserId ?? ''}
+        onChange={(e) => setField('leaderDirectiveUserId', e.target.value || null)}
+        sx={{ minWidth: 210, flex: '1 1 230px' }}
+      >
+        <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
+        {leaderOptions.map((x) => (
+          <MenuItem key={x.id} value={x.id}>
+            {x.name}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <TextField
+        select
+        fullWidth
+        size="small"
+        label={uiText(UITextKey.TextTrangThai)}
+        value={value.status ?? ''}
+        onChange={(e) => setField('status', e.target.value ? (Number(e.target.value) as WorkStatusCore) : null)}
+        sx={{ minWidth: 170, flex: '0 1 190px' }}
+      >
+        <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
+        {statusOptions.map((opt) => (
+          <MenuItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <TextField
+        select
+        fullWidth
+        size="small"
+        label={uiText(UITextKey.TextUuTien)}
+        value={value.priority ?? ''}
+        onChange={(e) => setField('priority', e.target.value ? (Number(e.target.value) as WorkPriorityCore) : null)}
+        sx={{ minWidth: 150, flex: '0 1 160px' }}
+      >
+        <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
+        {WORK_PRIORITY_OPTIONS.map((opt) => (
+          <MenuItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </MenuItem>
+        ))}
+      </TextField>
+    </>
+  );
+
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', width: '100%' }}>
-        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 220 }}>
-          <TextField
-            fullWidth
-            size="small"
-            label={uiText(UITextKey.TextTuKhoaMaTen)}
-            value={value.q}
-            onChange={(e) => setField('q', e.target.value)}
-          />
-        </Box>
-
-        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 220 }}>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            label={uiText(UITextKey.TextLanhDaoChiDao)}
-            value={value.leaderDirectiveUserId ?? ''}
-            onChange={(e) => setField('leaderDirectiveUserId', e.target.value || null)}
-          >
-            <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
-            {leaderOptions.map((x) => (
-              <MenuItem key={x.id} value={x.id}>
-                {x.name}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Box>
-
-        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 180 }}>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            label={uiText(UITextKey.TextTrangThai)}
-            value={value.status ?? ''}
-            onChange={(e) => setField('status', e.target.value ? (Number(e.target.value) as WorkStatusCore) : null)}
-          >
-            <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
-            {statusOptions.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Box>
-
-        {/* ✅ NEW: Ưu tiên (số 1/2/3) */}
-        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 0' }, minWidth: 160 }}>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            label={uiText(UITextKey.TextUuTien)}
-            value={value.priority ?? ''}
-            onChange={(e) => setField('priority', e.target.value ? (Number(e.target.value) as WorkPriorityCore) : null)}
-          >
-            <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
-            {WORK_PRIORITY_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, ml: { xs: 0, md: 'auto' } }}>
-          <Button variant="outlined" size="small" onClick={handleReset}>
+    <ListPageToolbar
+      filters={filters}
+      filterActions={
+        <>
+          <Button variant="outlined" size="small" onClick={handleReset} sx={listToolbarButtonSx}>
             Xóa lọc
           </Button>
-          <Button variant="contained" size="small" onClick={() => onSubmit?.(value)}>
-            Tìm kiếm
+          <Button variant="contained" size="small" onClick={() => onSubmit?.(value)} sx={listToolbarButtonSx}>
+            {uiText(UITextKey.CommonSearch)}
           </Button>
-        </Box>
-      </Box>
-    </Box>
+        </>
+      }
+      primaryActions={primaryActions}
+    />
   );
 };

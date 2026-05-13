@@ -168,7 +168,7 @@ export default function WorkRootAssignmentsTable({
       },
       {
         field: "activeChildCount",
-        header: "Cấp dưới active",
+        header: "Cấp dưới hoạt động",
         width: 120,
         align: "right",
         sortable: true,
