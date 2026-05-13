@@ -1,5 +1,6 @@
 import React from "react";
-import { MenuItem, Stack, TextField } from "@mui/material";
+import { MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import type { PeriodScopeMode } from "../../../types/aggregateTypes";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
@@ -26,6 +27,13 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
 }) => {
   return (
     <Stack spacing={1.5}>
+      <Stack direction="row" spacing={0.75} alignItems="center">
+        <Typography variant="subtitle2">{uiText(UITextKey.TextPhamViKy)}</Typography>
+        <Tooltip title="Một kỳ dùng cho báo cáo của một ngày/kỳ cụ thể. Khoảng kỳ dùng khi cần cộng nhiều kỳ liên tiếp. Lũy kế đến kỳ tính từ đầu phạm vi tới ngày đã chọn; toàn bộ kỳ lấy tất cả dữ liệu đã có báo cáo.">
+          <InfoOutlinedIcon fontSize="small" color="action" />
+        </Tooltip>
+      </Stack>
+
       <TextField
         select
         label={uiText(UITextKey.TextPhamViKy)}

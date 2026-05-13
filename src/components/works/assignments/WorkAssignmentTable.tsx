@@ -46,6 +46,8 @@ export interface AssignmentTableRow {
   latestDueAtUtc?: string | null;
   hasAnyDuePeriod?: boolean | null;
   hasOverduePeriod?: boolean | null;
+  startDate?: string | null;
+  completedDate?: string | null;
   evaluationTemplateLabel?: string | null;
   evaluationTemplateCode?: string | null;
   evaluatedAssignmentCount?: number | null;
@@ -317,6 +319,19 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
           ) : (
             <CommonLabelText text={row.latestPeriodKey || "-"} />
           ),
+      },
+      {
+        field: "startDate",
+        header: "Thời gian thực hiện",
+        sortable: true,
+        width: 180,
+        getSortValue: (row) => row.startDate || "",
+        render: (row) => (
+          <Stack spacing={0.25}>
+            <CommonDateText value={row.startDate} />
+            <CommonDateText value={row.completedDate} />
+          </Stack>
+        ),
       },
       {
         field: "isActive",

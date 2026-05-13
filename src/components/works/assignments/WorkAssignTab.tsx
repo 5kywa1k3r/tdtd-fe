@@ -176,6 +176,8 @@ function toAssignmentRow(x: WorkAssignmentListResponse): AssignmentTableRow {
     latestDueAtUtc: x?.latestDueAtUtc ?? null,
     hasAnyDuePeriod: x?.hasAnyDuePeriod ?? false,
     hasOverduePeriod: x?.hasOverduePeriod ?? false,
+    startDate: x?.startDate ?? null,
+    completedDate: x?.completedDate ?? null,
     evaluationTemplateId: x?.evaluationTemplateId ?? null,
     evaluationTemplateCode: x?.evaluationTemplateCode ?? null,
     evaluationTemplateLabel: x?.evaluationTemplateLabel ?? null,
@@ -206,8 +208,12 @@ function toDetailDialogValue(x: WorkAssignmentResponse): AssignmentCreateValue {
     assignmentType: draft.assignmentType,
     aggregationType: draft.aggregationType,
     schedule: draft.schedule ?? null,
+    startDate: draft.startDate ?? null,
+    completedDate: draft.completedDate ?? null,
     dueAtUtc: draft.dueAtUtc ?? null,
 
+    assigneeUserIds: draft.assigneeUserIds ?? [],
+    assigneeUserRefs: draft.assigneeRefs ?? [],
     assigneeUnitIds: Array.isArray((x as any)?.assignees)
       ? Array.from(
           new Set((x as any).assignees.map((item: any) => item?.unitId).filter(Boolean))
@@ -482,8 +488,13 @@ const WorkAssignTab: React.FC<Props> = ({
       return;
     }
 
-    if ((createValue.assigneeUnitIds ?? []).length === 0) {
-      showMessage("Bắt buộc chọn ít nhất 1 đơn vị được giao.");
+    if ((createValue.assigneeUnitIds ?? []).length === 0 && (createValue.assigneeUserIds ?? []).length === 0) {
+      showMessage("Bắt buộc chọn ít nhất 1 đơn vị hoặc tài khoản giao việc/phối hợp.");
+      return;
+    }
+
+    if (createValue.startDate && createValue.completedDate && createValue.completedDate < createValue.startDate) {
+      showMessage("Ngày hoàn thành không được trước ngày bắt đầu nhiệm vụ.");
       return;
     }
 
@@ -514,12 +525,14 @@ const WorkAssignTab: React.FC<Props> = ({
           dynamicFormDataSourceRulesJson: createValue.dynamicFormDataSourceRulesJson ?? null,
           assignmentType: createValue.assignmentType,
           aggregationType: createValue.aggregationType,
-          assigneeUserIds: [],
+          startDate: createValue.startDate ?? null,
+          completedDate: createValue.completedDate ?? null,
+          assigneeUserIds: createValue.assigneeUserIds ?? [],
           assigneeUnitIds: createValue.assigneeUnitIds,
           leaderWatcherUserIds: createValue.leaderWatcherUserIds,
           description: createValue.description?.trim() || null,
           isActive: createValue.isActive,
-          allowUserCreatedReports: createValue.allowUserCreatedReports,
+          allowUserCreatedReports: true,
           dueAtUtc: createValue.assignmentType === "ONCE" ? createValue.dueAtUtc ?? null : null,
           schedule:
             createValue.assignmentType === "PERIODIC_REPORT" ? createValue.schedule : null,
@@ -1126,13 +1139,17 @@ const WorkAssignTab: React.FC<Props> = ({
         hideSubmit
         viewAssigneeDisplay={
           Array.isArray((detailData as any)?.assignees) && (detailData as any).assignees.length > 0
-            ? Array.from(
-                new Set(
-                  (detailData as any).assignees
-                    .map((x: any) => x?.unitShortName || x?.unitName || x?.unitId)
+            ? (detailData as any).assignees
+                .map((x: any) =>
+                  [
+                    x?.fullName || x?.username || x?.userId,
+                    x?.unitShortName || x?.unitName || x?.unitId,
+                  ]
                     .filter(Boolean)
+                    .join(" - ")
                 )
-              ).join(", ")
+                .filter(Boolean)
+                .join(", ")
             : "-"
         }
         viewLeaderWatcherDisplay={

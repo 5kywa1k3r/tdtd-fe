@@ -5,8 +5,10 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 import type {
   AssignmentScheduleDto,
@@ -130,9 +132,14 @@ export const PeriodicScheduleEditor: React.FC<Props> = React.memo(function Perio
     <Card variant="outlined">
       <CardContent>
         <Stack spacing={2}>
-          <Typography variant="subtitle2">
-            Cấu hình định kỳ báo cáo
-          </Typography>
+          <Stack direction="row" spacing={0.75} alignItems="center">
+            <Typography variant="subtitle2">
+              Cấu hình định kỳ báo cáo
+            </Typography>
+            <Tooltip title="Theo tuần mặc định là thứ Hai. Các kỳ tháng, quý, nửa năm chỉ cần chọn ngày chốt trong kỳ; job tự động chỉ chạy từ hiện tại trở đi, không tạo bù các kỳ quá khứ.">
+              <InfoOutlinedIcon fontSize="small" color="action" />
+            </Tooltip>
+          </Stack>
 
           <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <TextField
@@ -143,6 +150,7 @@ export const PeriodicScheduleEditor: React.FC<Props> = React.memo(function Perio
               disabled={disabled}
               onChange={handleCycleChange}
               sx={{ minWidth: 220 }}
+              helperText="Theo tuần đủ cho đa số báo cáo định kỳ; mặc định chọn thứ Hai."
             >
               <MenuItem value="DAILY">{uiText(UITextKey.TextHangNgay)}</MenuItem>
               <MenuItem value="WEEKLY">{uiText(UITextKey.TextTuan)}</MenuItem>

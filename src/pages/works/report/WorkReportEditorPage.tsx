@@ -40,6 +40,10 @@ import RecordTableRuntimeEditor, {
 import LabelPicker from "../../../components/labels/LabelPicker";
 import ReportStatusChip from "../../../components/reports/ReportStatusChip";
 import ReportPeriodStatusChip from "../../../components/reports/ReportPeriodStatusChip";
+import SingleDayKeyField, {
+  dayKeyToIsoDate,
+  isoDateToDayKey,
+} from "../../../components/common/SingleDayKeyField";
 
 import {
   useGetWorkAssignmentReportLogsQuery,
@@ -165,6 +169,60 @@ function getContributionModeHelp(include: boolean) {
 function isOverdue(dueAtUtc?: string | null) {
   if (!dueAtUtc) return false;
   return new Date(dueAtUtc).getTime() < Date.now();
+}
+
+function todayDayKey() {
+  const now = new Date();
+  const yyyy = String(now.getFullYear()).padStart(4, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+function toDayKey(value?: string | null) {
+  if (!value) return "";
+  const text = String(value).trim();
+  const iso = isoDateToDayKey(text.slice(0, 10));
+  if (iso) return iso;
+  const digits = text.replace(/\D/g, "");
+  return digits.length >= 8 ? digits.slice(0, 8) : "";
+}
+
+function dayKeyToApiDate(dayKey?: string | null) {
+  return dayKey ? `${dayKeyToIsoDate(dayKey)}T00:00:00.000Z` : null;
+}
+
+function getReportAnchorDayKey(detail?: ParsedReportDetail | null) {
+  if (!detail) return "";
+  return (
+    toDayKey(detail.periodEnd) ||
+    toDayKey(detail.reportDate) ||
+    toDayKey(detail.periodStart) ||
+    toDayKey(detail.periodKey)
+  );
+}
+
+function isHistoricalReportDetail(detail?: ParsedReportDetail | null) {
+  if (!detail) return false;
+  if (detail.isHistoricalData) return true;
+  const anchor = getReportAnchorDayKey(detail);
+  return Boolean(anchor && anchor < todayDayKey());
+}
+
+function resolveInitialStartedDayKey(detail: ParsedReportDetail) {
+  return (
+    toDayKey(detail.startedDate) ||
+    toDayKey(detail.periodStart) ||
+    toDayKey(detail.reportDate) ||
+    toDayKey(detail.periodKey)
+  );
+}
+
+function resolveInitialCompletedDayKey(detail: ParsedReportDetail) {
+  const existing = toDayKey(detail.completedDate);
+  if (existing) return existing;
+  if (isHistoricalReportDetail(detail)) return getReportAnchorDayKey(detail);
+  return todayDayKey();
 }
 
 function formatDate(value?: string | null, withTime = false) {
@@ -1331,11 +1389,16 @@ type BusinessFormSectionProps = {
   canEdit: boolean;
   busy: boolean;
   overdue: boolean;
+  isHistoricalData: boolean;
+  startedDate: string;
+  completedDate: string;
   currentProgressStatus: string;
   reportReason: string;
   difficulties: string;
   proposedSolution: string;
   lateReason: string;
+  setStartedDate: (v: string) => void;
+  setCompletedDate: (v: string) => void;
   setCurrentProgressStatus: (v: string) => void;
   setReportReason: (v: string) => void;
   setDifficulties: (v: string) => void;
@@ -1348,11 +1411,16 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
     canEdit,
     busy,
     overdue,
+    isHistoricalData,
+    startedDate,
+    completedDate,
     currentProgressStatus,
     reportReason,
     difficulties,
     proposedSolution,
     lateReason,
+    setStartedDate,
+    setCompletedDate,
     setCurrentProgressStatus,
     setReportReason,
     setDifficulties,
@@ -1367,6 +1435,31 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
           <Typography variant="subtitle1" fontWeight={700}>
             Thông tin nghiệp vụ
           </Typography>
+
+          {isHistoricalData && (
+            <Alert severity="warning">
+              Đây là dữ liệu từ quá khứ. Người báo cáo phải kiểm tra ngày hoàn thành; khi duyệt, reviewer sẽ phải xác nhận riêng.
+            </Alert>
+          )}
+
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+            <SingleDayKeyField
+              label="Ngày bắt đầu báo cáo"
+              value={startedDate}
+              disabled={!canEdit || busy}
+              fullWidth
+              maxDayKey={completedDate || undefined}
+              onChange={setStartedDate}
+            />
+            <SingleDayKeyField
+              label="Ngày hoàn thành"
+              value={completedDate}
+              disabled={!canEdit || busy}
+              fullWidth
+              minDayKey={startedDate || undefined}
+              onChange={setCompletedDate}
+            />
+          </Stack>
 
           <TextField
             size="small"
@@ -1694,13 +1787,17 @@ export default function WorkReportEditorPage(
 
   const canEdit = detail ? !props.forceReadOnly && isEditableReportStatus(detail.status) : false;
   const canWithdraw = detail?.status === WorkAssignmentReportStatus.Submitted;
+  const isHistoricalData = isHistoricalReportDetail(detail);
   const overdue = isOverdue(detail?.dueAtUtc);
+  const requiresLateReason = overdue && !isHistoricalData;
 
   const [currentProgressStatus, setCurrentProgressStatus] = React.useState("");
   const [reportReason, setReportReason] = React.useState("");
   const [difficulties, setDifficulties] = React.useState("");
   const [proposedSolution, setProposedSolution] = React.useState("");
   const [lateReason, setLateReason] = React.useState("");
+  const [startedDate, setStartedDate] = React.useState("");
+  const [completedDate, setCompletedDate] = React.useState("");
   const [dataOrigin, setDataOrigin] = React.useState<WorkReportDataOrigin>("MANUAL_INPUT");
   const [cumulativeContributionMode, setCumulativeContributionMode] =
     React.useState<WorkReportCumulativeContributionMode>("INCLUDE");
@@ -1762,6 +1859,8 @@ export default function WorkReportEditorPage(
     setDifficulties(detail.difficulties ?? "");
     setProposedSolution(detail.proposedSolution ?? "");
     setLateReason(detail.lateReason ?? "");
+    setStartedDate(resolveInitialStartedDayKey(detail));
+    setCompletedDate(resolveInitialCompletedDayKey(detail));
     setDataOrigin(normalizeReportDataOrigin(detail.dataOrigin));
     setCumulativeContributionMode(normalizeContributionMode(detail.cumulativeContributionMode));
   }, [detail]);
@@ -1894,6 +1993,8 @@ export default function WorkReportEditorPage(
           reportReason: reportReason.trim() || null,
           difficulties: difficulties.trim() || null,
           proposedSolution: proposedSolution.trim() || null,
+          startedDate: dayKeyToApiDate(startedDate),
+          completedDate: dayKeyToApiDate(completedDate),
           lateReason: lateReason.trim() || null,
           note: null,
         },
@@ -1911,8 +2012,18 @@ export default function WorkReportEditorPage(
   const handleSubmit = async () => {
     if (!detail) return;
 
-    if (overdue && !lateReason.trim()) {
+    if (requiresLateReason && !lateReason.trim()) {
       showMessage("Bắt buộc nhập lý do trễ hạn trước khi nộp.");
+      return;
+    }
+
+    if (isHistoricalData && !completedDate) {
+      showMessage("Dữ liệu từ quá khứ bắt buộc có ngày hoàn thành.");
+      return;
+    }
+
+    if (startedDate && completedDate && completedDate < startedDate) {
+      showMessage("Ngày hoàn thành không được trước ngày bắt đầu báo cáo.");
       return;
     }
 
@@ -1972,6 +2083,8 @@ export default function WorkReportEditorPage(
           reportReason: reportReason.trim() || null,
           difficulties: difficulties.trim() || null,
           proposedSolution: proposedSolution.trim() || null,
+          startedDate: dayKeyToApiDate(startedDate),
+          completedDate: dayKeyToApiDate(completedDate),
           lateReason: lateReason.trim() || null,
           note: null,
         },
@@ -1990,6 +2103,8 @@ export default function WorkReportEditorPage(
           reportReason: reportReason.trim() || null,
           difficulties: difficulties.trim() || null,
           proposedSolution: proposedSolution.trim() || null,
+          startedDate: dayKeyToApiDate(startedDate),
+          completedDate: dayKeyToApiDate(completedDate),
           lateReason: lateReason.trim() || null,
           note: null,
         },
@@ -2118,7 +2233,7 @@ export default function WorkReportEditorPage(
           <Stack spacing={2} sx={{ minHeight: 0 }}>
             <ReportHeaderSection
               detail={detail}
-              overdue={overdue}
+              overdue={requiresLateReason}
               canEdit={canEdit}
               dataOrigin={dataOrigin}
               cumulativeContributionMode={cumulativeContributionMode}
@@ -2271,12 +2386,17 @@ export default function WorkReportEditorPage(
         <ReportBusinessFormSection
           canEdit={canEdit}
           busy={busy}
-          overdue={overdue}
+          overdue={requiresLateReason}
+          isHistoricalData={isHistoricalData}
+          startedDate={startedDate}
+          completedDate={completedDate}
           currentProgressStatus={currentProgressStatus}
           reportReason={reportReason}
           difficulties={difficulties}
           proposedSolution={proposedSolution}
           lateReason={lateReason}
+          setStartedDate={setStartedDate}
+          setCompletedDate={setCompletedDate}
           setCurrentProgressStatus={setCurrentProgressStatus}
           setReportReason={setReportReason}
           setDifficulties={setDifficulties}
