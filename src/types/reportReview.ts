@@ -93,6 +93,12 @@ export interface ReviewReportFlatRowDto {
   workReportPeriodId?: string | null;
 
   periodKey: string;
+  startedDate?: string | null;
+  completedDate?: string | null;
+  isHistoricalData?: boolean | null;
+  historicalDataApproved?: boolean | null;
+  historicalDataApprovedAtUtc?: string | null;
+  historicalDataApprovedByUserId?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
   dueAtUtc?: string | null;
@@ -123,6 +129,8 @@ export interface ReviewReportFlatRowDto {
 
 export interface ApproveReportRequest {
   comment?: string | null;
+  reviewerComment?: string | null;
+  confirmHistoricalDataApproval?: boolean;
 }
 
 export interface ReturnReportRequest {

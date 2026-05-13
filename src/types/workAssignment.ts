@@ -87,6 +87,8 @@ export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
 
+  startDate?: string | null;
+  completedDate?: string | null;
   dueAtUtc?: string | null;
 
   assignees: WorkAssignmentAssigneeRef[];
@@ -125,6 +127,8 @@ export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
   workType: string;
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
+  startDate?: string | null;
+  completedDate?: string | null;
   dueAtUtc?: string | null;
 
   schedule?: AssignmentScheduleDto | null;
@@ -163,6 +167,8 @@ export type SaveWorkAssignmentRequest = {
   dynamicFormDataSourceRulesJson?: string | null;
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
+  startDate?: string | null;
+  completedDate?: string | null;
   dueAtUtc?: string | null;
   schedule?: AssignmentScheduleDto | null;
   assigneeUserIds: string[];
@@ -211,6 +217,8 @@ export type AssignmentDraft = {
 
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
+  startDate?: string | null;
+  completedDate?: string | null;
   dueAtUtc?: string | null;
   schedule: AssignmentScheduleDto | null;
 
@@ -262,6 +270,8 @@ export function emptyAssignmentDraft(): AssignmentDraft {
     dynamicFormDataSourceRulesJson: null,
     assignmentType: "ONCE",
     aggregationType: "MATRIX",
+    startDate: null,
+    completedDate: null,
     schedule: null,
     assigneeUserIds: [],
     assigneeRefs: [],
@@ -309,6 +319,8 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     dynamicFormDataSourceRulesJson: x.dynamicFormDataSourceRulesJson ?? null,
     assignmentType: x.assignmentType,
     aggregationType: x.aggregationType,
+    startDate: x.startDate ?? null,
+    completedDate: x.completedDate ?? null,
     schedule: x.schedule ?? null,
     assigneeUserIds: Array.isArray(x.assignees) ? x.assignees.map((a) => a.userId).filter(Boolean) : [],
     assigneeRefs: x.assignees ?? [],

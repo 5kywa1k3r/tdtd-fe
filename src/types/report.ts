@@ -72,6 +72,12 @@ export interface WorkReportPeriodRow {
   reportTitle?: string | null;
   reportDate?: string | null;
   linkedScheduledPeriodId?: string | null;
+  startedDate?: string | null;
+  completedDate?: string | null;
+  isHistoricalData?: boolean | null;
+  historicalDataApproved?: boolean | null;
+  historicalDataApprovedAtUtc?: string | null;
+  historicalDataApprovedByUserId?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
   dueAtUtc?: string | null;
@@ -139,6 +145,12 @@ export interface WorkAssignmentReportResponse {
   reportTitle?: string | null;
   reportDate?: string | null;
   linkedScheduledPeriodId?: string | null;
+  startedDate?: string | null;
+  completedDate?: string | null;
+  isHistoricalData?: boolean | null;
+  historicalDataApproved?: boolean | null;
+  historicalDataApprovedAtUtc?: string | null;
+  historicalDataApprovedByUserId?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
   dueAtUtc?: string | null;
@@ -233,6 +245,12 @@ export interface WorkAssignmentReportListRow {
   reportTitle?: string | null;
   reportDate?: string | null;
   linkedScheduledPeriodId?: string | null;
+  startedDate?: string | null;
+  completedDate?: string | null;
+  isHistoricalData?: boolean | null;
+  historicalDataApproved?: boolean | null;
+  historicalDataApprovedAtUtc?: string | null;
+  historicalDataApprovedByUserId?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
   dueAtUtc?: string | null;
@@ -319,6 +337,8 @@ export interface SaveWorkAssignmentReportDraftRequest {
   reportReason?: string | null;
   difficulties?: string | null;
   proposedSolution?: string | null;
+  startedDate?: string | null;
+  completedDate?: string | null;
   lateReason?: string | null;
 
   note?: string | null;
@@ -353,6 +373,8 @@ export interface SubmitWorkAssignmentReportRequest {
   reportReason?: string | null;
   difficulties?: string | null;
   proposedSolution?: string | null;
+  startedDate?: string | null;
+  completedDate?: string | null;
   lateReason?: string | null;
 
   note?: string | null;
@@ -385,6 +407,8 @@ export interface CreateUserCreatedReportRequest {
   periodKey?: string | null;
   reportTitle?: string | null;
   reportDate?: string | null;
+  startedDate?: string | null;
+  completedDate?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
   dueAtUtc?: string | null;

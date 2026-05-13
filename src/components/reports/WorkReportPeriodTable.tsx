@@ -70,6 +70,38 @@ export default function WorkReportPeriodTable({
         ),
       },
       {
+        field: "startedDate",
+        header: "Ngày bắt đầu",
+        width: 130,
+        sortable: true,
+        getSortValue: (row) => row.startedDate || row.periodStart || "",
+        render: (row) => <CommonDateText value={row.startedDate || row.periodStart} />,
+      },
+      {
+        field: "completedDate",
+        header: "Ngày hoàn thành",
+        width: 140,
+        sortable: true,
+        getSortValue: (row) => row.completedDate || "",
+        render: (row) => <CommonDateText value={row.completedDate} />,
+      },
+      {
+        field: "isHistoricalData",
+        header: "Dữ liệu quá khứ",
+        width: 130,
+        align: "center",
+        sortable: true,
+        getSortValue: (row) => (row.isHistoricalData ? 1 : 0),
+        render: (row) => (
+          <BooleanChip
+            value={!!row.isHistoricalData}
+            trueLabel="Có"
+            falseLabel="Không"
+            trueColor="warning"
+          />
+        ),
+      },
+      {
         field: "dueAtUtc",
         header: "Hạn nộp",
         width: 130,

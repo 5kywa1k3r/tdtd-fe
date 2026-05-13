@@ -1457,13 +1457,19 @@ const WorkAggregationTab: React.FC<Props> = ({
       normalizeDayKeyInput(filter.periodDateTo) ||
       normalizeDayKeyInput(filter.periodDateFrom) ||
       new Date().toISOString().slice(0, 10);
+    const periodDate = dayKeyToDateInput(periodKey) || periodKey;
+    const periodDateUtc = `${periodDate}T00:00:00.000Z`;
 
     try {
       const created = await createUserCreatedReport({
         workAssignmentId: effectiveParentAssignmentId,
         data: {
           periodKey,
-          reportDate: periodKey,
+          reportDate: periodDateUtc,
+          startedDate: periodDateUtc,
+          completedDate: periodDateUtc,
+          periodStart: periodDateUtc,
+          periodEnd: periodDateUtc,
           reportTitle: `Báo cáo tổng hợp ${periodKey}`,
         },
       }).unwrap();

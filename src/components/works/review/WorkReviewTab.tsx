@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -87,6 +88,24 @@ function formatDayKey(dayKey?: string | null) {
   const normalized = normalizeDayKey(dayKey);
   if (normalized.length !== 8) return dayKey || "-";
   return `${normalized.slice(6, 8)}/${normalized.slice(4, 6)}/${normalized.slice(0, 4)}`;
+}
+
+function todayDayKey() {
+  const now = new Date();
+  const yyyy = String(now.getFullYear()).padStart(4, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+function isHistoricalReviewRow(row?: ReviewReportFlatRowDto | null) {
+  if (!row) return false;
+  if (row.isHistoricalData) return true;
+  const anchor =
+    normalizeDayKey(row.completedDate) ||
+    normalizeDayKey(row.periodEnd) ||
+    normalizeDayKey(row.periodKey);
+  return Boolean(anchor && anchor < todayDayKey());
 }
 
 function getTemplateLabel(row: {
@@ -406,6 +425,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
   const [actionTarget, setActionTarget] = React.useState<ReviewReportFlatRowDto | null>(null);
   const [actionKind, setActionKind] = React.useState<ReviewActionKind>("return");
   const [actionComment, setActionComment] = React.useState("");
+  const [historicalApproveTarget, setHistoricalApproveTarget] =
+    React.useState<ReviewReportFlatRowDto | null>(null);
 
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "" });
   const selectedSummaryRef = React.useRef<SummaryViewRow | null>(null);
@@ -623,21 +644,31 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
     setSummaryDialog({ open: true, title, items });
   }, []);
 
-  const handleApprove = async (row: ReviewReportFlatRowDto) => {
+  const submitApprove = async (row: ReviewReportFlatRowDto, confirmHistoricalDataApproval = false) => {
     if (!row.reportId) {
       showMessage("Không tìm thấy báo cáo để duyệt.");
       return;
     }
 
-    const data: ApproveReportRequest = { comment: null };
+    const data: ApproveReportRequest = { comment: null, confirmHistoricalDataApproval };
 
     try {
       await approveReviewReport({ reportId: row.reportId, data }).unwrap();
       showMessage("Đã duyệt báo cáo.");
+      setHistoricalApproveTarget(null);
       await refreshCurrentPopup();
     } catch (err: any) {
       showMessage(err?.data?.message || err?.message || "Duyệt báo cáo thất bại.");
     }
+  };
+
+  const handleApprove = async (row: ReviewReportFlatRowDto) => {
+    if (isHistoricalReviewRow(row) && !row.historicalDataApproved) {
+      setHistoricalApproveTarget(row);
+      return;
+    }
+
+    await submitApprove(row);
   };
 
   const openActionDialog = (kind: ReviewActionKind, row: ReviewReportFlatRowDto) => {
@@ -937,6 +968,23 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         render: (row) => <ReportStatusChip status={row.reportStatus} />,
       },
       {
+        field: "isHistoricalData",
+        header: "Dữ liệu quá khứ",
+        width: 150,
+        sortable: false,
+        render: (row) =>
+          isHistoricalReviewRow(row) ? (
+            <Chip
+              size="small"
+              color={row.historicalDataApproved ? "success" : "warning"}
+              variant={row.historicalDataApproved ? "filled" : "outlined"}
+              label={row.historicalDataApproved ? "Đã xác nhận" : "Cần xác nhận"}
+            />
+          ) : (
+            <Chip size="small" variant="outlined" label="Không" />
+          ),
+      },
+      {
         field: "dueAtUtc",
         header: "Hạn nộp",
         width: 160,
@@ -1230,6 +1278,44 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPreviewReportId(null)}>{uiText(UITextKey.TextDong)}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!historicalApproveTarget}
+        onClose={() => !approveState.isLoading && setHistoricalApproveTarget(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Xác nhận duyệt dữ liệu từ quá khứ</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={1.5} sx={{ pt: 0.5 }}>
+            <Alert severity="warning">
+              Báo cáo này được đánh dấu là dữ liệu từ quá khứ. Khi duyệt, hệ thống ghi nhận reviewer đã xác nhận nghiệp vụ và không tính báo cáo này là chậm muộn do các kỳ quá khứ.
+            </Alert>
+            <Typography variant="body2">
+              Kỳ báo cáo: <b>{formatDayKey(historicalApproveTarget?.periodKey)}</b>
+            </Typography>
+            <Typography variant="body2">
+              Ngày hoàn thành: <b>{formatDayKey(historicalApproveTarget?.completedDate || historicalApproveTarget?.periodEnd)}</b>
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHistoricalApproveTarget(null)} disabled={approveState.isLoading}>
+            Hủy
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            disabled={approveState.isLoading || !historicalApproveTarget}
+            onClick={() =>
+              historicalApproveTarget &&
+              void submitApprove(historicalApproveTarget, true)
+            }
+          >
+            Xác nhận và duyệt
+          </Button>
         </DialogActions>
       </Dialog>
 

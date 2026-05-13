@@ -27,6 +27,7 @@ import SingleDayKeyField, { dayKeyToIsoDate, isoDateToDayKey } from "../../commo
 import { UITextKey, uiText } from '../../../constants/uiText';
 import { useGetDynamicFormQuery } from "../../../api/dynamicFormApi";
 import { buildEditorValue } from "../../../features/dynamicForms/dynamicFormSchema";
+import type { UserRefDTO } from "../../../types/userRefDto";
 import type {
   DynamicFormDataSourceRuleType,
   DynamicFormDataSourceRulesDocument,
@@ -57,6 +58,11 @@ export interface AssignmentCreateValue {
   aggregationType: "MATRIX" | "UNIT_ROW_COL";
   schedule: any | null;
 
+  startDate?: string | null;
+  completedDate?: string | null;
+
+  assigneeUserIds: string[];
+  assigneeUserRefs?: UserRefDTO[];
   assigneeUnitIds: string[];
   leaderWatcherUserIds: string[];
 
@@ -83,6 +89,11 @@ export function defaultAssignmentCreateValue(): AssignmentCreateValue {
     aggregationType: "MATRIX",
     schedule: null,
 
+    startDate: null,
+    completedDate: null,
+
+    assigneeUserIds: [],
+    assigneeUserRefs: [],
     assigneeUnitIds: [],
     leaderWatcherUserIds: [],
 
@@ -130,6 +141,16 @@ function getTemplateLabel(value: AssignmentCreateValue) {
   const name = value.dynamicFormTemplateName?.trim() || value.dynamicExcelName?.trim();
   if (code && name) return `${code} - ${name}`;
   return code || name || value.dynamicFormTemplateId || value.dynamicExcelId || "";
+}
+
+function isoToDayKey(value?: string | null) {
+  if (!value) return "";
+  return isoDateToDayKey(String(value).slice(0, 10));
+}
+
+function dayKeyToApiDate(dayKey: string, endOfDay = false) {
+  if (!dayKey) return null;
+  return `${dayKeyToIsoDate(dayKey)}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
 }
 
 const SOURCE_RULE_OPTIONS: Array<{ value: DynamicFormDataSourceRuleType; label: string; help: string }> = [
@@ -232,7 +253,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   workStartDate,
   workEndDate,
   mode = "create",
-  title = "Giao công việc",
+  title = "Giao việc/Phối hợp",
   submitLabel = "Tạo mới",
   hideSubmit = false,
   viewAssigneeDisplay = "",
@@ -342,6 +363,13 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
     [emitChange]
   );
 
+  const handleAssigneeUsersChange = React.useCallback(
+    (ids: string[]) => {
+      emitChange({ assigneeUserIds: ids });
+    },
+    [emitChange]
+  );
+
   const handleLeaderWatcherChange = React.useCallback(
     (ids: string[]) => {
       emitChange({ leaderWatcherUserIds: ids });
@@ -377,7 +405,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
                 value={value.createMode}
                 onChange={handleChangeMode}
               >
-                <ToggleButton value="root">{uiText(UITextKey.TextGiaoCongViec)}</ToggleButton>
+                <ToggleButton value="root">Giao việc/Phối hợp</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
           ) : !isWorkOwner && !isView ? (
@@ -557,7 +585,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             <TextField
               select={!isView}
               size="small"
-              label={uiText(UITextKey.TextDinhKyMotLan)}
+              label="Hình thức theo dõi"
               value={value.assignmentType}
               disabled={readonly}
               onChange={isView ? undefined : handleAssignmentTypeChange}
@@ -588,21 +616,35 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               />
             ))}
 
+            <SingleDayKeyField
+              label="Ngày bắt đầu nhiệm vụ"
+              value={isoToDayKey(value.startDate)}
+              disabled={readonly}
+              fullWidth
+              minDayKey={workStartDate ? isoToDayKey(String(workStartDate).slice(0, 10)) : ""}
+              maxDayKey={workEndDate ? isoToDayKey(String(workEndDate).slice(0, 10)) : ""}
+              onChange={(dayKey) => emitChange({ startDate: dayKeyToApiDate(dayKey) })}
+            />
+
+            <SingleDayKeyField
+              label="Ngày hoàn thành"
+              value={isoToDayKey(value.completedDate)}
+              disabled={readonly}
+              fullWidth
+              minDayKey={
+                isoToDayKey(value.startDate) ||
+                (workStartDate ? isoToDayKey(String(workStartDate).slice(0, 10)) : "")
+              }
+              maxDayKey={workEndDate ? isoToDayKey(String(workEndDate).slice(0, 10)) : ""}
+              onChange={(dayKey) => emitChange({ completedDate: dayKeyToApiDate(dayKey, true) })}
+            />
+
             <FormControlLabel
               control={<Switch checked={value.isActive} disabled />}
               label={value.isActive ? "Đang hiệu lực" : "Ngừng hiệu lực"}
             />
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={value.allowUserCreatedReports}
-                  disabled={readonly}
-                  onChange={(_, checked) => emitChange({ allowUserCreatedReports: checked })}
-                />
-              }
-              label={uiText(UITextKey.TextBaoCaoChuDong)}
-            />
+            <Chip size="small" color="success" variant="outlined" label="Báo cáo chủ động luôn bật" />
           </Stack>
 
           {isView ? (
@@ -631,14 +673,25 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             <>
               <LazyUnitMultiSelect
                 mode="multiple"
-                label={uiText(UITextKey.TextDonViDuocGiao)}
+                label="Đơn vị giao việc/phối hợp"
                 value={value.assigneeUnitIds}
                 onChange={handleAssigneeUnitsChange}
               />
 
               <Alert severity="info">
-                Chỉ chọn đơn vị. Khi lưu, hệ thống sẽ map sang tài khoản quản trị đơn vị theo quy tắc mu_.
+                Chọn đơn vị cấp dưới để giao việc hoặc phối hợp. Nếu đơn vị đã ở cấp thấp nhất và cần giao cho người trong chính đơn vị, chọn trực tiếp tài khoản ở mục bên dưới.
               </Alert>
+
+              <HybridUnitUserPicker
+                kind="assignees"
+                mode="multiple"
+                label="Tài khoản phối hợp trực tiếp"
+                placeholder="Chọn tài khoản trong đơn vị khi không còn đơn vị cấp dưới"
+                value={value.assigneeUserIds}
+                valueRefs={value.assigneeUserRefs}
+                disabled={readonly}
+                onChange={handleAssigneeUsersChange}
+              />
 
               <HybridUnitUserPicker
                 kind="leaders"

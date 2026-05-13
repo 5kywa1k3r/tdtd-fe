@@ -73,6 +73,31 @@ function matchStatusBucket(
   }
 }
 
+function normalizeDayKey(value?: string | null) {
+  return (value ?? "").replace(/\D/g, "").slice(0, 8);
+}
+
+function todayDayKey() {
+  const now = new Date();
+  const yyyy = String(now.getFullYear()).padStart(4, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+function getPeriodAnchorDayKey(row: WorkReportPeriodRow) {
+  return (
+    normalizeDayKey(row.periodEnd) ||
+    normalizeDayKey(row.reportDate) ||
+    normalizeDayKey(row.periodStart) ||
+    normalizeDayKey(row.periodKey)
+  );
+}
+
+function hasReportData(row: WorkReportPeriodRow) {
+  return Boolean(row.currentReportId || (row.reportVersionCount ?? 0) > 0);
+}
+
 export default function WorkReportTemplateDetailPage(
   props: WorkReportTemplateDetailPageProps
 ) {
@@ -109,6 +134,20 @@ export default function WorkReportTemplateDetailPage(
     () => allPeriods.filter((row) => matchStatusBucket(row, filterValue.statusBucket)),
     [allPeriods, filterValue.statusBucket]
   );
+
+  const pastReportStats = useMemo(() => {
+    const today = todayDayKey();
+    const pastRows = allPeriods.filter((row) => {
+      const anchor = getPeriodAnchorDayKey(row);
+      return Boolean(anchor && anchor < today);
+    });
+    const reported = pastRows.filter(hasReportData).length;
+    return {
+      required: pastRows.length,
+      reported,
+      missing: Math.max(0, pastRows.length - reported),
+    };
+  }, [allPeriods]);
 
   const handleOpenPeriod = async (row: WorkReportPeriodRow) => {
     try {
@@ -185,6 +224,10 @@ export default function WorkReportTemplateDetailPage(
       <Alert severity="info" sx={{ borderRadius: 2 }}>
         Chọn một kỳ báo cáo để mở chi tiết. Người báo cáo lưu nháp và nộp báo cáo tại đây;
         phần rà soát nên thực hiện ở tab duyệt báo cáo.
+      </Alert>
+
+      <Alert severity={pastReportStats.missing > 0 ? "warning" : "success"} sx={{ borderRadius: 2 }}>
+        Kỳ quá khứ: cần {pastReportStats.required} báo cáo, đã có {pastReportStats.reported} báo cáo, còn {pastReportStats.missing} báo cáo chưa báo cáo. Job tự động chỉ xử lý từ hiện tại trở đi.
       </Alert>
 
       <WorkReportPeriodFilterBar
