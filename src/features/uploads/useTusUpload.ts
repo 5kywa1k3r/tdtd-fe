@@ -13,6 +13,26 @@ function extractUploadId(uploadUrl?: string | null) {
   return parts[parts.length - 1];
 }
 
+function normalizeTusEndpoint(endpoint: string) {
+  if (typeof window === 'undefined') return endpoint;
+
+  try {
+    const url = new URL(endpoint, window.location.origin);
+    if (
+      window.location.protocol === 'https:' &&
+      url.protocol === 'http:' &&
+      url.host === window.location.host
+    ) {
+      url.protocol = 'https:';
+      return url.toString();
+    }
+  } catch {
+    return endpoint;
+  }
+
+  return endpoint;
+}
+
 export function useTusUpload() {
   const uploadRef = React.useRef<tus.Upload | null>(null);
   const [state, setState] = React.useState<TusState>({ status: 'idle' });
@@ -34,7 +54,8 @@ export function useTusUpload() {
     uploadToken: string;  // from /upload-sessions resp
     chunkSize: number;
   }) => {
-    const { file, endpoint, uploadToken, chunkSize } = args;
+    const { file, uploadToken, chunkSize } = args;
+    const endpoint = normalizeTusEndpoint(args.endpoint);
 
     // reset previous upload instance
     if (uploadRef.current) {

@@ -20,7 +20,6 @@ import { MantineDateRangeFilter } from "../../common/dateRanger/MantineDateRange
 import { ActionResultDialog } from "../../common/ActionResultDialog";
 import SingleDayKeyField, { isoDateToDayKey, dayKeyToIsoDate } from "../../common/SingleDayKeyField";
 import { useWorkFormState, type WorkFormDraft } from "./parts/useWorkFormState";
-import { WorkBasisFiles } from "./parts/WorkBasisFiles";
 import EvaluationTemplateSelector from "../../evaluation/EvaluationTemplateSelector";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
@@ -283,8 +282,6 @@ export const WorkForm: React.FC<WorkFormProps> = ({
     }
   };
 
-  const workId = initialData?.id;
-
   return (
     <>
       <Stack spacing={2}>
@@ -382,8 +379,6 @@ export const WorkForm: React.FC<WorkFormProps> = ({
             </Stack>
           </CardContent>
         </Card>
-
-        {workId && <WorkBasisFiles workId={workId} disabled={!isEdit} />}
 
         <Card variant="outlined">
           <CardContent>

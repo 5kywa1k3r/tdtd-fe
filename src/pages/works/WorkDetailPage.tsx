@@ -21,6 +21,7 @@ import ChevronRightOutlinedIcon from "@mui/icons-material/ChevronRightOutlined";
 import DashboardCustomizeOutlinedIcon from "@mui/icons-material/DashboardCustomizeOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
@@ -40,6 +41,7 @@ import WorkReportTemplateDetailPage from "./report/WorkReportTemplateDetailPage"
 import WorkAggregationTab from "./aggregation/WorkAggregationTab";
 import type { MyReportTemplateRow } from "../../types/report";
 import WorkReviewTab from "../../components/works/review/WorkReviewTab";
+import WorkDocumentLibrary from "../../components/works/documents/WorkDocumentLibrary";
 import { getMeSnapshot } from "../../stores/authStorage";
 import { UITextKey, uiText } from "../../constants/uiText";
 import { getWorkStatusLabel, WORK_STATUS } from "../../types/work";
@@ -50,7 +52,7 @@ interface WorkDetailPageProps {
   type: WorkType;
 }
 
-type DetailTab = "COMMON" | "ASSIGN" | "REPORT" | "AGGREGATION" | "REVIEW";
+type DetailTab = "COMMON" | "DOCUMENT" | "ASSIGN" | "REPORT" | "AGGREGATION" | "REVIEW";
 type CommonMode = "view" | "edit";
 type AggregationSeed = {
   parentAssignmentId: string;
@@ -89,8 +91,10 @@ function getStatusColor(status?: number | null) {
 function normalizeDetailTab(value?: string | null): DetailTab | null {
   const upper = (value || "").trim().toUpperCase();
   if (upper === "ACTIONS") return "ASSIGN";
+  if (upper === "DOCUMENTS" || upper === "FILES") return "DOCUMENT";
   if (
     upper === "COMMON" ||
+    upper === "DOCUMENT" ||
     upper === "ASSIGN" ||
     upper === "REPORT" ||
     upper === "AGGREGATION" ||
@@ -239,6 +243,14 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           badge: canEditCommon ? "Có thể chỉnh sửa" : "Chỉ xem",
           icon: <DashboardCustomizeOutlinedIcon />,
           accent: "#111827",
+        },
+        {
+          key: "DOCUMENT" as DetailTab,
+          title: "Tài liệu",
+          description: "Quản lý kho tài liệu dùng chung theo phạm vi toàn bộ công việc và từng nhánh công việc.",
+          badge: "MinIO",
+          icon: <FolderOutlinedIcon />,
+          accent: "#0f766e",
         },
         {
           key: "ASSIGN" as DetailTab,
@@ -880,6 +892,12 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                   await refetch();
                 }}
               />
+            )}
+
+            {tab === "DOCUMENT" && (
+              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                <WorkDocumentLibrary workId={workId} />
+              </Box>
             )}
 
             {tab === "ASSIGN" && (
