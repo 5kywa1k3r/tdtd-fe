@@ -34,6 +34,15 @@ type Props = {
   onCreate: () => void;
 };
 
+const filterFieldSx = (basis: number, grow = false) => ({
+  flex: {
+    xs: "1 1 100%",
+    sm: `1 1 ${basis}px`,
+    lg: `${grow ? 1 : 0} 1 ${basis}px`,
+  },
+  minWidth: 0,
+});
+
 export default function DynamicFormFilterBar({
   value,
   onChange,
@@ -55,7 +64,7 @@ export default function DynamicFormFilterBar({
         value={value.code}
         onChange={(e) => emit({ code: e.target.value })}
         onKeyDown={onEnterSearch}
-        sx={{ minWidth: 150, flex: "0 1 170px" }}
+        sx={filterFieldSx(150)}
       />
 
       <TextField
@@ -64,7 +73,7 @@ export default function DynamicFormFilterBar({
         value={value.name}
         onChange={(e) => emit({ name: e.target.value })}
         onKeyDown={onEnterSearch}
-        sx={{ minWidth: 200, flex: "1 1 230px" }}
+        sx={filterFieldSx(240, true)}
       />
 
       <Select
@@ -73,7 +82,7 @@ export default function DynamicFormFilterBar({
         onChange={(event: SelectChangeEvent) =>
           emit({ status: event.target.value as DynamicFormFilterValue["status"] })
         }
-        sx={{ minWidth: 132, flex: "0 0 132px" }}
+        sx={filterFieldSx(128)}
       >
         <MenuItem value="ALL">{uiText(UITextKey.TextTatCa3)}</MenuItem>
         <MenuItem value="DRAFT">{uiText(UITextKey.TextDraft)}</MenuItem>
@@ -86,14 +95,14 @@ export default function DynamicFormFilterBar({
         onChange={(event: SelectChangeEvent) =>
           emit({ active: event.target.value as DynamicFormFilterValue["active"] })
         }
-        sx={{ minWidth: 142, flex: "0 0 142px" }}
+        sx={filterFieldSx(140)}
       >
         <MenuItem value="ALL">{uiText(UITextKey.TextMoiTrangThai)}</MenuItem>
         <MenuItem value="ACTIVE">{uiText(UITextKey.TextActive)}</MenuItem>
         <MenuItem value="INACTIVE">{uiText(UITextKey.TextInactive)}</MenuItem>
       </Select>
 
-      <Box sx={{ minWidth: 280, flex: "1 1 300px" }}>
+      <Box sx={filterFieldSx(280)}>
         <MantineDateRangeFilter
           value={value.dateRange}
           onChange={(next) => emit({ dateRange: next })}

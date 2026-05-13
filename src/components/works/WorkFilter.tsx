@@ -28,6 +28,15 @@ interface WorkFilterProps {
   primaryActions?: React.ReactNode;
 }
 
+const filterFieldSx = (basis: number, grow = false) => ({
+  flex: {
+    xs: '1 1 100%',
+    sm: `1 1 ${basis}px`,
+    lg: `${grow ? 1 : 0} 1 ${basis}px`,
+  },
+  minWidth: 0,
+});
+
 export const WorkFilter: React.FC<WorkFilterProps> = ({
   value,
   onChange,
@@ -47,22 +56,20 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
   const filters = (
     <>
       <TextField
-        fullWidth
         size="small"
         label={uiText(UITextKey.TextTuKhoaMaTen)}
         value={value.q}
         onChange={(e) => setField('q', e.target.value)}
-        sx={{ minWidth: 220, flex: '1 1 300px' }}
+        sx={filterFieldSx(260, true)}
       />
 
       <TextField
         select
-        fullWidth
         size="small"
         label={uiText(UITextKey.TextLanhDaoChiDao)}
         value={value.leaderDirectiveUserId ?? ''}
         onChange={(e) => setField('leaderDirectiveUserId', e.target.value || null)}
-        sx={{ minWidth: 210, flex: '1 1 230px' }}
+        sx={filterFieldSx(220)}
       >
         <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
         {leaderOptions.map((x) => (
@@ -74,12 +81,11 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
 
       <TextField
         select
-        fullWidth
         size="small"
         label={uiText(UITextKey.TextTrangThai)}
         value={value.status ?? ''}
         onChange={(e) => setField('status', e.target.value ? (Number(e.target.value) as WorkStatusCore) : null)}
-        sx={{ minWidth: 170, flex: '0 1 190px' }}
+        sx={filterFieldSx(160)}
       >
         <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
         {statusOptions.map((opt) => (
@@ -91,12 +97,11 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
 
       <TextField
         select
-        fullWidth
         size="small"
         label={uiText(UITextKey.TextUuTien)}
         value={value.priority ?? ''}
         onChange={(e) => setField('priority', e.target.value ? (Number(e.target.value) as WorkPriorityCore) : null)}
-        sx={{ minWidth: 150, flex: '0 1 160px' }}
+        sx={filterFieldSx(140)}
       >
         <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
         {WORK_PRIORITY_OPTIONS.map((opt) => (
@@ -113,11 +118,11 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
       filters={filters}
       filterActions={
         <>
-          <Button variant="outlined" size="small" onClick={handleReset} sx={listToolbarButtonSx}>
-            Xóa lọc
-          </Button>
           <Button variant="contained" size="small" onClick={() => onSubmit?.(value)} sx={listToolbarButtonSx}>
             {uiText(UITextKey.CommonSearch)}
+          </Button>
+          <Button variant="outlined" size="small" onClick={handleReset} sx={listToolbarButtonSx}>
+            Xóa lọc
           </Button>
         </>
       }
