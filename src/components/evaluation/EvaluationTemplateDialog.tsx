@@ -20,6 +20,7 @@ import type {
   EvaluationTemplateItemRequest,
   UpdateEvaluationTemplateRequest,
 } from '../../types/evaluationTemplate';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 function normalizeItems(items: EvaluationTemplateItemRequest[]) {
   return items.map((x, index) => ({
@@ -139,14 +140,14 @@ export default function EvaluationTemplateDialog({ open, template, readOnly = fa
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField
               fullWidth
-              label="Mã đại diện"
+              label={uiText(UITextKey.TextMaDaiDien)}
               value={representativeCode}
               onChange={(e) => setRepresentativeCode(e.target.value.toUpperCase())}
               disabled={readOnly || isEdit}
             />
             <TextField
               fullWidth
-              label="Tên bộ đánh giá"
+              label={uiText(UITextKey.TextTenBoDanhGia)}
               value={representativeLabel}
               onChange={(e) => setRepresentativeLabel(e.target.value)}
               disabled={readOnly}
@@ -156,29 +157,29 @@ export default function EvaluationTemplateDialog({ open, template, readOnly = fa
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField
               fullWidth
-              label="Phạm vi đơn vị"
+              label={uiText(UITextKey.TextPhamViDonVi)}
               value={unitCodeScope}
               onChange={(e) => setUnitCodeScope(e.target.value.toUpperCase())}
-              helperText="Ví dụ: PV01. Để trống nếu muốn dùng chung."
+              helperText={uiText(UITextKey.TextViDuPV01DeTrongNeuMuonDungChung)}
               disabled={readOnly}
             />
             {isEdit && !readOnly && (
               <TextField
                 select
                 fullWidth
-                label="Trạng thái"
+                label={uiText(UITextKey.TextTrangThai)}
                 value={isActive ? '1' : '0'}
                 onChange={(e) => setIsActive(e.target.value === '1')}
               >
-                <MenuItem value="1">Đang dùng</MenuItem>
-                <MenuItem value="0">Ngừng dùng</MenuItem>
+                <MenuItem value="1">{uiText(UITextKey.TextDangDung)}</MenuItem>
+                <MenuItem value="0">{uiText(UITextKey.TextNgungDung)}</MenuItem>
               </TextField>
             )}
           </Stack>
 
           <Stack spacing={1}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="subtitle2">Danh sách mã đi kèm</Typography>
+              <Typography variant="subtitle2">{uiText(UITextKey.TextDanhSachMaDiKem)}</Typography>
               {!readOnly && (
                 <Button size="small" startIcon={<AddCircleOutlineIcon />} onClick={addItem} sx={{ height: 36 }}>
                   Thêm mã
@@ -189,7 +190,7 @@ export default function EvaluationTemplateDialog({ open, template, readOnly = fa
             {items.map((item, index) => (
               <Stack key={index} direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems="center">
                 <TextField
-                  label="Thứ tự"
+                  label={uiText(UITextKey.TextThuTu)}
                   type="number"
                   value={item.order}
                   onChange={(e) => updateItem(index, 'order', Number(e.target.value) || index + 1)}
@@ -198,14 +199,14 @@ export default function EvaluationTemplateDialog({ open, template, readOnly = fa
                 />
                 <TextField
                   fullWidth
-                  label="Mã"
+                  label={uiText(UITextKey.TextMa)}
                   value={item.code}
                   onChange={(e) => updateItem(index, 'code', e.target.value.toUpperCase())}
                   disabled={readOnly}
                 />
                 <TextField
                   fullWidth
-                  label="Tên hiển thị"
+                  label={uiText(UITextKey.TextTenHienThi)}
                   value={item.label}
                   onChange={(e) => updateItem(index, 'label', e.target.value)}
                   disabled={readOnly}

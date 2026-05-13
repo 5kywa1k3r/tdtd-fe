@@ -8,8 +8,11 @@ import CommonDateText from "../common/CommonDateText";
 import BooleanChip from "../common/BooleanChip";
 import ReportPeriodStatusChip from "./ReportPeriodStatusChip";
 import type { MyReportTemplateRow } from "../../types/report";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type MyReportTemplateSortField =
+  | "dynamicFormTemplateCode"
+  | "dynamicFormTemplateName"
   | "dynamicExcelCode"
   | "dynamicExcelName"
   | "bindingCount"
@@ -34,10 +37,10 @@ type Props = {
 };
 
 function getTemplateLabel(row: MyReportTemplateRow) {
-  const code = row.dynamicExcelCode?.trim();
-  const name = row.dynamicExcelName?.trim();
+  const code = row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
+  const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
   if (code && name) return `${code} - ${name}`;
-  return code || name || row.dynamicExcelId;
+  return code || name || row.dynamicFormTemplateId || row.dynamicExcelId || "";
 }
 
 export default function MyReportTemplateGroupTable({
@@ -63,7 +66,7 @@ export default function MyReportTemplateGroupTable({
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Mở chi tiết">
+            <Tooltip title={uiText(UITextKey.TextMoChiTiet)}>
               <span>
                 <IconButton
                   size="small"
@@ -81,7 +84,7 @@ export default function MyReportTemplateGroupTable({
         ),
       },
       {
-        field: "dynamicExcelCode",
+        field: "dynamicFormTemplateCode",
         header: "Biểu mẫu",
         width: "28%",
         sortable: true,
@@ -156,7 +159,7 @@ export default function MyReportTemplateGroupTable({
     <AppTable<MyReportTemplateRow, MyReportTemplateSortField>
       rows={rows}
       columns={columns}
-      rowKey={(row) => row.dynamicExcelId}
+      rowKey={(row) => row.dynamicFormTemplateId || row.dynamicExcelId || ""}
       selectable={false}
       onRowDoubleClick={onRowDoubleClick}
       sortMode="server"

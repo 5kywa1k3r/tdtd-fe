@@ -6,6 +6,7 @@ import { LazyUnitMultiSelect } from "../../common/LazyUnitMultiSelect";
 import { MantineDateRangeFilter } from "../../common/dateRanger/MantineDateRangeFilter";
 import type { WorkDashboardDetailFilters } from "../../../types/dashboard";
 import { dayjsToDateInput, filtersToDateRange } from "../../../utils/dashboardUi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   value: WorkDashboardDetailFilters;
@@ -40,7 +41,7 @@ export default function WorkDetailFilters({
                 toDate: dayjsToDateInput(next.to),
               })
             }
-            placeholder="Chọn khoảng ngày"
+            placeholder={uiText(UITextKey.TextChonKhoangNgay)}
             inputHeight={40}
             dropdownWidth={360}
           />
@@ -48,7 +49,7 @@ export default function WorkDetailFilters({
 
         <Box sx={{ minWidth: 320, flex: 1 }}>
           <LazyUnitMultiSelect
-            label="Đơn vị"
+            label={uiText(UITextKey.TextDonVi)}
             value={value.unitIds}
             onChange={(unitIds) => onChange({ ...value, unitIds })}
             mode="multiple"
@@ -62,7 +63,7 @@ export default function WorkDetailFilters({
               onChange={(e) => onChange({ ...value, includeRootAssignments: e.target.checked })}
             />
           }
-          label="Hiển thị công việc được giao"
+          label={uiText(UITextKey.TextHienThiCongViecDuocGiao)}
         />
 
         <FormControlLabel
@@ -72,7 +73,7 @@ export default function WorkDetailFilters({
               onChange={(e) => onChange({ ...value, includeReportSummary: e.target.checked })}
             />
           }
-          label="Hiển thị tổng hợp báo cáo"
+          label={uiText(UITextKey.TextHienThiTongHopBaoCao)}
         />
 
         <Stack direction="row" spacing={1}>

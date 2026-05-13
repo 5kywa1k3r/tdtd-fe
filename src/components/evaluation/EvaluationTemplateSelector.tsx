@@ -2,6 +2,7 @@ import { Autocomplete, Box, Button, Chip, Stack, TextField, Typography } from "@
 import { useMemo } from "react";
 import type { EvaluationTemplateDto } from "../../types/evaluationTemplate";
 import { useGetEvaluationTemplatesQuery } from "../../api/evaluationTemplateApi";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type Props = {
   value?: string | null;
@@ -57,8 +58,8 @@ export default function EvaluationTemplateSelector({
             <TextField
               {...params}
               size="small"
-              label="Bộ mã đánh giá"
-              placeholder="Chọn bộ mã dùng cho đánh giá thủ công ở phần giao việc"
+              label={uiText(UITextKey.TextBoMaDanhGia)}
+              placeholder={uiText(UITextKey.TextChonBoMaDungChoDanhGiaThuCong)}
             />
           )}
         />

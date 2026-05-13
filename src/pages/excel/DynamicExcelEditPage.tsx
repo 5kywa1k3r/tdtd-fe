@@ -3,10 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Box, CircularProgress, Typography } from "@mui/material";
 
 import ExcelDesigner from "../../components/excel/fortune/ExcelDesigner";
+import RecordTableTemplateEditor from "../../components/excel/recordTable/RecordTableTemplateEditor";
 import {
   useGetDynamicExcelQuery,
   useUpdateDynamicExcelMutation,
 } from "../../api/dynamicExcelApi";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export default function DynamicExcelEditPage() {
   const navigate = useNavigate();
@@ -42,7 +44,7 @@ export default function DynamicExcelEditPage() {
   if (!id) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography fontWeight={800}>Thiếu id</Typography>
+        <Typography fontWeight={800}>{uiText(UITextKey.TextThieuId)}</Typography>
       </Box>
     );
   }
@@ -51,7 +53,7 @@ export default function DynamicExcelEditPage() {
     return (
       <Box sx={{ p: 2, display: "flex", alignItems: "center", gap: 1 }}>
         <CircularProgress size={18} />
-        <Typography>Đang tải bảng biểu...</Typography>
+        <Typography>{uiText(UITextKey.TextDangTaiBangBieu)}</Typography>
       </Box>
     );
   }
@@ -59,11 +61,39 @@ export default function DynamicExcelEditPage() {
   if (q.isError || !detail) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography fontWeight={800}>Không tải được bảng biểu</Typography>
+        <Typography fontWeight={800}>{uiText(UITextKey.TextKhongTaiDuocBangBieu)}</Typography>
         <Typography variant="body2" color="text.secondary">
           id: {id}
         </Typography>
       </Box>
+    );
+  }
+
+  if (detail.tableKind === "RECORD_TABLE") {
+    return (
+      <RecordTableTemplateEditor
+        mode="edit"
+        meta={{ code: detail.code, name: detail.name }}
+        initialSpecJson={detail.recordTableSpecJson}
+        onBack={() => navigate("/dynamic-excel")}
+        onSaved={async (p) => {
+          await update({
+            id,
+            body: {
+              name: p.name,
+              tableKind: "RECORD_TABLE",
+              recordTableSpecJson: p.recordTableSpecJson,
+              rawWorkbookDataJson: detail.rawWorkbookDataJson || "[]",
+              specJson: detail.specJson || JSON.stringify({ kind: "RECORD_TABLE" }),
+              dataRect: null,
+              w: 0,
+              h: 0,
+            },
+          }).unwrap();
+
+          navigate("/dynamic-excel");
+        }}
+      />
     );
   }
 
@@ -81,6 +111,8 @@ export default function DynamicExcelEditPage() {
             // tạm giữ nguyên name/labels hiện có (nếu muốn sửa name/labels thì làm UI ngoài)
             name: p.name,
             // labels: p.labels ?? [],
+            tableKind: "NUMERIC_GRID",
+            recordTableSpecJson: null,
 
             rawWorkbookDataJson: JSON.stringify(p.rawWorkbookData),
             specJson: JSON.stringify(p.spec),

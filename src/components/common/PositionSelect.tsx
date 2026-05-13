@@ -1,5 +1,6 @@
 import { MenuItem, TextField } from '@mui/material';
 import { useListPositionsQuery } from '../../api/adminCatalogApi';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type Props = {
   value: string;
@@ -10,6 +11,8 @@ type Props = {
   unitTypeCode?: string | null;
   unitCode?: string | null;
   allowEmpty?: boolean;
+  id?: string;
+  name?: string;
 };
 
 export function PositionSelect(props: Props) {
@@ -21,6 +24,8 @@ export function PositionSelect(props: Props) {
     disabled,
     unitTypeCode,
     allowEmpty = true,
+    id,
+    name,
   } = props;
 
   const { data: options = [], isFetching } = useListPositionsQuery({
@@ -33,13 +38,15 @@ export function PositionSelect(props: Props) {
       select
       fullWidth
       size={size}
+      id={id}
+      name={name}
       label={label}
       value={value ?? ''}
       disabled={disabled || isFetching}
       onChange={(e) => onChange(e.target.value)}
     >
-      {allowEmpty && <MenuItem value="">-- Tất cả --</MenuItem>}
-      {!allowEmpty && <MenuItem value="">-- Chọn chức vụ --</MenuItem>}
+      {allowEmpty && <MenuItem value="">{uiText(UITextKey.TextTatCa2)}</MenuItem>}
+      {!allowEmpty && <MenuItem value="">{uiText(UITextKey.TextChonChucVu)}</MenuItem>}
       {options.map((p) => (
         <MenuItem key={p.code} value={p.code}>
           {p.name}

@@ -1,17 +1,18 @@
 // src/components/common/WorkStatusChip.tsx
 import * as React from "react";
 import { Chip, type ChipProps } from "@mui/material";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type ChipColor = ChipProps["color"];
 
 export type WorkStatusCode = 1 | 2 | 3 | 4 | 5;
 
 const STATUS_LABEL: Record<WorkStatusCode, string> = {
-  1: "Chua bat dau",
-  2: "Dang thuc hien",
-  3: "Hoan thanh",
-  4: "Co nguy co qua han",
-  5: "Qua han",
+  1: "Chưa bắt đầu",
+  2: "Đang thực hiện",
+  3: "Hoàn thành",
+  4: "Có nguy cơ quá hạn",
+  5: "Quá hạn",
 };
 
 const STATUS_COLOR: Record<WorkStatusCode, ChipColor> = {
@@ -30,12 +31,12 @@ export interface WorkStatusChipProps {
 export const WorkStatusChip: React.FC<WorkStatusChipProps> = ({ status, size = "small" }) => {
   if (!status) {
     return (
-      <Chip size={size} label="Chua thiet lap" variant="outlined" color="default" />
+      <Chip size={size} label={uiText(UITextKey.TextChuaThietLap2)} variant="outlined" color="default" />
     );
   }
 
   const s = status as WorkStatusCode;
-  const label = STATUS_LABEL[s] ?? `Trang thai ${status}`;
+  const label = STATUS_LABEL[s] ?? `Trạng thái ${status}`;
   const color = STATUS_COLOR[s] ?? "default";
 
   return (

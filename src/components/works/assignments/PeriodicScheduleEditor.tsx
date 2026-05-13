@@ -18,6 +18,7 @@ import SingleDayKeyField, {
 } from "../../common/SingleDayKeyField";
 import { parseIsoDate } from "./scheduleCalendarUtils";
 import { ScheduleCalendarRulePicker } from "./ScheduleCalendarRulePicker";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   value: AssignmentScheduleDto | null;
@@ -137,21 +138,21 @@ export const PeriodicScheduleEditor: React.FC<Props> = React.memo(function Perio
             <TextField
               select
               size="small"
-              label="Loại kỳ"
+              label={uiText(UITextKey.TextLoaiKy)}
               value={displayCycleType}
               disabled={disabled}
               onChange={handleCycleChange}
               sx={{ minWidth: 220 }}
             >
-              <MenuItem value="DAILY">Hàng ngày</MenuItem>
-              <MenuItem value="WEEKLY">Tuần</MenuItem>
-              <MenuItem value="MONTHLY">Tháng</MenuItem>
-              <MenuItem value="QUARTERLY">Quý</MenuItem>
-              <MenuItem value="SEMI_ANNUAL">Nửa năm</MenuItem>
+              <MenuItem value="DAILY">{uiText(UITextKey.TextHangNgay)}</MenuItem>
+              <MenuItem value="WEEKLY">{uiText(UITextKey.TextTuan)}</MenuItem>
+              <MenuItem value="MONTHLY">{uiText(UITextKey.TextThang)}</MenuItem>
+              <MenuItem value="QUARTERLY">{uiText(UITextKey.TextQuy)}</MenuItem>
+              <MenuItem value="SEMI_ANNUAL">{uiText(UITextKey.TextNuaNam)}</MenuItem>
             </TextField>
 
             <SingleDayKeyField
-              label="Ngày bắt đầu áp dụng"
+              label={uiText(UITextKey.TextNgayBatDauApDung)}
               value={s.startDate ? isoDateToDayKey(String(s.startDate).slice(0, 10)) : ""}
               disabled={disabled}
               fullWidth

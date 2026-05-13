@@ -110,7 +110,7 @@ function inferColCount(sheet: any) {
   return Math.max(fromColumn, fromData, fromCelldata, 1);
 }
 
-function normalizeTemplateWorkbook(input: any[] | undefined): any[] {
+export function normalizeTemplateWorkbook(input: any[] | undefined): any[] {
   const src = Array.isArray(input) ? safeClone(input) : [];
   if (!Array.isArray(src) || src.length === 0) return [];
 
@@ -118,12 +118,17 @@ function normalizeTemplateWorkbook(input: any[] | undefined): any[] {
     const rowCount = inferRowCount(raw);
     const colCount = inferColCount(raw);
 
+    const sheetId = String(raw?.id ?? raw?.index ?? `sheet-${idx + 1}`);
     const data = Array.isArray(raw?.data) ? safeClone(raw.data) : [];
-    const celldata = buildCelldataFromData(data);
+    const celldata =
+      Array.isArray(raw?.celldata) && raw.celldata.length > 0
+        ? safeClone(raw.celldata)
+        : buildCelldataFromData(data);
 
     return {
+      id: sheetId,
       name: raw?.name ?? `Sheet${idx + 1}`,
-      index: raw?.index ?? raw?.id ?? `sheet-${idx + 1}`,
+      index: raw?.index ?? sheetId,
       order: typeof raw?.order === "number" ? raw.order : idx,
       status: idx === 0 ? 1 : 0,
       row: Math.max(rowCount, 1),
@@ -165,7 +170,7 @@ function normalizeTemplateWorkbook(input: any[] | undefined): any[] {
   });
 }
 
-function applyValues1DToWorkbook(
+export function applyValues1DToWorkbook(
   workbook: any[],
   input: {
     values1D: ReportCellValue[];
@@ -183,6 +188,7 @@ function applyValues1DToWorkbook(
   const next = safeClone(workbook);
   const sheet = next[0];
   if (!sheet) return next;
+  const sheetId = String(sheet.id ?? sheet.index ?? "sheet-1");
 
   const rowCount = Math.max(sheet.row ?? 0, r0 + h, 1);
   const colCount = Math.max(sheet.column ?? 0, c0 + w, 1);
@@ -218,6 +224,9 @@ function applyValues1DToWorkbook(
     }
   }
 
+  sheet.id = sheetId;
+  sheet.index = sheet.index ?? sheetId;
+  sheet.name = sheet.name ?? "Sheet1";
   sheet.row = rowCount;
   sheet.column = colCount;
   sheet.data = data;

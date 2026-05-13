@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useLoginMutation } from '../../api/auth/authApi';
 import { getTokenFromStorage } from '../../stores/authStorage';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 function extractErrorMessage(err: unknown): string {
   if (!err) return 'Đăng nhập thất bại.';
@@ -131,7 +132,7 @@ export const LoginPage = () => {
             )}
 
             <TextField
-              label="Email / Tên đăng nhập"
+              label={uiText(UITextKey.TextEmailTenDangNhap)}
               fullWidth
               margin="normal"
               value={username}
@@ -152,7 +153,7 @@ export const LoginPage = () => {
             />
 
             <TextField
-              label="Mật khẩu"
+              label={uiText(UITextKey.TextMatKhau)}
               type="password"
               fullWidth
               margin="normal"
@@ -228,7 +229,7 @@ export const LoginPage = () => {
                 color: theme.palette.primary.dark,
               })}
             >
-              {isLoading ? 'ĐANG ĐĂNG NHẬP...' : 'LOGIN'}
+              {isLoading ? 'ĐANG ĐĂNG NHẬP...' : 'ĐĂNG NHẬP'}
             </Button>
           </form>
         </Paper>

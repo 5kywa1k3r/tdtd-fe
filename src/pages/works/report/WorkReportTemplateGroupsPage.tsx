@@ -8,12 +8,12 @@ import MyReportTemplateGroupTable, {
 import WorkReportTemplateGroupFilterBar, {
   type WorkReportTemplateGroupFilterValue,
 } from "../../../components/reports/WorkReportTemplateGroupFilterBar";
-
 import { useLazySearchMyReportTemplatesQuery } from "../../../api/reportApi";
 import type {
   MyReportTemplateRow,
   MyReportTemplateSearchRequest,
 } from "../../../types/report";
+import { UITextKey, uiText } from "../../../constants/uiText";
 
 export interface WorkReportTemplateGroupsPageProps {
   workId?: string;
@@ -132,7 +132,7 @@ export default function WorkReportTemplateGroupsPage(
   );
 
   if (!workId) {
-    return <Alert severity="warning">Thiếu workId để tải danh sách báo cáo.</Alert>;
+    return <Alert severity="warning">{uiText(UITextKey.TextThieuWorkIdDeTaiDanhSachBaoCao)}</Alert>;
   }
 
   return (
@@ -147,9 +147,9 @@ export default function WorkReportTemplateGroupsPage(
       />
 
       {error ? (
-        <Alert severity="error">Không tải được danh sách báo cáo.</Alert>
+        <Alert severity="error">{uiText(UITextKey.TextKhongTaiDuocDanhSachBaoCao)}</Alert>
       ) : rows.length === 0 && !isLoading && !isFetching ? (
-        <Alert severity="info">Không có nhóm biểu mẫu báo cáo phù hợp.</Alert>
+        <Alert severity="info">{uiText(UITextKey.TextKhongCoNhomBieuMauBaoCaoPhuHop)}</Alert>
       ) : (
         <MyReportTemplateGroupTable
           rows={rows}

@@ -6,69 +6,23 @@ function manualChunks(id: string) {
   if (!normalizedId.includes("/node_modules/")) return undefined;
   const fileName = normalizedId.split("/").pop() ?? "";
 
-  if (normalizedId.includes("/@fortune-sheet/") || fileName.startsWith("@fortune-sheet_")) {
-    return "vendor-fortune-sheet";
-  }
-  if (
-    normalizedId.includes("/reactflow/") ||
-    normalizedId.includes("/@reactflow/") ||
-    normalizedId.includes("/zustand/") ||
-    fileName.includes("reactflow") ||
-    fileName.includes("@reactflow") ||
-    fileName.includes("zustand")
-  ) {
-    return "vendor-mindmap";
-  }
-  if (
-    normalizedId.includes("/recharts/") ||
-    normalizedId.includes("/d3-") ||
-    fileName.includes("recharts") ||
-    fileName.startsWith("d3-")
-  ) {
-    return "vendor-charts";
-  }
-  if (
-    normalizedId.includes("/@mantine/") ||
-    normalizedId.includes("/@tabler/") ||
-    fileName.includes("@mantine") ||
-    fileName.includes("@tabler")
-  ) {
-    return "vendor-mantine";
-  }
-  if (
-    normalizedId.includes("/@mui/") ||
-    normalizedId.includes("/@emotion/") ||
-    normalizedId.includes("/@floating-ui/") ||
-    normalizedId.includes("/@popperjs/") ||
-    normalizedId.includes("/@base-ui/") ||
-    fileName.includes("@mui") ||
-    fileName.includes("@emotion")
-  ) {
-    return "vendor-mui";
-  }
-  if (
-    normalizedId.includes("/react/") ||
-    normalizedId.includes("/react-dom/") ||
-    normalizedId.includes("/react-router/") ||
-    normalizedId.includes("/react-router-dom/") ||
-    normalizedId.includes("/scheduler/") ||
-    fileName.startsWith("react") ||
-    fileName.includes("react-router") ||
-    fileName.includes("scheduler")
-  ) {
-    return "vendor-react";
-  }
-  if (
-    normalizedId.includes("/@reduxjs/") ||
-    normalizedId.includes("/react-redux/") ||
-    normalizedId.includes("/redux/") ||
-    normalizedId.includes("/axios/") ||
-    fileName.includes("@reduxjs") ||
-    fileName.includes("react-redux") ||
-    fileName.includes("axios")
-  ) {
-    return "vendor-data";
-  }
+  // Keep React and React-based UI packages in Rollup's natural graph. Forcing
+  // React 19 or React wrappers into separate manual chunks can create circular
+  // production imports and fail while exporting React.Activity.
+  if (normalizedId.includes("/react/") || fileName.startsWith("react_")) return undefined;
+  if (normalizedId.includes("/react-dom/") || fileName.startsWith("react-dom_")) return undefined;
+  if (normalizedId.includes("/react-router/") || normalizedId.includes("/react-router-dom/")) return undefined;
+  if (normalizedId.includes("/scheduler/") || fileName.includes("scheduler")) return undefined;
+  if (normalizedId.includes("/@mui/") || normalizedId.includes("/@emotion/")) return undefined;
+  if (normalizedId.includes("/@mantine/") || normalizedId.includes("/@tabler/")) return undefined;
+  if (normalizedId.includes("/recharts/") || fileName.includes("recharts")) return undefined;
+  if (normalizedId.includes("/reactflow/") || normalizedId.includes("/@reactflow/")) return undefined;
+  if (normalizedId.includes("/@fortune-sheet/")) return undefined;
+  if (normalizedId.includes("/react-redux/") || fileName.includes("react-redux")) return undefined;
+  if (normalizedId.includes("/@reduxjs/") || normalizedId.includes("/redux/")) return undefined;
+  if (normalizedId.includes("/axios/")) return undefined;
+
+  if (normalizedId.includes("/d3-") || fileName.startsWith("d3-")) return "vendor-charts";
   if (
     normalizedId.includes("/exceljs/") ||
     normalizedId.includes("/jszip/") ||
@@ -88,11 +42,11 @@ function manualChunks(id: string) {
     return "vendor-upload";
   }
   if (normalizedId.includes("/dayjs/") || normalizedId.includes("/date-fns/") || fileName.includes("dayjs")) {
-    return "vendor-date";
+    return undefined;
   }
   if (normalizedId.includes("/lodash/") || normalizedId.includes("/lodash-es/")) return "vendor-lodash";
 
-  return "vendor-misc";
+  return undefined;
 }
 
 export default defineConfig({
@@ -104,6 +58,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks,
+        onlyExplicitManualChunks: true,
       },
     },
   },

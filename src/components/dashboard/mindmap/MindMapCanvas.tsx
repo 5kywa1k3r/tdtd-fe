@@ -36,13 +36,34 @@ type MindMapCanvasProps = {
 };
 
 const CARD_WIDTH = 340;
-const CARD_HEIGHT = 205;
+const DEFAULT_CARD_HEIGHT = 205;
 const COLUMN_GAP = 135;
 const ROW_GAP = 38;
 
 const nodeTypes = {
   mindMapGraphNode: MindMapGraphNode,
 };
+
+function getEstimatedNodeHeight(node?: MindMapGraphNodeData): number {
+  switch (node?.kind) {
+    case "template":
+      return 350;
+    case "user":
+      return 365;
+    case "assignment":
+      return 235;
+    case "work":
+      return 220;
+    case "report":
+      return 205;
+    case "empty":
+      return 132;
+    case "loadMore":
+      return 96;
+    default:
+      return DEFAULT_CARD_HEIGHT;
+  }
+}
 
 export default function MindMapCanvas(props: MindMapCanvasProps) {
   const {
@@ -55,8 +76,8 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
     onViewportChange,
     onReady,
     onRetry,
-    emptyTitle = "Chon work de mo mind map",
-    emptyDescription = "Chon mot work o phia tren de bat dau xem cay assignment root.",
+    emptyTitle = "Chọn đầu việc để mở sơ đồ",
+    emptyDescription = "Chọn một đầu việc ở phía trên để bắt đầu xem cây công việc.",
     fullScreen = false,
     edgeToEdge = false,
     statusColorEnabled = false,
@@ -79,22 +100,24 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
 
     const measureHeight = (nodeId: string): number => {
       const children = getVisibleChildren(nodeId);
-      if (children.length === 0) return CARD_HEIGHT;
+      const nodeHeight = getEstimatedNodeHeight(graphNodesById[nodeId]);
+      if (children.length === 0) return nodeHeight;
 
       const childrenHeight = children.reduce((sum, childId, index) => {
         const childHeight = measureHeight(childId);
         return sum + childHeight + (index === 0 ? 0 : ROW_GAP);
       }, 0);
 
-      return Math.max(CARD_HEIGHT, childrenHeight);
+      return Math.max(nodeHeight, childrenHeight);
     };
 
     const placeNode = (nodeId: string, level: number, top: number) => {
       const node = graphNodesById[nodeId];
       if (!node) return;
 
+      const nodeHeight = getEstimatedNodeHeight(node);
       const subtreeHeight = measureHeight(nodeId);
-      const y = top + subtreeHeight / 2 - CARD_HEIGHT / 2;
+      const y = top + subtreeHeight / 2 - nodeHeight / 2;
       const childIds = getVisibleChildren(nodeId);
 
       flowNodes.push({
@@ -106,6 +129,10 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
         },
         data: node,
         draggable: false,
+        style: {
+          width: node.kind === "loadMore" ? 220 : CARD_WIDTH,
+          minHeight: nodeHeight,
+        },
       });
 
       let cursorTop = top;
@@ -153,7 +180,7 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
       >
         <CircularProgress size={28} />
         <Typography variant="body2" color="text.secondary">
-          Dang tai cay mind map...
+          Đang tải sơ đồ công việc...
         </Typography>
       </Stack>
     );
@@ -164,7 +191,7 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
       <MindMapEmptyState
         title={emptyTitle}
         description={emptyDescription}
-        actionLabel={onRetry ? "Tai lai" : undefined}
+        actionLabel={onRetry ? "Tải lại" : undefined}
         onAction={onRetry}
       />
     );
@@ -238,7 +265,7 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
                 "&:hover": { bgcolor: "rgba(15,23,42,0.96)" },
               }}
             >
-              Hien legend
+              Hiện chú giải
             </Button>
           )}
           {legendOpen ? (
@@ -248,7 +275,7 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
               onClick={() => setLegendOpen(false)}
               sx={{ mt: 0.6, bgcolor: "rgba(255,255,255,0.78)" }}
             >
-              An legend
+              Ẩn chú giải
             </Button>
           ) : null}
         </Panel>
@@ -265,10 +292,10 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
             }}
           >
             <Typography variant="caption" fontWeight={800}>
-              Mind map canvas
+              Màn hình sơ đồ
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Work la node goc. Mo tung nhanh de tranh tai API lon.
+              Đầu việc là mục gốc. Mở từng nhánh để tránh tải dữ liệu quá lớn.
             </Typography>
           </Stack>
         </Panel>
@@ -288,7 +315,7 @@ export default function MindMapCanvas(props: MindMapCanvasProps) {
         >
           <CircularProgress size={30} />
           <Typography variant="body2" color="text.secondary">
-            Dang cap nhat canvas...
+            Đang cập nhật sơ đồ...
           </Typography>
         </Stack>
       ) : null}

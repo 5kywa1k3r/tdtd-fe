@@ -3,6 +3,7 @@ import React from 'react';
 import { TextField, MenuItem, Button, Box } from '@mui/material';
 import type { WorkPriorityCore, WorkStatusCore } from '../../types/work';
 import { WORK_PRIORITY_OPTIONS } from '../../types/work';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export interface WorkFilterValues {
   q: string;
@@ -47,7 +48,7 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
           <TextField
             fullWidth
             size="small"
-            label="Từ khóa (mã/tên)"
+            label={uiText(UITextKey.TextTuKhoaMaTen)}
             value={value.q}
             onChange={(e) => setField('q', e.target.value)}
           />
@@ -58,11 +59,11 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
             select
             fullWidth
             size="small"
-            label="Lãnh đạo chỉ đạo"
+            label={uiText(UITextKey.TextLanhDaoChiDao)}
             value={value.leaderDirectiveUserId ?? ''}
             onChange={(e) => setField('leaderDirectiveUserId', e.target.value || null)}
           >
-            <MenuItem value="">Tất cả</MenuItem>
+            <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
             {leaderOptions.map((x) => (
               <MenuItem key={x.id} value={x.id}>
                 {x.name}
@@ -76,11 +77,11 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
             select
             fullWidth
             size="small"
-            label="Trạng thái"
+            label={uiText(UITextKey.TextTrangThai)}
             value={value.status ?? ''}
             onChange={(e) => setField('status', e.target.value ? (Number(e.target.value) as WorkStatusCore) : null)}
           >
-            <MenuItem value="">Tất cả</MenuItem>
+            <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
             {statusOptions.map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>
                 {opt.label}
@@ -95,11 +96,11 @@ export const WorkFilter: React.FC<WorkFilterProps> = ({
             select
             fullWidth
             size="small"
-            label="Ưu tiên"
+            label={uiText(UITextKey.TextUuTien)}
             value={value.priority ?? ''}
             onChange={(e) => setField('priority', e.target.value ? (Number(e.target.value) as WorkPriorityCore) : null)}
           >
-            <MenuItem value="">Tất cả</MenuItem>
+            <MenuItem value="">{uiText(UITextKey.TextTatCa)}</MenuItem>
             {WORK_PRIORITY_OPTIONS.map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>
                 {opt.label}

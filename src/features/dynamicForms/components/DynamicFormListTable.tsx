@@ -10,6 +10,7 @@ import { AppTable, type AppTableColumn, type SortDirection } from "../../../comp
 import CommonDateText from "../../../components/common/CommonDateText";
 import CommonLabelText from "../../../components/common/CommonLabelText";
 import type { DynamicFormRow, DynamicFormSearchReq } from "../../../api/dynamicFormApi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type SortField = NonNullable<DynamicFormSearchReq["sortField"]>;
 
@@ -66,7 +67,7 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.25} justifyContent="center">
-            <Tooltip title="Xem">
+            <Tooltip title={uiText(UITextKey.TextXem)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -79,11 +80,11 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Sua">
+            <Tooltip title={uiText(UITextKey.TextSua2)}>
               <span>
                 <IconButton
                   size="small"
-                  disabled={row.isPublished}
+                  disabled={row.isPublished || row.canMutate === false}
                   onClick={(e) => {
                     e.stopPropagation();
                     onEdit?.(row);
@@ -94,11 +95,11 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
               </span>
             </Tooltip>
 
-            <Tooltip title="Publish">
+            <Tooltip title={uiText(UITextKey.TextPublish)}>
               <span>
                 <IconButton
                   size="small"
-                  disabled={row.isPublished}
+                  disabled={row.isPublished || row.canMutate === false}
                   onClick={(e) => {
                     e.stopPropagation();
                     onPublish?.(row);
@@ -109,23 +110,26 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
               </span>
             </Tooltip>
 
-            <Tooltip title="Clone">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClone?.(row);
-                }}
-              >
-                <ContentCopyIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-
-            <Tooltip title="Xoa">
+            <Tooltip title={row.canClone === false ? "Chưa có quyền sao chép" : uiText(UITextKey.TextClone)}>
               <span>
                 <IconButton
                   size="small"
-                  disabled={row.isPublished}
+                  disabled={row.canClone === false}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClone?.(row);
+                  }}
+                >
+                  <ContentCopyIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={uiText(UITextKey.TextXoa2)}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={row.isPublished || row.canMutate === false}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete?.(row);
@@ -164,7 +168,7 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
               />
             </Tooltip>
 
-            <Tooltip title="Copy">
+            <Tooltip title={uiText(UITextKey.TextCopy)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -180,38 +184,41 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
       },
       {
         field: "name",
-        header: "Ten",
+        header: "Tên",
         sortable: true,
         width: "30%",
         render: (row) => <CommonLabelText text={row.name} />,
       },
       {
         field: "status",
-        header: "Trang thai",
+        header: "Trạng thái",
         width: 150,
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.75}>
             <Chip
               size="small"
-              label={row.isPublished ? "Published" : "Draft"}
+              label={row.isPublished ? "Đã công bố" : "Bản nháp"}
               color={row.isPublished ? "success" : "default"}
               variant={row.isPublished ? "filled" : "outlined"}
             />
-            {!row.isActive && <Chip size="small" label="Inactive" color="warning" variant="outlined" />}
+            {!row.isActive && <Chip size="small" label={uiText(UITextKey.TextInactive)} color="warning" variant="outlined" />}
+            {row.canViewByCloneGrant && (
+              <Chip size="small" label="Được cấp quyền sao chép" color="info" variant="outlined" />
+            )}
           </Stack>
         ),
       },
       {
         field: "versionNo",
-        header: "Version",
+        header: "Phiên bản",
         sortable: true,
         width: 100,
         render: (row) => <CommonLabelText text={`v${row.versionNo}`} />,
       },
       {
         field: "createdAtUtc",
-        header: "Ngay tao",
+        header: "Ngày tạo",
         sortable: true,
         width: 160,
         render: (row) => <CommonDateText value={row.createdAtUtc} />,
@@ -219,7 +226,7 @@ export const DynamicFormListTable: React.FC<DynamicFormListTableProps> = ({
       },
       {
         field: "createdByUsername",
-        header: "Nguoi tao",
+        header: "Người tạo",
         sortable: true,
         width: 150,
         render: (row) => <CommonLabelText text={row.createdByUsername} />,

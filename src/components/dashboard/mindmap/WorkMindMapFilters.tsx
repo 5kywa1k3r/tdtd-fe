@@ -6,6 +6,7 @@ import { LazyUnitMultiSelect } from "../../common/LazyUnitMultiSelect";
 import { MantineDateRangeFilter } from "../../common/dateRanger/MantineDateRangeFilter";
 import type { DashboardMindMapFilters } from "../../../types/dashboardMindMap";
 import { dayjsToDateInput, filtersToDateRange } from "../../../utils/dashboardUi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type WorkMindMapFiltersProps = {
   value: DashboardMindMapFilters;
@@ -47,7 +48,7 @@ export default function WorkMindMapFilters(props: WorkMindMapFiltersProps) {
                   toDate: dayjsToDateInput(next.to),
                 })
               }
-              placeholder="Chon khoang ngay"
+              placeholder={uiText(UITextKey.TextChonKhoangNgay2)}
               inputHeight={40}
               dropdownWidth={360}
             />
@@ -55,7 +56,7 @@ export default function WorkMindMapFilters(props: WorkMindMapFiltersProps) {
 
           <Box sx={{ minWidth: 320, flex: 1 }}>
             <LazyUnitMultiSelect
-              label="Don vi"
+              label={uiText(UITextKey.TextDonVi2)}
               value={value.unitIds}
               onChange={(unitIds) => onChange({ ...value, unitIds })}
               mode="multiple"

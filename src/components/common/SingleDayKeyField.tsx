@@ -4,14 +4,18 @@ import {
   IconButton,
   InputAdornment,
   TextField,
-  Tooltip,
 } from "@mui/material";
+import { Popover } from "@mantine/core";
+import { DatePicker } from "@mantine/dates";
 import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type Props = {
   label: string;
   value: string; // yyyyMMdd
   onChange?: (value: string) => void; // yyyyMMdd
+  name?: string;
+  id?: string;
   disabled?: boolean;
   fullWidth?: boolean;
   sx?: any;
@@ -42,6 +46,33 @@ export function isoDateToDayKey(value?: string | null) {
   const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!matched) return "";
   return `${matched[1]}${matched[2]}${matched[3]}`;
+}
+
+function dayKeyToDate(dayKey?: string | null) {
+  const normalized = normalizeDayKey(dayKey);
+  if (!isValidDayKey(normalized)) return null;
+
+  const yyyy = Number(normalized.slice(0, 4));
+  const mm = Number(normalized.slice(4, 6));
+  const dd = Number(normalized.slice(6, 8));
+  return new Date(yyyy, mm - 1, dd);
+}
+
+function pickerValueToDayKey(value: Date | string | null) {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const matched = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (matched) return `${matched[1]}${matched[2]}${matched[3]}`;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const yyyy = String(date.getFullYear()).padStart(4, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
 }
 
 function digitsToDisplay(digits: string) {
@@ -84,6 +115,8 @@ const SingleDayKeyField: React.FC<Props> = ({
   label,
   value,
   onChange,
+  name,
+  id,
   disabled,
   fullWidth,
   sx,
@@ -93,48 +126,19 @@ const SingleDayKeyField: React.FC<Props> = ({
   maxDayKey,
 }) => {
   const [displayValue, setDisplayValue] = React.useState(dayKeyToDisplay(value));
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [pickerOpened, setPickerOpened] = React.useState(false);
+  const generatedId = React.useId();
+  const inputId = id ?? name ?? `single-day-${generatedId}`;
 
   React.useEffect(() => {
     setDisplayValue(dayKeyToDisplay(value));
   }, [value]);
 
-  const openPicker = React.useCallback(() => {
-    if (disabled) return;
-    const input = inputRef.current;
-    if (!input) return;
-
-    if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === "function") {
-      (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-      return;
-    }
-
-    input.click();
-  }, [disabled]);
-
   return (
     <Box lang="vi" sx={{ width: fullWidth ? "100%" : undefined, ...sx }}>
-      <input
-        ref={inputRef}
-        type="date"
-        lang="vi"
-        value={dayKeyToIsoDate(value)}
-        min={dayKeyToIsoDate(minDayKey)}
-        max={dayKeyToIsoDate(maxDayKey)}
-        disabled={disabled}
-        onChange={(e) => onChange?.(isoDateToDayKey(e.target.value))}
-        tabIndex={-1}
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
-
       <TextField
+        id={inputId}
+        name={name ?? inputId}
         size="small"
         label={label}
         value={displayValue}
@@ -170,11 +174,37 @@ const SingleDayKeyField: React.FC<Props> = ({
         InputProps={{
           endAdornment: disabled ? undefined : (
             <InputAdornment position="end">
-              <Tooltip title="Chọn ngày">
-                <IconButton edge="end" onClick={openPicker}>
-                  <CalendarTodayOutlinedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+              <Popover
+                opened={pickerOpened}
+                onChange={setPickerOpened}
+                position="bottom-end"
+                shadow="md"
+                withinPortal
+                zIndex={20000}
+              >
+                <Popover.Target>
+                  <IconButton
+                    edge="end"
+                    title={uiText(UITextKey.TextChonNgay)}
+                    aria-label={uiText(UITextKey.TextChonNgay)}
+                    onClick={() => setPickerOpened((opened) => !opened)}
+                  >
+                    <CalendarTodayOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Popover.Target>
+                <Popover.Dropdown>
+                  <DatePicker
+                    locale="vi"
+                    value={dayKeyToDate(value)}
+                    minDate={dayKeyToDate(minDayKey) ?? undefined}
+                    maxDate={dayKeyToDate(maxDayKey) ?? undefined}
+                    onChange={(next) => {
+                      onChange?.(pickerValueToDayKey(next));
+                      setPickerOpened(false);
+                    }}
+                  />
+                </Popover.Dropdown>
+              </Popover>
             </InputAdornment>
           ),
         }}

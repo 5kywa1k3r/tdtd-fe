@@ -3,6 +3,7 @@ import {
   getWorkReportPeriodStatusLabel,
   WorkReportPeriodStatus,
 } from "../../types/reportStatus";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export interface ReportPeriodStatusChipProps {
   status?: number | null;
@@ -16,7 +17,7 @@ export default function ReportPeriodStatusChip(
   const { status, size = "small", isReturned = false } = props;
 
   if (status == null) {
-    return <Chip size={size} variant="outlined" label="Chưa có" />;
+    return <Chip size={size} variant="outlined" label={uiText(UITextKey.TextChuaCo)} />;
   }
 
   if (

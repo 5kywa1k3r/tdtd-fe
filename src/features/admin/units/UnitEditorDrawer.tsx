@@ -8,6 +8,7 @@ import {
   useGetUnitHistoryQuery,
 } from '../../../api/adminUnitsApi';
 import { useListUnitTypesQuery } from '../../../api/adminCatalogApi';
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type ParentDisplay = {
   fullName: string;
@@ -147,7 +148,7 @@ export function UnitEditorDrawer(props: {
       {isEdit && (
         selected ? (
           <Box sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ opacity: 0.7 }}>Đang sửa</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.7 }}>{uiText(UITextKey.TextDangSua)}</Typography>
             <Typography variant="body2" sx={{ fontWeight: 800 }}>
               {selected.fullName}
             </Typography>
@@ -166,7 +167,7 @@ export function UnitEditorDrawer(props: {
       {isCreate && (
         parent ? (
           <Box sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ opacity: 0.7 }}>Đơn vị cấp trên</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.7 }}>{uiText(UITextKey.TextDonViCapTren)}</Typography>
             <Typography variant="body2" sx={{ fontWeight: 800 }}>
               {parent.fullName}
             </Typography>
@@ -182,17 +183,17 @@ export function UnitEditorDrawer(props: {
       )}
 
         <Stack spacing={2}>
-          <TextField label="Tên đầy đủ" value={fullName} onChange={(e) => setFullName(e.target.value)} autoFocus />
-          <TextField label="Tên rút gọn" value={shortName} onChange={(e) => setShortName(e.target.value)} />
-          <TextField label="Ký hiệu" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
+          <TextField label={uiText(UITextKey.TextTenDayDu)} value={fullName} onChange={(e) => setFullName(e.target.value)} autoFocus />
+          <TextField label={uiText(UITextKey.TextTenRutGon)} value={shortName} onChange={(e) => setShortName(e.target.value)} />
+          <TextField label={uiText(UITextKey.TextKyHieu)} value={symbol} onChange={(e) => setSymbol(e.target.value)} />
           <TextField
             select
-            label="Loại đơn vị"
+            label={uiText(UITextKey.TextLoaiDonVi)}
             value={primaryUnitTypeCode}
             onChange={(e) => setPrimaryUnitTypeCode(e.target.value)}
             required
           >
-            <MenuItem value="">-- Chọn loại đơn vị --</MenuItem>
+            <MenuItem value="">{uiText(UITextKey.TextChonLoaiDonVi)}</MenuItem>
             {unitTypes.map((type) => (
               <MenuItem key={type.code} value={type.code}>
                 {type.name}
@@ -201,11 +202,11 @@ export function UnitEditorDrawer(props: {
           </TextField>
           <FormControlLabel
             control={<Switch checked={isVirtual} onChange={(e) => setIsVirtual(e.target.checked)} />}
-            label="Unit ao gom nhom, khong tao user truc tiep"
+            label={uiText(UITextKey.TextUnitAoGomNhomKhongTaoUserTrucTiep)}
           />
 
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Button size="small" variant="outlined" onClick={props.onClose} sx={actionButtonSx}>Huỷ</Button>
+            <Button size="small" variant="outlined" onClick={props.onClose} sx={actionButtonSx}>{uiText(UITextKey.TextHuy2)}</Button>
             <Button
               size="small"
               variant="contained"

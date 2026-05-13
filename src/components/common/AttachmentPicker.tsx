@@ -7,6 +7,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import ImageIcon from '@mui/icons-material/Image';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 
 export type AttachmentItem = {
@@ -140,7 +141,7 @@ export const AttachmentPicker: React.FC<AttachmentPickerProps> = ({
                 </Typography>
 
                 <TextField
-                  label="Mô tả (không bắt buộc)"
+                  label={uiText(UITextKey.TextMoTaKhongBatBuoc)}
                   value={it.description ?? ''}
                   onChange={(e) => changeDesc(idx, e.target.value)}
                   fullWidth
@@ -153,7 +154,7 @@ export const AttachmentPicker: React.FC<AttachmentPickerProps> = ({
               <IconButton
                 size="small"
                 onClick={() => removeAt(idx)}
-                aria-label="Xóa file"
+                aria-label={uiText(UITextKey.TextXoaFile)}
                 disabled={disabled}
               >
                 <DeleteOutlineIcon fontSize="small" />

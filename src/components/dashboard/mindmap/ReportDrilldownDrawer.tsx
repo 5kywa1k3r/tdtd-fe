@@ -18,6 +18,7 @@ import type {
 } from "../../../types/dashboardMindMap";
 import { formatDateTime } from "../../../utils/dashboardUi";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type ReportDrilldownDrawerProps = {
   open: boolean;
@@ -28,14 +29,14 @@ type ReportDrilldownDrawerProps = {
 };
 
 const BUCKET_LABELS: Partial<Record<DashboardMindMapBucket, string>> = {
-  ALL: "Tat ca",
-  TODO: "Chua lam",
-  DONE: "Da lam",
-  PENDING: "Chua mo",
-  DRAFT: "Ban nhap",
-  SUBMITTED: "Da gui",
-  APPROVED: "Da duyet",
-  OVERDUE: "Cham muon",
+  ALL: "Tất cả",
+  TODO: "Chưa làm",
+  DONE: "Đã làm",
+  PENDING: "Chưa bắt đầu",
+  DRAFT: "Bản nháp",
+  SUBMITTED: "Đã gửi",
+  APPROVED: "Đã duyệt",
+  OVERDUE: "Chậm muộn",
 };
 
 function getErrorMessage(error: unknown): string {
@@ -45,7 +46,7 @@ function getErrorMessage(error: unknown): string {
     error?: string;
   };
 
-  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Khong tai duoc danh sach report.";
+  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Không tải được danh sách báo cáo.";
 }
 
 function noteBlock(label: string, value?: string | null) {
@@ -88,12 +89,12 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
     () => [
       {
         field: "assignmentName",
-        header: "Assignment",
+        header: "Công việc",
         width: 220,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assignmentCode || "-"} - {row.assignmentName || "Chua ro ten"}
+              {row.assignmentCode || "-"} - {row.assignmentName || "Chưa rõ tên"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {row.periodKey || "-"}
@@ -103,49 +104,49 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
       },
       {
         field: "assigneeFullName",
-        header: "Nguoi / don vi",
+        header: "Người / đơn vị",
         width: 190,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assigneeFullName || row.assigneeUsername || "Chua ro nguoi dung"}
+              {row.assigneeFullName || row.assigneeUsername || "Chưa rõ người dùng"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {row.unitLabel || "Chua ro don vi"}
+              {row.unitLabel || "Chưa rõ đơn vị"}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "timeline",
-        header: "Timeline",
+        header: "Thời gian",
         width: 190,
         render: (row) => (
           <Stack spacing={0.35}>
             <Typography variant="caption" color="text.secondary">
-              Han: {formatDateTime(row.dueAtUtc)}
+              Hạn: {formatDateTime(row.dueAtUtc)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Gui: {formatDateTime(row.submittedAtUtc)}
+              Gửi: {formatDateTime(row.submittedAtUtc)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Duyet: {formatDateTime(row.approvedAtUtc)}
+              Duyệt: {formatDateTime(row.approvedAtUtc)}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "notes",
-        header: "Noi dung bao cao / danh gia",
+        header: "Nội dung báo cáo / đánh giá",
         render: (row) => (
           <Stack spacing={1}>
-            {noteBlock("Trang thai tien do", row.currentProgressStatus)}
-            {noteBlock("Ly do bao cao", row.reportReason)}
-            {noteBlock("Kho khan", row.difficulties)}
-            {noteBlock("Giai phap de xuat", row.proposedSolution)}
-            {noteBlock("Ly do cham", row.lateReason)}
-            {noteBlock("Phan hoi / tra lai", row.reviewerComment || row.returnReason)}
-            {noteBlock("Danh gia reviewer", row.reviewerEvaluation)}
+            {noteBlock("Trạng thái tiến độ", row.currentProgressStatus)}
+            {noteBlock("Lý do báo cáo", row.reportReason)}
+            {noteBlock("Khó khăn", row.difficulties)}
+            {noteBlock("Giải pháp đề xuất", row.proposedSolution)}
+            {noteBlock("Lý do chậm", row.lateReason)}
+            {noteBlock("Phản hồi / trả lại", row.reviewerComment || row.returnReason)}
+            {noteBlock("Đánh giá của người duyệt", row.reviewerEvaluation)}
           </Stack>
         ),
       },
@@ -173,17 +174,17 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
       <Stack spacing={2} sx={{ height: "100%" }}>
         <Box>
           <Typography variant="h6" fontWeight={800}>
-            Drilldown theo report
+            Chi tiết báo cáo
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            Nhom hien tai: {BUCKET_LABELS[bucket] ?? bucket}. Du lieu lay theo subtree cua node dang chon.
+            Nhóm hiện tại: {BUCKET_LABELS[bucket] ?? bucket}. Dữ liệu lấy theo toàn bộ nhánh đang chọn.
           </Typography>
         </Box>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
           <TextField
-            label="Tim nhanh"
-            placeholder="Assignment, nguoi dung, don vi, ky bao cao..."
+            label={uiText(UITextKey.TextTimNhanh)}
+            placeholder={uiText(UITextKey.TextAssignmentNguoiDungDonViKyBaoCao)}
             value={keyword}
             onChange={(event) => {
               setKeyword(event.target.value);
@@ -192,7 +193,7 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
             sx={{ flex: 1 }}
           />
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip label={`${data?.totalRows ?? 0} dong`} />
+            <Chip label={`${data?.totalRows ?? 0} dòng`} />
             <Chip color="primary" variant="outlined" label={BUCKET_LABELS[bucket] ?? bucket} />
           </Stack>
         </Stack>
@@ -218,7 +219,7 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
 
         {isFetching ? (
           <Typography variant="caption" color="text.secondary">
-            Dang tai danh sach report...
+            Đang tải danh sách báo cáo...
           </Typography>
         ) : null}
       </Stack>

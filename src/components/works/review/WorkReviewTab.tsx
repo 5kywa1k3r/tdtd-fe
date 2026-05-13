@@ -22,6 +22,8 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import ReplayOutlinedIcon from "@mui/icons-material/ReplayOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
+import RestoreOutlinedIcon from "@mui/icons-material/RestoreOutlined";
 
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import AssignmentProgressChip from "../../../components/reports/AssignmentProgressChip";
@@ -35,7 +37,9 @@ import ReviewEntityListViewDialog, {
 } from "./ReviewEntityListViewDialog";
 import {
   useApproveReviewReportMutation,
+  useDeactivateReviewReportMutation,
   useRecallApprovedReviewReportMutation,
+  useReactivateReviewReportMutation,
   useReturnReviewReportMutation,
   useSearchReviewReportsMutation,
   useSearchReviewSummaryMutation,
@@ -43,6 +47,7 @@ import {
 import type {
   ApproveReportRequest,
   RecallApprovedReportRequest,
+  ReportActiveRequest,
   ReturnReportRequest,
   ReviewReportFlatRowDto,
   ReviewStatusBucket,
@@ -50,12 +55,13 @@ import type {
 } from "../../../types/reportReview";
 import { WorkAssignmentReportStatus } from "../../../types/reportStatus";
 import WorkReportEditorPage from "../../../pages/works/report/WorkReportEditorPage";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   workId: string;
 };
 
-type ReviewActionKind = "return" | "recallApproved";
+type ReviewActionKind = "return" | "recallApproved" | "deactivate" | "reactivate";
 type SummaryDialogState = {
   open: boolean;
   title: string;
@@ -167,6 +173,42 @@ function canReturn(row?: ReviewReportFlatRowDto | null) {
 
 function canRecallApproved(row?: ReviewReportFlatRowDto | null) {
   return !!row?.reportId && row.reportStatus === WorkAssignmentReportStatus.Approved;
+}
+
+function canDeactivate(row?: ReviewReportFlatRowDto | null) {
+  return !!row?.reportId && row.reportIsActive !== false;
+}
+
+function canReactivate(row?: ReviewReportFlatRowDto | null) {
+  return !!row?.reportId && row.reportIsActive === false;
+}
+
+function getActionTitle(kind: ReviewActionKind) {
+  if (kind === "recallApproved") return "Thu hồi duyệt";
+  if (kind === "deactivate") return "Ẩn báo cáo";
+  if (kind === "reactivate") return "Kích hoạt lại báo cáo";
+  return "Trả lại báo cáo";
+}
+
+function getActionAlert(kind: ReviewActionKind) {
+  if (kind === "recallApproved") return "Báo cáo đã duyệt sẽ quay về trạng thái Đã nộp.";
+  if (kind === "deactivate") return "Báo cáo sẽ bị ẩn khỏi danh sách và không còn được tính vào thống kê.";
+  if (kind === "reactivate") return "Báo cáo sẽ được kích hoạt lại nếu không có báo cáo hiện hành khác trong cùng kỳ.";
+  return "Báo cáo sẽ được trả lại và quay về trạng thái Nháp.";
+}
+
+function getActionButtonLabel(kind: ReviewActionKind) {
+  if (kind === "recallApproved") return "Thu hồi duyệt";
+  if (kind === "deactivate") return "Ẩn báo cáo";
+  if (kind === "reactivate") return "Kích hoạt lại";
+  return "Trả lại";
+}
+
+function getActionButtonColor(kind: ReviewActionKind): "primary" | "secondary" | "warning" | "error" {
+  if (kind === "recallApproved") return "secondary";
+  if (kind === "deactivate") return "error";
+  if (kind === "reactivate") return "primary";
+  return "warning";
 }
 
 function summarizeLabels(labels: string[], max = 2) {
@@ -334,6 +376,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
   const [approveReviewReport, approveState] = useApproveReviewReportMutation();
   const [returnReviewReport, returnState] = useReturnReviewReportMutation();
   const [recallApprovedReviewReport, recallState] = useRecallApprovedReviewReportMutation();
+  const [deactivateReviewReport, deactivateState] = useDeactivateReviewReportMutation();
+  const [reactivateReviewReport, reactivateState] = useReactivateReviewReportMutation();
 
   const [allSummaryRows, setAllSummaryRows] = React.useState<ReviewSummaryRowDto[]>([]);
   const [summaryRows, setSummaryRows] = React.useState<SummaryViewRow[]>([]);
@@ -476,7 +520,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
       setDetailPage(0);
       setPeriodDialogOpen(false);
     } catch (err: any) {
-      showMessage(err?.data?.message || err?.message || "Không tải được bảng review.");
+      showMessage(err?.data?.message || err?.message || "Không tải được bảng cần duyệt.");
     }
   }, [
     applySummaryFilters,
@@ -556,7 +600,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         setDetailRows([]);
         setDetailTotalRows(0);
         setPeriodDialogOpen(false);
-        showMessage(err?.data?.message || err?.message || "Không tải được danh sách review.");
+        showMessage(err?.data?.message || err?.message || "Không tải được danh sách cần duyệt.");
       }
     },
     [detailPageSize, loadDetailRows, reviewStatusBucket, showMessage, summaryUnitId, summaryUserId]
@@ -615,12 +659,30 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
     }
 
     const comment = actionComment.trim();
-    if (!comment) {
+    if (!comment && actionKind !== "deactivate" && actionKind !== "reactivate") {
       showMessage(actionKind === "recallApproved" ? "Phải nhập lý do thu hồi duyệt." : "Bắt buộc nhập lý do trả lại.");
       return;
     }
 
     try {
+      if (actionKind === "deactivate") {
+        const data: ReportActiveRequest = { comment: comment || null };
+        await deactivateReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
+        showMessage("Đã ẩn báo cáo và cập nhật thống kê.");
+        closeActionDialog();
+        await refreshCurrentPopup();
+        return;
+      }
+
+      if (actionKind === "reactivate") {
+        const data: ReportActiveRequest = { comment: comment || null };
+        await reactivateReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
+        showMessage("Đã kích hoạt lại báo cáo và cập nhật thống kê.");
+        closeActionDialog();
+        await refreshCurrentPopup();
+        return;
+      }
+
       if (actionKind === "recallApproved") {
         const data: RecallApprovedReportRequest = { comment };
         await recallApprovedReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
@@ -671,7 +733,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         align: "center",
         sortable: false,
         render: (row) => (
-          <Tooltip title="Xem danh sách review">
+          <Tooltip title={uiText(UITextKey.TextXemDanhSachReview)}>
             <IconButton size="small" onClick={() => void openPeriods(row)}>
               <VisibilityOutlinedIcon fontSize="small" />
             </IconButton>
@@ -755,7 +817,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
       {
         field: "actions",
         header: "",
-        width: 170,
+        width: 220,
         sortable: false,
         align: "center",
         render: (row) => (
@@ -772,7 +834,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
               </span>
             </Tooltip>
 
-            <Tooltip title="Duyệt báo cáo">
+            <Tooltip title={uiText(UITextKey.TextDuyetBaoCao)}>
               <span>
                 <IconButton
                   size="small"
@@ -785,7 +847,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
               </span>
             </Tooltip>
 
-            <Tooltip title="Trả lại báo cáo">
+            <Tooltip title={uiText(UITextKey.TextTraLaiBaoCao)}>
               <span>
                 <IconButton
                   size="small"
@@ -798,7 +860,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
               </span>
             </Tooltip>
 
-            <Tooltip title="Thu hồi duyệt">
+            <Tooltip title={uiText(UITextKey.TextThuHoiDuyet)}>
               <span>
                 <IconButton
                   size="small"
@@ -807,6 +869,32 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   disabled={!canRecallApproved(row) || recallState.isLoading}
                 >
                   <ReplayOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={uiText(UITextKey.TextAnBaoCao)}>
+              <span>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => openActionDialog("deactivate", row)}
+                  disabled={!canDeactivate(row) || deactivateState.isLoading}
+                >
+                  <BlockOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={uiText(UITextKey.TextKichHoatLai)}>
+              <span>
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => openActionDialog("reactivate", row)}
+                  disabled={!canReactivate(row) || reactivateState.isLoading}
+                >
+                  <RestoreOutlinedIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
@@ -877,19 +965,24 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         render: (row) => <CommonLabelText text={row.returnReason || row.reviewerComment || "-"} />,
       },
     ],
-    [approveState.isLoading, recallState.isLoading, returnState.isLoading]
+    [approveState.isLoading, deactivateState.isLoading, reactivateState.isLoading, recallState.isLoading, returnState.isLoading]
   );
 
   const summaryLoading = searchSummaryState.isLoading;
   const detailLoading = searchReviewReportsState.isLoading;
-  const busyAction = approveState.isLoading || returnState.isLoading || recallState.isLoading;
+  const busyAction =
+    approveState.isLoading ||
+    returnState.isLoading ||
+    recallState.isLoading ||
+    deactivateState.isLoading ||
+    reactivateState.isLoading;
   const detailPageCount = Math.max(1, Math.ceil((detailTotalRows || 0) / (detailPageSize || 1)));
 
   return (
     <Box sx={{ height: "100%", minHeight: 0 }}>
       <Stack spacing={2} sx={{ height: "100%", minHeight: 0 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Duyệt báo cáo</Typography>
+          <Typography variant="h6">{uiText(UITextKey.TextDuyetBaoCao)}</Typography>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -919,7 +1012,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         {summaryLoading ? (
           <Stack direction="row" spacing={1} alignItems="center">
             <CircularProgress size={18} />
-            <Typography variant="body2">Đang tải dữ liệu review...</Typography>
+            <Typography variant="body2">{uiText(UITextKey.TextDangTaiDuLieuReview)}</Typography>
           </Stack>
         ) : (
           <AppTable<SummaryViewRow>
@@ -939,7 +1032,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
       >
         <DialogTitle>
           <Stack spacing={0.5}>
-            <Typography variant="h6">Danh sách kỳ cần đánh giá</Typography>
+            <Typography variant="h6">{uiText(UITextKey.TextDanhSachKyCanDanhGia)}</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
               {selectedSummary ? getTemplateLabel(selectedSummary) : "-"}
             </Typography>
@@ -958,7 +1051,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                 <TextField
                   select
                   size="small"
-                  label="Trạng thái"
+                  label={uiText(UITextKey.TextTrangThai)}
                   value={detailStatusBucket}
                   onChange={(e) => {
                     const next = e.target.value as ReviewStatusBucket;
@@ -979,7 +1072,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                 <TextField
                   select
                   size="small"
-                  label="Số dòng"
+                  label={uiText(UITextKey.TextSoDong)}
                   value={detailPageSize}
                   onChange={(e) => {
                     const next = Number(e.target.value);
@@ -1000,7 +1093,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                 <TextField
                   select
                   size="small"
-                  label="Đơn vị"
+                  label={uiText(UITextKey.TextDonVi)}
                   value={detailUnitId}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1011,7 +1104,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   }}
                   sx={{ minWidth: 220 }}
                 >
-                  <MenuItem value="">Tất cả đơn vị</MenuItem>
+                  <MenuItem value="">{uiText(UITextKey.TextTatCaDonVi)}</MenuItem>
                   {detailUnitOptions.map((opt) => (
                     <MenuItem key={opt.id} value={opt.id}>
                       {opt.label}
@@ -1022,7 +1115,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                 <TextField
                   select
                   size="small"
-                  label="Tài khoản"
+                  label={uiText(UITextKey.TextTaiKhoan)}
                   value={detailUserId}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1033,7 +1126,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   }}
                   sx={{ minWidth: 260 }}
                 >
-                  <MenuItem value="">Tất cả tài khoản</MenuItem>
+                  <MenuItem value="">{uiText(UITextKey.TextTatCaTaiKhoan)}</MenuItem>
                   {detailUserOptions.map((opt) => (
                     <MenuItem key={opt.id} value={opt.id}>
                       {opt.label}
@@ -1050,7 +1143,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
             {detailLoading ? (
               <Stack direction="row" spacing={1} alignItems="center">
                 <CircularProgress size={18} />
-                <Typography variant="body2">Đang tải danh sách kỳ...</Typography>
+                <Typography variant="body2">{uiText(UITextKey.TextDangTaiDanhSachKy)}</Typography>
               </Stack>
             ) : (
               <>
@@ -1119,19 +1212,24 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={() => setPeriodDialogOpen(false)}>Đóng</Button>
+          <Button onClick={() => setPeriodDialogOpen(false)}>{uiText(UITextKey.TextDong)}</Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={!!previewReportId} onClose={() => setPreviewReportId(null)} fullWidth maxWidth="xl">
-        <DialogTitle>Xem báo cáo</DialogTitle>
+        <DialogTitle>{uiText(UITextKey.TextXemBaoCao)}</DialogTitle>
         <DialogContent dividers>
           {previewReportId ? (
-            <WorkReportEditorPage workId={workId} reportId={previewReportId} onBack={() => setPreviewReportId(null)} />
+            <WorkReportEditorPage
+              workId={workId}
+              reportId={previewReportId}
+              forceReadOnly
+              onBack={() => setPreviewReportId(null)}
+            />
           ) : null}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPreviewReportId(null)}>Đóng</Button>
+          <Button onClick={() => setPreviewReportId(null)}>{uiText(UITextKey.TextDong)}</Button>
         </DialogActions>
       </Dialog>
 
@@ -1141,43 +1239,39 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>
-          {actionKind === "recallApproved" ? "Thu hồi duyệt" : "Trả lại báo cáo"}
-        </DialogTitle>
+        <DialogTitle>{getActionTitle(actionKind)}</DialogTitle>
 
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
-            <Alert severity={actionKind === "recallApproved" ? "warning" : "info"}>
-              {actionKind === "recallApproved"
-                ? "Báo cáo đã duyệt sẽ quay về trạng thái Đã nộp."
-                : "Báo cáo sẽ được trả lại và quay về trạng thái Nháp."}
+            <Alert severity={actionKind === "deactivate" ? "warning" : "info"}>
+              {getActionAlert(actionKind)}
             </Alert>
 
             <TextField
               size="small"
-              label={actionKind === "recallApproved" ? "Lý do thu hồi duyệt *" : "Lý do trả lại *"}
+              label={actionKind === "deactivate" || actionKind === "reactivate" ? "Ghi chú" : "Lý do *"}
               value={actionComment}
               disabled={busyAction}
               onChange={(e) => setActionComment(e.target.value)}
               fullWidth
               multiline
               minRows={3}
-              required
+              required={actionKind !== "deactivate" && actionKind !== "reactivate"}
             />
           </Stack>
         </DialogContent>
 
         <DialogActions>
           <Button onClick={closeActionDialog} disabled={busyAction}>
-            Hủy
+            {uiText(UITextKey.TextHuy3)}
           </Button>
           <Button
             variant="contained"
-            color={actionKind === "recallApproved" ? "secondary" : "warning"}
+            color={getActionButtonColor(actionKind)}
             onClick={() => void handleConfirmAction()}
             disabled={busyAction}
           >
-            {actionKind === "recallApproved" ? "Thu hồi duyệt" : "Trả lại"}
+            {getActionButtonLabel(actionKind)}
           </Button>
         </DialogActions>
       </Dialog>

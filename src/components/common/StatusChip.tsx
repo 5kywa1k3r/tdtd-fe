@@ -6,6 +6,7 @@ import {
   type WorkStatusCore,
   type WorkStatusFilterValue,
 } from '../../constants/status';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type ChipColor = ChipProps['color'];
 
@@ -52,7 +53,7 @@ export const StatusChip: React.FC<StatusChipProps> = ({
     return (
       <Chip
         size={size}
-        label="Chưa thiết lập"
+        label={uiText(UITextKey.TextChuaThietLap)}
         variant="outlined"
         color="default"
       />

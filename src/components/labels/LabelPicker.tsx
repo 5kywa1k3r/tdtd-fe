@@ -49,6 +49,7 @@ function fallbackLabel(code: string): LabelRow {
     description: null,
     color: null,
     groupCode: null,
+    dataType: "NUMBER",
     scopeType: "GLOBAL",
     scopeId: null,
     isSystem: false,
@@ -57,6 +58,22 @@ function fallbackLabel(code: string): LabelRow {
     createdAtUtc: "",
     updatedAtUtc: "",
   };
+}
+
+function formatLabelDataType(dataType?: string | null) {
+  switch (dataType) {
+    case "SHORT_TEXT":
+      return "Văn bản ngắn";
+    case "LONG_TEXT":
+      return "Văn bản dài";
+    case "DATE":
+      return "Ngày";
+    case "BOOLEAN":
+      return "Có/không";
+    case "NUMBER":
+    default:
+      return "Số";
+  }
 }
 
 export default function LabelPicker({
@@ -181,7 +198,7 @@ export default function LabelPicker({
               {row.name}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
-              {row.code}
+              {row.code} · {formatLabelDataType(row.dataType)}
             </Typography>
           </Box>
         </Box>

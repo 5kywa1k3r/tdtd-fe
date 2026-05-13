@@ -1,15 +1,18 @@
 import React, { useMemo } from "react";
 import { Chip, IconButton, Stack, Tooltip } from "@mui/material";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import PreviewOutlinedIcon from "@mui/icons-material/PreviewOutlined";
 import TableViewOutlinedIcon from "@mui/icons-material/TableViewOutlined";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import CommonLabelText from "../../common/CommonLabelText";
 import CommonDateText from "../../common/CommonDateText";
 import BooleanChip from "../../common/BooleanChip";
 import AssignmentProgressChip from "../../reports/AssignmentProgressChip";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export interface AssignmentTableRow {
   id: string;
@@ -19,10 +22,20 @@ export interface AssignmentTableRow {
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  dynamicFormDataSourceRulesJson?: string | null;
   assignmentType?: string | null;
   aggregationType?: string | null;
   assignees?:
-    | Array<{ fullName?: string | null; username?: string | null; userName?: string | null }>
+    | Array<{
+        userId?: string | null;
+        fullName?: string | null;
+        username?: string | null;
+        userName?: string | null;
+        unitId?: string | null;
+        unitSymbol?: string | null;
+        unitShortName?: string | null;
+        unitName?: string | null;
+      }>
     | null;
   isActive?: boolean | null;
   createdAtUtc?: string | null;
@@ -49,6 +62,7 @@ interface WorkAssignmentTableProps {
   onViewDetail?: (row: AssignmentTableRow) => void;
   onPreviewTemplate?: (row: AssignmentTableRow) => void;
   onOpenAggregate?: (row: AssignmentTableRow) => void;
+  onConfigureSourceRules?: (row: AssignmentTableRow) => void;
   onToggleActive?: (row: AssignmentTableRow) => void;
   onEvaluate?: (row: AssignmentTableRow) => void;
 }
@@ -95,8 +109,10 @@ function manualEvalLabel(row: AssignmentTableRow) {
 const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
   rows,
   onViewDetail,
+  onPreviewTemplate,
   onEvaluate,
   onOpenAggregate,
+  onConfigureSourceRules,
   onToggleActive,
 }) => {
   const columns: AppTableColumn<AssignmentTableRow>[] = useMemo(
@@ -104,12 +120,12 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
       {
         field: "actions",
         header: "Thao tác",
-        width: 170,
+        width: 250,
         align: "center",
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Xem chi tiết">
+            <Tooltip title={uiText(UITextKey.TextXemChiTiet)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -123,9 +139,30 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
 
             <Tooltip
               title={
+                row.dynamicFormTemplateId
+                  ? "Xem trước biểu mẫu động"
+                  : "Công việc chưa có biểu mẫu động"
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!row.dynamicFormTemplateId}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPreviewTemplate?.(row);
+                  }}
+                >
+                  <PreviewOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Tooltip
+              title={
                 row.evaluationTemplateId
-                  ? "Đánh giá assignment"
-                  : "Assignment chưa có bộ tiêu chí"
+                  ? "Đánh giá công việc"
+                  : "Công việc chưa có bộ tiêu chí"
               }
             >
               <span>
@@ -142,7 +179,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               </span>
             </Tooltip>
 
-            <Tooltip title="Tổng hợp">
+            <Tooltip title={uiText(UITextKey.TextTongHop)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -152,6 +189,27 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               >
                 <TableViewOutlinedIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+
+            <Tooltip
+              title={
+                row.dynamicFormTemplateId
+                  ? "Cấu hình nguồn dữ liệu"
+                  : "Công việc chưa có biểu mẫu động"
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!row.dynamicFormTemplateId}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfigureSourceRules?.(row);
+                  }}
+                >
+                  <AccountTreeOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
 
             <Tooltip title={row.isActive ? "Ngừng hiệu lực" : "Kích hoạt lại"}>
@@ -169,7 +227,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         ),
       },
       {
-        field: "dynamicExcelCode",
+        field: "dynamicFormTemplateCode",
         header: "Biểu mẫu",
         sortable: true,
         width: "22%",
@@ -285,7 +343,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         render: (row) => <CommonDateText value={row.updatedAtUtc} withTime />,
       },
     ],
-    [onEvaluate, onOpenAggregate, onToggleActive, onViewDetail]
+    [onConfigureSourceRules, onEvaluate, onOpenAggregate, onPreviewTemplate, onToggleActive, onViewDetail]
   );
 
   return (

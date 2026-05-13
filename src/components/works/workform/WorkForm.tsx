@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -19,9 +19,10 @@ import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
 import { MantineDateRangeFilter } from "../../common/dateRanger/MantineDateRangeFilter";
 import { ActionResultDialog } from "../../common/ActionResultDialog";
 import SingleDayKeyField, { isoDateToDayKey, dayKeyToIsoDate } from "../../common/SingleDayKeyField";
-import { useWorkFormState } from "./parts/useWorkFormState";
+import { useWorkFormState, type WorkFormDraft } from "./parts/useWorkFormState";
 import { WorkBasisFiles } from "./parts/WorkBasisFiles";
 import EvaluationTemplateSelector from "../../evaluation/EvaluationTemplateSelector";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type WorkType = "TASK" | "INDICATOR";
 type WorkFormMode = "create" | "edit" | "view";
@@ -39,6 +40,133 @@ const Field = React.memo(function Field(
 ) {
   const { isView, disabled, ...rest } = props;
   return <TextField size="small" {...rest} disabled={!!isView || !!disabled} />;
+});
+
+type WorkTextDraft = Required<Pick<WorkFormDraft, "name" | "description">>;
+type WorkNoteDraft = Required<Pick<WorkFormDraft, "note">>;
+
+interface WorkMainTextFieldsProps {
+  isView: boolean;
+  nameLabel: string;
+  name: string;
+  description: string;
+  onDraftChange: (next: WorkTextDraft) => void;
+}
+
+const WorkMainTextFields = React.memo(function WorkMainTextFields({
+  isView,
+  nameLabel,
+  name,
+  description,
+  onDraftChange,
+}: WorkMainTextFieldsProps) {
+  const initialDraft = useMemo(() => ({ name, description }), [name, description]);
+  const draftRef = useRef<WorkTextDraft>(initialDraft);
+  const [draft, setDraft] = useState<WorkTextDraft>(initialDraft);
+
+  useEffect(() => {
+    draftRef.current = initialDraft;
+    setDraft(initialDraft);
+    onDraftChange(initialDraft);
+  }, [initialDraft, onDraftChange]);
+
+  const commitDraft = useCallback(
+    (patch: Partial<WorkTextDraft>) => {
+      const next = { ...draftRef.current, ...patch };
+      draftRef.current = next;
+      setDraft(next);
+      onDraftChange(next);
+    },
+    [onDraftChange]
+  );
+
+  const handleNameChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      commitDraft({ name: e.target.value });
+    },
+    [commitDraft]
+  );
+
+  const handleDescriptionChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      commitDraft({ description: e.target.value });
+    },
+    [commitDraft]
+  );
+
+  return (
+    <>
+      <Tooltip title={draft.name.trim() || ""} arrow disableHoverListener={!draft.name.trim()}>
+        <Box>
+          <Field
+            isView={isView}
+            name="name"
+            label={nameLabel}
+            value={draft.name}
+            onChange={handleNameChange}
+            fullWidth
+            required
+          />
+        </Box>
+      </Tooltip>
+
+      <Field
+        isView={isView}
+        name="description"
+        label={uiText(UITextKey.TextMoTa2)}
+        value={draft.description}
+        onChange={handleDescriptionChange}
+        fullWidth
+        multiline
+        minRows={2}
+      />
+    </>
+  );
+});
+
+interface WorkNoteFieldProps {
+  isView: boolean;
+  note: string;
+  onDraftChange: (next: WorkNoteDraft) => void;
+}
+
+const WorkNoteField = React.memo(function WorkNoteField({
+  isView,
+  note,
+  onDraftChange,
+}: WorkNoteFieldProps) {
+  const [draft, setDraft] = useState<WorkNoteDraft>(() => ({ note }));
+  const draftRef = useRef<WorkNoteDraft>({ note });
+
+  useEffect(() => {
+    const next = { note };
+    draftRef.current = next;
+    setDraft(next);
+    onDraftChange(next);
+  }, [note, onDraftChange]);
+
+  const handleNoteChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const next = { note: e.target.value };
+      draftRef.current = next;
+      setDraft(next);
+      onDraftChange(next);
+    },
+    [onDraftChange]
+  );
+
+  return (
+    <Field
+      isView={isView}
+      label={uiText(UITextKey.TextGhiChu)}
+      name="note"
+      value={draft.note}
+      onChange={handleNoteChange}
+      fullWidth
+      multiline
+      minRows={3}
+    />
+  );
 });
 
 export const WorkForm: React.FC<WorkFormProps> = ({
@@ -66,6 +194,35 @@ export const WorkForm: React.FC<WorkFormProps> = ({
     buildUpdatePayload,
   } = useWorkFormState(initialData, type);
 
+  const textDraftRef = useRef<WorkTextDraft>({
+    name: state.name,
+    description: state.description,
+  });
+  const noteDraftRef = useRef<WorkNoteDraft>({
+    note: state.note,
+  });
+
+  useEffect(() => {
+    textDraftRef.current = {
+      name: state.name,
+      description: state.description,
+    };
+  }, [state.name, state.description]);
+
+  const handleTextDraftChange = useCallback((next: WorkTextDraft) => {
+    textDraftRef.current = next;
+  }, []);
+
+  useEffect(() => {
+    noteDraftRef.current = {
+      note: state.note,
+    };
+  }, [state.note]);
+
+  const handleNoteDraftChange = useCallback((next: WorkNoteDraft) => {
+    noteDraftRef.current = next;
+  }, []);
+
   const [resultOpen, setResultOpen] = useState(false);
   const [resultOk, setResultOk] = useState(true);
   const [resultMsg, setResultMsg] = useState("");
@@ -92,7 +249,11 @@ export const WorkForm: React.FC<WorkFormProps> = ({
   }, [isView, isCreate]);
 
   const handleSave = async () => {
-    const err = validate(nameLabel);
+    const draft = {
+      ...textDraftRef.current,
+      ...noteDraftRef.current,
+    };
+    const err = validate(nameLabel, draft);
     if (err) {
       showErr(err);
       return;
@@ -100,12 +261,12 @@ export const WorkForm: React.FC<WorkFormProps> = ({
 
     try {
       if (isEdit && initialData?.id) {
-        const payload = buildUpdatePayload();
+        const payload = buildUpdatePayload(draft);
         const saved = await updateWork({ id: initialData.id, data: payload }).unwrap();
         onSaved?.(saved?.id);
         showOk("Cập nhật thành công.");
       } else {
-        const payload = buildCreatePayload();
+        const payload = buildCreatePayload(draft);
         const saved = await createWork(payload).unwrap();
         onSaved?.(saved?.id);
         showOk("Tạo mới thành công.");
@@ -151,22 +312,18 @@ export const WorkForm: React.FC<WorkFormProps> = ({
         <Card variant="outlined">
           <CardContent>
             <Stack spacing={1.5}>
-              <Tooltip title={state.name.trim() || ""} arrow disableHoverListener={!state.name.trim()}>
-                <Box>
-                  <Field
-                    isView={isView}
-                    label={nameLabel}
-                    value={state.name}
-                    onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
-                    fullWidth
-                    required
-                  />
-                </Box>
-              </Tooltip>
+              <WorkMainTextFields
+                isView={isView}
+                nameLabel={nameLabel}
+                name={state.name}
+                description={state.description}
+                onDraftChange={handleTextDraftChange}
+              />
 
               <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems="flex-start">
                 <Box sx={{ minWidth: 320, flex: 1 }}>
                   <MantineDateRangeFilter
+                    name="workDateRange"
                     disabled={isView}
                     value={dateValue}
                     onChange={(v) => {
@@ -176,7 +333,7 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                         endDate: v.to ? v.to.format("YYYY-MM-DD") : "",
                       }));
                     }}
-                    placeholder="Từ ngày – đến ngày"
+                    placeholder={uiText(UITextKey.TextTuNgayDenNgay)}
                     zIndex={20000}
                     inputHeight={40}
                   />
@@ -187,7 +344,8 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                     isView={isView}
                     select
                     fullWidth
-                    label="Ưu tiên"
+                    label={uiText(UITextKey.TextUuTien)}
+                    name="priority"
                     value={state.priority}
                     onChange={(e) =>
                       setState((s) => ({
@@ -206,7 +364,8 @@ export const WorkForm: React.FC<WorkFormProps> = ({
 
                 <Box sx={{ width: { xs: "100%", md: 190 } }}>
                   <SingleDayKeyField
-                    label="Hạn"
+                    label={uiText(UITextKey.TextHan)}
+                    name="dueDate"
                     value={isoDateToDayKey(state.dueDate)}
                     disabled={isView}
                     fullWidth
@@ -220,15 +379,6 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                 </Box>
               </Stack>
 
-              <Field
-                isView={isView}
-                label="Mô tả"
-                value={state.description}
-                onChange={(e) => setState((s) => ({ ...s, description: e.target.value }))}
-                fullWidth
-                multiline
-                minRows={2}
-              />
             </Stack>
           </CardContent>
         </Card>
@@ -243,7 +393,7 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                   <HybridUnitUserPicker
                     kind="leaders"
                     mode="single"
-                    label="Lãnh đạo chỉ đạo"
+                    label={uiText(UITextKey.TextLanhDaoChiDao)}
                     disabled={isView}
                     value={state.leaderDirectiveUserId ? [state.leaderDirectiveUserId] : []}
                     onChange={(ids) => setState((s) => ({ ...s, leaderDirectiveUserId: ids[0] ?? "" }))}
@@ -255,7 +405,7 @@ export const WorkForm: React.FC<WorkFormProps> = ({
                   <HybridUnitUserPicker
                     kind="leaders"
                     mode="multiple"
-                    label="Lãnh đạo, chỉ huy theo dõi"
+                    label={uiText(UITextKey.TextLanhDaoChiHuyTheoDoi)}
                     disabled={isView}
                     value={state.leaderWatchUserIds}
                     valueRefs={initialData?.leaderWatch ?? []}
@@ -281,14 +431,10 @@ export const WorkForm: React.FC<WorkFormProps> = ({
 
         <Card variant="outlined">
           <CardContent>
-            <Field
+            <WorkNoteField
               isView={isView}
-              label="Ghi chú"
-              value={state.note}
-              onChange={(e) => setState((s) => ({ ...s, note: e.target.value }))}
-              fullWidth
-              multiline
-              minRows={3}
+              note={state.note}
+              onDraftChange={handleNoteDraftChange}
             />
           </CardContent>
         </Card>

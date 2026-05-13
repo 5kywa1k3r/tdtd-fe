@@ -37,6 +37,7 @@ import {
   useSearchLabelsMutation,
   useUpdateLabelMutation,
 } from "../../api/labelApi";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type LabelFormState = {
   id?: string;
@@ -45,6 +46,7 @@ type LabelFormState = {
   description: string;
   color: string;
   groupCode: string;
+  dataType: LabelRow["dataType"];
   scopeType: LabelScopeType;
   scopeId: string;
   isActive: boolean;
@@ -56,6 +58,7 @@ const defaultFormState = (): LabelFormState => ({
   description: "",
   color: "#2563EB",
   groupCode: "",
+  dataType: "NUMBER",
   scopeType: "GLOBAL",
   scopeId: "",
   isActive: true,
@@ -72,6 +75,18 @@ function scopeLabel(row: Pick<LabelRow, "scopeType" | "scopeId">) {
   if (row.scopeType === "GLOBAL") return "Toàn hệ thống";
   if (row.scopeType === "LEVEL") return `Level ${row.scopeId ?? ""}`;
   return `Đơn vị ${row.scopeId ?? ""}`;
+}
+
+const LABEL_DATA_TYPE_OPTIONS: Array<{ value: LabelRow["dataType"]; label: string }> = [
+  { value: "NUMBER", label: "Số" },
+  { value: "SHORT_TEXT", label: "Văn bản ngắn" },
+  { value: "LONG_TEXT", label: "Văn bản dài" },
+  { value: "DATE", label: "Ngày" },
+  { value: "BOOLEAN", label: "Có/không" },
+];
+
+function dataTypeLabel(value?: string | null) {
+  return LABEL_DATA_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? "Số";
 }
 
 function canManageLabels(roles?: string[]) {
@@ -173,6 +188,11 @@ export default function LabelListPage() {
         render: (row) => row.groupCode || "-",
       },
       {
+        field: "dataType",
+        header: "Kiểu dữ liệu",
+        render: (row) => dataTypeLabel(row.dataType),
+      },
+      {
         field: "scopeType",
         header: "Phạm vi",
         render: (row) => scopeLabel(row),
@@ -202,7 +222,7 @@ export default function LabelListPage() {
         align: "right",
         render: (row) => (
           <Stack direction="row" justifyContent="flex-end">
-            <Tooltip title="Sửa">
+            <Tooltip title={uiText(UITextKey.TextSua)}>
               <span>
                 <IconButton
                   size="small"
@@ -213,7 +233,7 @@ export default function LabelListPage() {
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Xóa">
+            <Tooltip title={uiText(UITextKey.TextXoa)}>
               <span>
                 <IconButton
                   size="small"
@@ -258,6 +278,7 @@ export default function LabelListPage() {
       description: row.description ?? "",
       color: row.color ?? "#2563EB",
       groupCode: row.groupCode ?? "",
+      dataType: row.dataType ?? "NUMBER",
       scopeType: row.scopeType,
       scopeId: row.scopeId ?? "",
       isActive: row.isActive,
@@ -272,6 +293,7 @@ export default function LabelListPage() {
       description: form.description.trim() || null,
       color: form.color.trim() || null,
       groupCode: form.groupCode.trim() || null,
+      dataType: form.dataType,
       scopeType: isSystemAdmin ? form.scopeType : null,
       scopeId: isSystemAdmin ? form.scopeId.trim() || null : null,
       isActive: form.isActive,
@@ -286,6 +308,7 @@ export default function LabelListPage() {
             description: payload.description,
             color: payload.color,
             groupCode: payload.groupCode,
+            dataType: payload.dataType,
             isActive: payload.isActive,
           },
         }).unwrap();
@@ -334,7 +357,7 @@ export default function LabelListPage() {
               Quản lý nhãn
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Nhãn dùng để chuẩn hóa Dynamic Form, table block và thống kê cơ cấu/lũy kế.
+              Nhãn dùng để chuẩn hóa biểu mẫu động, bảng Excel và thống kê cơ cấu/lũy kế.
             </Typography>
           </Box>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
@@ -345,7 +368,7 @@ export default function LabelListPage() {
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
           <TextField
             size="small"
-            label="Tìm nhãn"
+            label={uiText(UITextKey.TextTimNhan2)}
             value={q}
             onChange={(event) => setQ(event.target.value)}
             onKeyDown={(event) => {
@@ -355,7 +378,7 @@ export default function LabelListPage() {
           />
           <TextField
             size="small"
-            label="Nhóm"
+            label={uiText(UITextKey.TextNhom2)}
             value={groupCode}
             onChange={(event) => setGroupCode(event.target.value)}
             onKeyDown={(event) => {
@@ -366,14 +389,14 @@ export default function LabelListPage() {
           <TextField
             select
             size="small"
-            label="Trạng thái"
+            label={uiText(UITextKey.TextTrangThai)}
             value={active}
             onChange={(event) => setActive(event.target.value as typeof active)}
             sx={{ minWidth: 150 }}
           >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ACTIVE">Active</MenuItem>
-            <MenuItem value="INACTIVE">Inactive</MenuItem>
+            <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
+            <MenuItem value="ACTIVE">{uiText(UITextKey.TextActive)}</MenuItem>
+            <MenuItem value="INACTIVE">{uiText(UITextKey.TextInactive)}</MenuItem>
           </TextField>
           <Button variant="contained" startIcon={<SearchIcon />} onClick={applySearch}>
             Tìm
@@ -414,16 +437,16 @@ export default function LabelListPage() {
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <TextField
               size="small"
-              label="Mã nhãn"
+              label={uiText(UITextKey.TextMaNhan2)}
               value={form.code}
               disabled={Boolean(form.id) || busy}
               onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))}
-              helperText="Chỉ dùng chữ thường, số, dấu -, _ hoặc ."
+              helperText={uiText(UITextKey.TextChiDungChuThuongSoDauHoac)}
               required
             />
             <TextField
               size="small"
-              label="Tên nhãn"
+              label={uiText(UITextKey.TextTenNhan2)}
               value={form.name}
               disabled={busy}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
@@ -432,7 +455,7 @@ export default function LabelListPage() {
             <Stack direction="row" spacing={1}>
               <TextField
                 size="small"
-                label="Nhóm"
+                label={uiText(UITextKey.TextNhom2)}
                 value={form.groupCode}
                 disabled={busy}
                 onChange={(event) => setForm((prev) => ({ ...prev, groupCode: event.target.value }))}
@@ -440,19 +463,36 @@ export default function LabelListPage() {
               />
               <TextField
                 size="small"
-                label="Màu"
+                label={uiText(UITextKey.TextMau2)}
                 value={form.color}
                 disabled={busy}
                 onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
                 sx={{ width: 140 }}
               />
             </Stack>
+            <TextField
+              select
+              size="small"
+              label="Kiểu dữ liệu"
+              value={form.dataType}
+              disabled={busy}
+              helperText="Cùng một nhãn chỉ nên dùng cho cùng kiểu dữ liệu để thống kê/gộp không bị mơ hồ."
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
+              }
+            >
+              {LABEL_DATA_TYPE_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
             {isSystemAdmin && !form.id && (
               <Stack direction="row" spacing={1}>
                 <TextField
                   select
                   size="small"
-                  label="Phạm vi"
+                  label={uiText(UITextKey.TextPhamVi2)}
                   value={form.scopeType}
                   disabled={busy}
                   onChange={(event) =>
@@ -464,13 +504,13 @@ export default function LabelListPage() {
                   }
                   sx={{ width: 180 }}
                 >
-                  <MenuItem value="GLOBAL">Toàn hệ thống</MenuItem>
-                  <MenuItem value="LEVEL">Level</MenuItem>
-                  <MenuItem value="UNIT">Đơn vị</MenuItem>
+                  <MenuItem value="GLOBAL">{uiText(UITextKey.TextToanHeThong)}</MenuItem>
+                  <MenuItem value="LEVEL">{uiText(UITextKey.TextLevel)}</MenuItem>
+                  <MenuItem value="UNIT">{uiText(UITextKey.TextDonVi)}</MenuItem>
                 </TextField>
                 <TextField
                   size="small"
-                  label="ScopeId"
+                  label={uiText(UITextKey.TextScopeId)}
                   value={form.scopeId}
                   disabled={busy || form.scopeType === "GLOBAL"}
                   onChange={(event) => setForm((prev) => ({ ...prev, scopeId: event.target.value }))}
@@ -480,7 +520,7 @@ export default function LabelListPage() {
             )}
             <TextField
               size="small"
-              label="Mô tả"
+              label={uiText(UITextKey.TextMoTa2)}
               value={form.description}
               disabled={busy}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
@@ -497,7 +537,7 @@ export default function LabelListPage() {
                   }
                 />
               }
-              label="Active"
+              label={uiText(UITextKey.TextActive)}
             />
           </Stack>
         </DialogContent>
@@ -517,7 +557,7 @@ export default function LabelListPage() {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Xóa nhãn"
+        title={uiText(UITextKey.TextXoaNhan2)}
         message={
           <Typography variant="body2">
             Xóa nhãn <b>{deleteTarget?.code}</b>?

@@ -14,6 +14,7 @@ export type UserSearchRow = {
   unitCode?: string | null;
   positionCode?: string | null;
   positionName?: string | null;
+  accountKind?: string | null;
   isDeleted: boolean;
   roles: string[]; //  NEW: dùng để disable nút theo target role
 };
@@ -22,12 +23,12 @@ export type UserDto = {
   id: string;
   username: string;
   fullName: string;
-  unitId: string;
+  unitId?: string | null;
   unitSymbol?: string | null;
   unitName?: string | null;
   unitCode?: string | null;
   roles: string[];
-  positionCode: string; // ✅ giữ nguyên (required)
+  positionCode?: string | null;
   positionName?: string | null;
   isDeleted?: boolean;
   accountKind?: string | null;
@@ -40,8 +41,8 @@ export type CreateUserReq = {
   username: string;
   password: string;
   fullName: string;
-  unitId: string;
-  positionCode: string; // ✅ giữ nguyên
+  unitId?: string | null;
+  positionCode?: string | null;
   roles?: string[];
 };
 
@@ -49,7 +50,7 @@ export type UpdateUserReq = {
   username?: string;
   fullName: string;
   roles?: string[];
-  positionCode: string; // ✅ giữ nguyên
+  positionCode?: string | null;
   note?: string;
 };
 
@@ -115,6 +116,7 @@ export const adminUsersApi = baseApi.injectEndpoints({
           // ✅ NEW
           positionCode: r.positionCode ?? r._positionCode ?? null,
           positionName: r.positionName ?? null,
+          accountKind: r.accountKind ?? null,
 
           isDeleted: !!r.isDeleted,
           roles: Array.isArray(r.roles) ? r.roles : [],

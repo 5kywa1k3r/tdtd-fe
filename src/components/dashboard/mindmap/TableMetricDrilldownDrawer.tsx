@@ -43,7 +43,7 @@ function getErrorMessage(error: unknown): string {
     error?: string;
   };
 
-  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Khong tai duoc drilldown metric.";
+  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Không tải được chi tiết chỉ số.";
 }
 
 function getMetricLabel(metric: DashboardMindMapTableSummaryDto | null): string {
@@ -59,6 +59,23 @@ function getMetricLabel(metric: DashboardMindMapTableSummaryDto | null): string 
           : metric.metricKey;
 
   return `${metric.dynamicFormTemplateName || metric.blockId || metric.tableMode}: ${axisLabel || metric.metricKey}`;
+}
+
+function getTableModeLabel(tableMode?: string | null): string {
+  switch (tableMode) {
+    case "FIXED_GRID":
+      return "Bảng cố định";
+    case "APPEND_ROWS":
+      return "Thêm theo dòng";
+    case "APPEND_COLUMNS":
+      return "Thêm theo cột";
+    case "MATRIX":
+      return "Bảng ma trận";
+    case "SUMMARY_TEMPLATE":
+      return "Mẫu tổng hợp";
+    default:
+      return "Bảng";
+  }
 }
 
 function noteBlock(label: string, value?: string | null) {
@@ -102,12 +119,12 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
     () => [
       {
         field: "assignmentName",
-        header: "Assignment",
+        header: "Công việc",
         width: 220,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assignmentCode || "-"} - {row.assignmentName || "Chua ro ten"}
+              {row.assignmentCode || "-"} - {row.assignmentName || "Chưa rõ tên"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {row.periodKey || "-"}
@@ -117,22 +134,22 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
       },
       {
         field: "assigneeFullName",
-        header: "Nguoi / don vi",
+        header: "Người / đơn vị",
         width: 180,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assigneeFullName || row.assigneeUsername || "Chua ro nguoi dung"}
+              {row.assigneeFullName || row.assigneeUsername || "Chưa rõ người dùng"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {row.unitLabel || "Chua ro don vi"}
+              {row.unitLabel || "Chưa rõ đơn vị"}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "sum",
-        header: "Gia tri metric",
+        header: "Giá trị chỉ số",
         width: 190,
         align: "right",
         render: (row) => (
@@ -141,38 +158,38 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
               {formatMetricNumber(row.sum)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              avg {formatMetricNumber(row.average)} | {row.valueCount} value
+              trung bình {formatMetricNumber(row.average)} | {row.valueCount} giá trị
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              min {formatMetricNumber(row.min)} / max {formatMetricNumber(row.max)}
+              nhỏ nhất {formatMetricNumber(row.min)} / lớn nhất {formatMetricNumber(row.max)}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "status",
-        header: "Trang thai",
+        header: "Trạng thái",
         width: 160,
         render: (row) => (
           <Stack spacing={0.5}>
             <Chip size="small" label={getWorkAssignmentReportStatusLabel(row.reportStatus)} />
             <Typography variant="caption" color="text.secondary">
-              Gui: {formatDateTime(row.submittedAtUtc)}
+              Gửi: {formatDateTime(row.submittedAtUtc)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Duyet: {formatDateTime(row.approvedAtUtc)}
+              Duyệt: {formatDateTime(row.approvedAtUtc)}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "sourceKeys",
-        header: "Nguon metric",
+        header: "Nguồn chỉ số",
         render: (row) => (
           <Stack spacing={1}>
-            {noteBlock("MetricKey", row.metricKey)}
-            {noteBlock("Row/Column", `${row.rowKey || "-"} / ${row.columnKey || "-"}`)}
-            {noteBlock("Source keys", row.sourceKeys.slice(0, 12).join(", "))}
+            {noteBlock("Mã chỉ số", row.metricKey)}
+            {noteBlock("Dòng/Cột", `${row.rowKey || "-"} / ${row.columnKey || "-"}`)}
+            {noteBlock("Mã nguồn", row.sourceKeys.slice(0, 12).join(", "))}
           </Stack>
         ),
       },
@@ -200,7 +217,7 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
       <Stack spacing={2} sx={{ height: "100%" }}>
         <Box>
           <Typography variant="h6" fontWeight={800}>
-            Drilldown metric bang
+            Chi tiết chỉ số trong bảng
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
             {getMetricLabel(metric)}
@@ -208,9 +225,9 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
         </Box>
 
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Chip label={`${data?.totalRows ?? 0} report`} />
-          <Chip color="primary" variant="outlined" label={metric?.tableMode || "TABLE"} />
-          <Chip variant="outlined" label={`Tong: ${formatMetricNumber(metric?.sum)}`} />
+          <Chip label={`${data?.totalRows ?? 0} báo cáo`} />
+          <Chip color="primary" variant="outlined" label={getTableModeLabel(metric?.tableMode)} />
+          <Chip variant="outlined" label={`Tổng: ${formatMetricNumber(metric?.sum)}`} />
         </Stack>
 
         <Divider />
@@ -234,7 +251,7 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
 
         {isFetching ? (
           <Typography variant="caption" color="text.secondary">
-            Dang tai report dong gop metric...
+            Đang tải báo cáo đóng góp chỉ số...
           </Typography>
         ) : null}
       </Stack>

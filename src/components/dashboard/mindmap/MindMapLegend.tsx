@@ -1,4 +1,5 @@
 import { Box, Chip, Divider, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type MindMapLegendProps = {
   statusColorEnabled: boolean;
@@ -6,21 +7,22 @@ type MindMapLegendProps = {
 };
 
 const ENTITY_ITEMS = [
-  { label: "Work", color: "rgba(20,184,166,0.42)" },
-  { label: "Assignment", color: "rgba(148,163,184,0.42)" },
-  { label: "Template", color: "rgba(245,158,11,0.42)" },
-  { label: "User", color: "rgba(59,130,246,0.34)" },
-  { label: "Report", color: "rgba(34,197,94,0.28)" },
-  { label: "Load more", color: "rgba(148,163,184,0.28)" },
+  { label: "Đầu việc", color: "rgba(20,184,166,0.42)" },
+  { label: "Công việc", color: "rgba(148,163,184,0.42)" },
+  { label: "Biểu mẫu", color: "rgba(245,158,11,0.42)" },
+  { label: "Người dùng", color: "rgba(59,130,246,0.34)" },
+  { label: "Báo cáo", color: "rgba(34,197,94,0.28)" },
+  { label: "Chưa có dữ liệu", color: "rgba(148,163,184,0.16)" },
+  { label: "Tải thêm", color: "rgba(148,163,184,0.28)" },
 ];
 
 const STATUS_ITEMS = [
-  { label: "Chua thuc hien / Chua mo", color: "#94a3b8" },
-  { label: "Dang thuc hien / Ban nhap", color: "#0ea5e9" },
-  { label: "Da gui", color: "#2563eb" },
-  { label: "Hoan thanh / Da duyet", color: "#22c55e" },
-  { label: "Nguy co / Qua han da lam", color: "#f59e0b" },
-  { label: "Qua han", color: "#ef4444" },
+  { label: "Chưa thực hiện / Chưa bắt đầu", color: "#94a3b8" },
+  { label: "Đang thực hiện / Bản nháp", color: "#0ea5e9" },
+  { label: "Đã gửi", color: "#2563eb" },
+  { label: "Hoàn thành / Đã duyệt", color: "#22c55e" },
+  { label: "Nguy cơ / Quá hạn đã làm", color: "#f59e0b" },
+  { label: "Quá hạn", color: "#ef4444" },
 ];
 
 function LegendChip(props: { label: string; color: string }) {
@@ -58,7 +60,7 @@ export default function MindMapLegend(props: MindMapLegendProps) {
           LEGEND
         </Typography>
         <FormControlLabel
-          label="Mau trang thai"
+          label={uiText(UITextKey.TextMauTrangThai)}
           control={(
             <Switch
               size="small"
@@ -94,7 +96,7 @@ export default function MindMapLegend(props: MindMapLegendProps) {
       ) : null}
 
       <Typography variant="caption" color="text.secondary">
-        Mau trang thai chi la vien/background nhe cho work, assignment va report.
+        Màu trạng thái chỉ dùng viền/nền nhẹ cho đầu việc, công việc và báo cáo.
       </Typography>
     </Stack>
   );

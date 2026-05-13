@@ -19,6 +19,8 @@ import EvaluationTemplateFilterBar, {
   type EvaluationTemplateFilterValue,
 } from "../../components/evaluation/EvaluationTemplateFilterBar";
 import { normalizeVi } from "../../helpers/normalize";
+import { releaseFocusBeforeModal } from "../../utils/focus";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 const defaultFilterValue = (): EvaluationTemplateFilterValue => ({
   q: "",
@@ -90,7 +92,7 @@ export default function EvaluationTemplateManagementPage() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           Quản lý bộ đánh giá
         </Typography>
-        <Typography color="text.secondary">Quản lý bộ mã đánh giá dùng chung.</Typography>
+        <Typography color="text.secondary">{uiText(UITextKey.TextQuanLyBoMaDanhGiaDungChung)}</Typography>
       </Box>
 
       {!canManage && (
@@ -117,6 +119,7 @@ export default function EvaluationTemplateManagementPage() {
         onReset={() => setFilterValue(defaultFilterValue())}
         onReload={() => void refetch()}
         onCreate={() => {
+          releaseFocusBeforeModal();
           setSelected(null);
           setDialogMode("create");
         }}
@@ -136,15 +139,16 @@ export default function EvaluationTemplateManagementPage() {
       {isFetching ? (
         <Stack direction="row" spacing={1} alignItems="center">
           <CircularProgress size={18} />
-          <Typography variant="body2">Đang tải danh sách bộ đánh giá...</Typography>
+          <Typography variant="body2">{uiText(UITextKey.TextDangTaiDanhSachBoDanhGia)}</Typography>
         </Stack>
       ) : filteredRows.length === 0 ? (
-        <Alert severity="info">Không có bộ đánh giá phù hợp với bộ lọc hiện tại.</Alert>
+        <Alert severity="info">{uiText(UITextKey.TextKhongCoBoDanhGiaPhuHopVoiBo)}</Alert>
       ) : (
         <EvaluationTemplateTable
           rows={filteredRows}
           canManage={canManage}
           onView={(row) => {
+            releaseFocusBeforeModal();
             setSelected(row);
             setDialogMode("view");
           }}

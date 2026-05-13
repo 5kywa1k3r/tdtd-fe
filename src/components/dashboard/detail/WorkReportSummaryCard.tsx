@@ -8,6 +8,7 @@ import {
   countOverdueReports,
   countWaitingReports,
 } from "../../../utils/dashboardUi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   summary?: DashboardNodeReportSummaryDto | null;
@@ -26,12 +27,12 @@ export default function WorkReportSummaryCard({ summary }: Props) {
       <Grid size={{ xs: 12, lg: 8 }}>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <SummaryCard title="Tổng báo cáo" value={summary.total} />
+            <SummaryCard title={uiText(UITextKey.TextTongBaoCao)} value={summary.total} />
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <SummaryCard
-              title="Đang chờ xử lý"
+              title={uiText(UITextKey.TextDangChoXuLy)}
               value={countWaitingReports(summary)}
               bottomRows={[
                 { label: "Chưa mở", value: summary.pendingCount },
@@ -43,7 +44,7 @@ export default function WorkReportSummaryCard({ summary }: Props) {
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <SummaryCard
-              title="Đã duyệt"
+              title={uiText(UITextKey.TextDaDuyet)}
               value={summary.approvedCount}
               valueColor="success.main"
             />
@@ -51,7 +52,7 @@ export default function WorkReportSummaryCard({ summary }: Props) {
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <SummaryCard
-              title="Quá hạn"
+              title={uiText(UITextKey.TextQuaHan)}
               value={countOverdueReports(summary)}
               valueColor="error.main"
               bottomRows={[
@@ -74,7 +75,7 @@ export default function WorkReportSummaryCard({ summary }: Props) {
 
       <Grid size={{ xs: 12, lg: 4 }}>
         <DashboardPieChart
-          title="Cơ cấu trạng thái báo cáo"
+          title={uiText(UITextKey.TextCoCauTrangThaiBaoCao)}
           data={buildReportPieData(summary)}
           height={280}
           emptyText="Chưa có dữ liệu báo cáo để hiển thị."

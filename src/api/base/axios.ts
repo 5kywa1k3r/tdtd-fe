@@ -2,8 +2,14 @@ import axios from 'axios';
 import { getTokenFromStorage, setTokenToActiveStorage, setMeSnapshot } from '../../stores/authStorage';
 import type { RefreshResponse } from '../../dtos/auth';
 import { performLogout } from '../../utils/AuthEvents';
+import { ApiErrorCode } from '../../constants/errorCodes';
+import { normalizeApiError } from '../../utils/apiError';
 
 const baseURL = import.meta.env.VITE_API_URL ?? 'https://localhost:7232/api';
+
+function isAuthRequest(url: string, path: string): boolean {
+  return url === path || url.endsWith(path) || url.includes(path);
+}
 
 // main api
 export const api = axios.create({
@@ -31,7 +37,18 @@ async function refreshAccessToken(): Promise<string> {
   const res = await refreshClient.post<RefreshResponse>('/auth/refresh', {});
   const newToken = res.data.accessToken;
 
-  if (!newToken) throw new Error('Refresh succeeded but missing accessToken');
+  if (!newToken) {
+    throw {
+      response: {
+        status: 401,
+        data: {
+          errorCode: ApiErrorCode.AuthMeNotAvailable,
+          service: 'AUTH',
+          message: 'Không lấy được thông tin người dùng.',
+        },
+      },
+    };
+  }
   setTokenToActiveStorage(newToken);
   setMeSnapshot(res.data.user);
 
@@ -43,15 +60,19 @@ api.interceptors.response.use(
   async (error) => {
     const original = error?.config;
 
-    if (!original) return Promise.reject(error);
+    if (!original) return Promise.reject(normalizeApiError(error));
 
     const status = error?.response?.status;
     const url = String(original.url ?? '');
 
     // Nếu refresh itself chết -> logout luôn (không retry)
-    if (status === 401 && url.includes('/auth/refresh')) {
+    if (status === 401 && isAuthRequest(url, '/auth/refresh')) {
       performLogout();
-      return Promise.reject(error);
+      return Promise.reject(normalizeApiError(error));
+    }
+
+    if (status === 401 && isAuthRequest(url, '/auth/login')) {
+      return Promise.reject(normalizeApiError(error));
     }
 
     // Retry 1 lần khi 401
@@ -73,7 +94,7 @@ api.interceptors.response.use(
         return api.request(original);
       } catch (e) {
         performLogout();
-        return Promise.reject(e);
+        return Promise.reject(normalizeApiError(e));
       }
     }
 
@@ -82,6 +103,6 @@ api.interceptors.response.use(
       performLogout();
     }
 
-    return Promise.reject(error);
+    return Promise.reject(normalizeApiError(error));
   }
 );

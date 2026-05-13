@@ -8,6 +8,7 @@ import { AppTable, type AppTableColumn } from "../common/AppTable";
 import CommonLabelText from "../common/CommonLabelText";
 import CommonDateText from "../common/CommonDateText";
 import BooleanChip from "../common/BooleanChip";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type Props = {
   rows: EvaluationTemplateDto[];
@@ -92,14 +93,14 @@ export default function EvaluationTemplateTable({
         align: "center",
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Xem chi tiết">
+            <Tooltip title={uiText(UITextKey.TextXemChiTiet)}>
               <IconButton size="small" onClick={() => onView(row)}>
                 <VisibilityOutlinedIcon fontSize="small" />
               </IconButton>
             </Tooltip>
 
             {canManage && row.isActive && (
-              <Tooltip title="Ngừng dùng">
+              <Tooltip title={uiText(UITextKey.TextNgungDung)}>
                 <IconButton size="small" color="error" onClick={() => onDeactivate(row)}>
                   <BlockOutlinedIcon fontSize="small" />
                 </IconButton>

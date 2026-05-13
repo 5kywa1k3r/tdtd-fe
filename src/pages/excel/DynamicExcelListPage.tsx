@@ -18,6 +18,7 @@ import type {
   DynamicExcelRow,
   DynamicExcelSearchReq,
 } from "../../api/dynamicExcelApi";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 const defaultFilterValue = (): DynamicExcelFilterValue => ({
   code: "",
@@ -138,14 +139,14 @@ export default function DynamicExcelListPage() {
 
       <ConfirmDialog
         open={wrapConfirmOpen}
-        title="Tao Dynamic Form"
+        title={uiText(UITextKey.TextTaoDynamicForm)}
         message={
           <Typography variant="body2">
-            Tao hoac mo Dynamic Form boc bang <b>{wrapTarget?.code}</b>.
+            Tạo hoặc mở biểu mẫu động chứa bảng <b>{wrapTarget?.code}</b>.
           </Typography>
         }
-        confirmText="Tao form"
-        cancelText="Huy"
+        confirmText="Tạo biểu mẫu"
+        cancelText="Hủy"
         variant="info"
         confirmLoading={wrapState.isLoading}
         onConfirm={async () => {
@@ -164,7 +165,7 @@ export default function DynamicExcelListPage() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Xóa bảng biểu"
+        title={uiText(UITextKey.TextXoaBangBieu)}
         message={
           <>
             <Typography variant="body2">

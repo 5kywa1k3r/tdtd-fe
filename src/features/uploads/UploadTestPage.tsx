@@ -8,6 +8,7 @@ import {
   useLazyPresignDownloadQuery,
 } from '../../api/uploadApi';
 import { useTusUpload } from './useTusUpload';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export default function UploadTestPage() {
   const [file, setFile] = React.useState<File | null>(null);
@@ -39,7 +40,6 @@ export default function UploadTestPage() {
     const st = sourceType.trim() || 'WORK';
     const sid = sourceId.trim();
 
-    // ✅ BE đang yêu cầu FileName => gửi luôn
     const sess = await createSession({
       sourceType: st,
       sourceId: sid ? sid : null,
@@ -51,12 +51,11 @@ export default function UploadTestPage() {
     console.log('upload session resp:', sess);
 
     if (!sess.uploadToken) {
-      throw new Error('Upload session missing uploadToken');
+      throw new Error('Thiếu thông tin xác nhận tải lên.');
     }
 
-    // optional: check max size theo response
     if (file.size > sess.maxSize) {
-      alert(`File quá lớn. Max: ${sess.maxSize} bytes`);
+      alert(`Tệp quá lớn. Dung lượng tối đa: ${sess.maxSize} byte.`);
       return;
     }
 
@@ -81,7 +80,6 @@ export default function UploadTestPage() {
     }
   };
 
-  // auto verify sau khi tus success
   React.useEffect(() => {
     if (tusState.status === 'success' && uploadId && file) {
       void verify({ uploadId, fileName: file.name }, true);
@@ -93,7 +91,7 @@ export default function UploadTestPage() {
       <Card sx={{ maxWidth: 900, mx: 'auto' }}>
         <CardContent>
           <Typography variant="h6" fontWeight={800}>
-            Upload Test (TUS → MinIO → Mongo FileDoc)
+            Kiểm tra tải tệp lên
           </Typography>
 
           <Divider sx={{ my: 2 }} />
@@ -101,13 +99,13 @@ export default function UploadTestPage() {
           <Stack spacing={2}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
-                label="SourceType"
+                label="Loại dữ liệu liên quan"
                 value={sourceType}
                 onChange={(e) => setSourceType(e.target.value)}
                 fullWidth
               />
               <TextField
-                label="SourceId (optional)"
+                label="Mã liên quan (không bắt buộc)"
                 value={sourceId}
                 onChange={(e) => setSourceId(e.target.value)}
                 fullWidth
@@ -116,12 +114,12 @@ export default function UploadTestPage() {
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
               <Button variant="outlined" component="label">
-                Chọn file
+                Chọn tệp
                 <input hidden type="file" onChange={onPickFile} />
               </Button>
 
               <Typography variant="body2" sx={{ flex: 1, opacity: 0.85 }}>
-                {file ? `${file.name} (${Math.round(file.size / 1024)} KB)` : 'Chưa chọn file'}
+                {file ? `${file.name} (${Math.round(file.size / 1024)} KB)` : 'Chưa chọn tệp'}
               </Typography>
 
               <Button
@@ -129,7 +127,7 @@ export default function UploadTestPage() {
                 disabled={!file || createSessionState.isLoading || tusState.status === 'uploading'}
                 onClick={onStartUpload}
               >
-                Upload
+                Tải lên
               </Button>
 
               <Button
@@ -137,34 +135,34 @@ export default function UploadTestPage() {
                 disabled={tusState.status !== 'uploading'}
                 onClick={cancel}
               >
-                Cancel
+                Hủy
               </Button>
             </Stack>
 
             {createSessionState.isError && (
               <Typography color="error" variant="body2">
-                Create session error (check Network Response)
+                Không chuẩn bị được lượt tải lên. Vui lòng thử lại hoặc kiểm tra kết nối.
               </Typography>
             )}
 
             {(tusState.status === 'uploading') && (
               <Box>
                 <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2">Uploading… {tusState.progress}%</Typography>
+                  <Typography variant="body2">Đang tải lên... {tusState.progress}%</Typography>
                   <Typography variant="body2" sx={{ opacity: 0.75 }}>
                     {tusState.bytesUploaded} / {tusState.bytesTotal}
                   </Typography>
                 </Stack>
                 <LinearProgress variant="determinate" value={tusState.progress} />
                 <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                  uploadId: {tusState.uploadId ?? '(chưa có - tus chưa trả url)'}
+                  Mã lượt tải lên: {tusState.uploadId ?? '(chưa có)'}
                 </Typography>
               </Box>
             )}
 
             {(tusState.status === 'error') && (
               <Box>
-                <Typography color="error" fontWeight={700}>Upload error</Typography>
+                <Typography color="error" fontWeight={700}>{uiText(UITextKey.TextUploadError)}</Typography>
                 <Typography variant="body2" sx={{ opacity: 0.85 }}>{tusState.error}</Typography>
               </Box>
             )}
@@ -177,11 +175,11 @@ export default function UploadTestPage() {
                 disabled={!uploadId || verifyState.isFetching}
                 onClick={onVerify}
               >
-                Verify
+                Kiểm tra
               </Button>
 
               <Typography variant="body2" sx={{ flex: 1, opacity: 0.85 }}>
-                verify: {verifyState.data ? JSON.stringify(verifyState.data) : '(chưa verify)'}
+                Kết quả kiểm tra: {verifyState.data ? JSON.stringify(verifyState.data) : '(chưa kiểm tra)'}
               </Typography>
 
 
@@ -191,11 +189,11 @@ export default function UploadTestPage() {
                 disabled={!fileId || presignState.isFetching}
                 onClick={onPresign}
             >
-              Presign & Open
+              Mở tệp
             </Button>
             {fileId && (
               <Typography variant="body2" fontWeight={800}>
-                ✅ fileId: {fileId}
+                Mã tệp: {fileId}
               </Typography>
             )}
           </Stack>

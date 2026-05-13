@@ -4,6 +4,28 @@ export type AssignmentType = "ONCE" | "PERIODIC_REPORT";
 export type AggregationType = "MATRIX" | "UNIT_ROW_COL";
 export type ReportCycleType = "DAILY" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMI_ANNUAL";
 export type ComputationType = "SUM" | "MEAN" | "MAX" | "MIN";
+export type DynamicFormDataSourceRuleType =
+  | "MANUAL"
+  | "AGGREGATE_CHILDREN"
+  | "MAP_CHILD"
+  | "MIXED";
+
+export type DynamicFormSectionDataSourceRule = {
+  sectionId: string;
+  sourceRule: DynamicFormDataSourceRuleType;
+  sourceAssignmentIds?: string[];
+  sourceSectionId?: string | null;
+  sourceBlockId?: string | null;
+  sourceFieldId?: string | null;
+  note?: string | null;
+};
+
+export type DynamicFormDataSourceRulesDocument = {
+  version: number;
+  sectionRules: DynamicFormSectionDataSourceRule[];
+  fieldRules?: unknown[];
+  blockRules?: unknown[];
+};
 
 export type QuarterDayRuleDto = { quarter: number; days: number[] };
 export type SemiAnnualDayRuleDto = { half: number; days: number[] };
@@ -60,6 +82,7 @@ export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  dynamicFormDataSourceRulesJson?: string | null;
 
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
@@ -97,6 +120,7 @@ export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  dynamicFormDataSourceRulesJson?: string | null;
 
   workType: string;
   assignmentType: AssignmentType;
@@ -136,7 +160,7 @@ export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
 export type SaveWorkAssignmentRequest = {
   parentAssignmentId?: string | null;
   dynamicFormTemplateId?: string | null;
-  dynamicExcelId?: string | null;
+  dynamicFormDataSourceRulesJson?: string | null;
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
   dueAtUtc?: string | null;
@@ -147,6 +171,27 @@ export type SaveWorkAssignmentRequest = {
   description?: string | null;
   isActive?: boolean;
   allowUserCreatedReports?: boolean;
+};
+
+export type UpdateWorkAssignmentDataSourceRulesRequest = {
+  dynamicFormDataSourceRulesJson?: string | null;
+};
+
+export type HandoverWorkAssignmentRequest = {
+  fromAssigneeUserId: string;
+  toAssigneeUserId: string;
+  reason?: string | null;
+  comment?: string | null;
+};
+
+export type WorkAssignmentHandoverResponse = {
+  assignment: WorkAssignmentResponse;
+  fromAssigneeUserId: string;
+  toAssigneeUserId: string;
+  workTemplateAssigneeId: string;
+  periodCount: number;
+  reportCount: number;
+  queueItemCount: number;
 };
 
 export type AssignmentDraft = {
@@ -162,6 +207,7 @@ export type AssignmentDraft = {
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  dynamicFormDataSourceRulesJson?: string | null;
 
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
@@ -213,6 +259,7 @@ export function emptyAssignmentDraft(): AssignmentDraft {
     dynamicFormTemplateId: "",
     dynamicFormTemplateCode: "",
     dynamicFormTemplateName: "",
+    dynamicFormDataSourceRulesJson: null,
     assignmentType: "ONCE",
     aggregationType: "MATRIX",
     schedule: null,
@@ -259,6 +306,7 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     dynamicFormTemplateId: x.dynamicFormTemplateId ?? null,
     dynamicFormTemplateCode: x.dynamicFormTemplateCode ?? null,
     dynamicFormTemplateName: x.dynamicFormTemplateName ?? null,
+    dynamicFormDataSourceRulesJson: x.dynamicFormDataSourceRulesJson ?? null,
     assignmentType: x.assignmentType,
     aggregationType: x.aggregationType,
     schedule: x.schedule ?? null,

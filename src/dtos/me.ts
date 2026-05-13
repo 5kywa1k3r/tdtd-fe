@@ -4,6 +4,10 @@ export type MeDto = {
   fullName: string;
   unitId: string;
   unitName: string;
+  unitCode?: string;
+  unitTypeCodes?: string[];
+  positionCode?: string;
+  accountKind?: string;
   roles: string[];
   isDeleted: boolean;
 };

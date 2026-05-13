@@ -1,5 +1,8 @@
 # Frontend Common Rules
 
+> Navigation: `../ARCHITECTURE_MAP.md` -> `../DOCUMENTATION_MAP.md` -> this file.
+> Type: Frontend rule doc.
+
 Mục tiêu của rule này là giữ cho các màn FE có cùng một ngôn ngữ hiển thị và cùng pattern triển khai, đặc biệt với các bảng dữ liệu, filter bar và picker dùng nhiều lần.
 
 ## 1. Table Pattern

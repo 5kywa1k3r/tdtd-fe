@@ -100,6 +100,9 @@ export interface ReviewReportFlatRowDto {
 
   reportId?: string | null;
   reportStatus?: number | null;
+  reportIsActive?: boolean | null;
+  reportDeactivatedAtUtc?: string | null;
+  reportDeactivationReason?: string | null;
   submittedAtUtc?: string | null;
   approvedAtUtc?: string | null;
   returnedAtUtc?: string | null;
@@ -128,4 +131,8 @@ export interface ReturnReportRequest {
 
 export interface RecallApprovedReportRequest {
   comment: string;
+}
+
+export interface ReportActiveRequest {
+  comment?: string | null;
 }

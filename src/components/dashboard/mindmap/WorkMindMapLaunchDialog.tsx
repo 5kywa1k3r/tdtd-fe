@@ -26,6 +26,7 @@ import type { WorkListRow, WorkTypeCore } from "../../../types/work";
 import { WORK_TYPE, WORK_TYPE_OPTIONS } from "../../../types/work";
 import { getWorkStatusChipColor, getWorkStatusLabel } from "../../../utils/dashboardUi";
 import type { WorkMindMapOption } from "./WorkMindMapToolbar";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type WorkMindMapLaunchDialogProps = {
   open: boolean;
@@ -103,16 +104,16 @@ export default function WorkMindMapLaunchDialog(props: WorkMindMapLaunchDialogPr
         >
           <Box>
             <Typography variant="h5" fontWeight={900}>
-              Dashboard Mind Map
+              Sơ đồ công việc
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.45, maxWidth: 900 }}>
-              Chon mot work de bat dau tu node work. Owner se thay root, user thuc hien se thay assignment dau vao trong nhanh duoc phan.
+              Chọn một đầu việc để bắt đầu. Người phụ trách thấy cây từ gốc, người thực hiện thấy công việc đầu vào trong nhánh được phân công.
             </Typography>
           </Box>
 
           <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
-            <Chip size="small" label="0 assignment dang hien thi" />
-            <Chip size="small" color="primary" variant="outlined" label="1 node da nap" />
+            <Chip size="small" label={uiText(UITextKey.Text0AssignmentDangHienThi)} />
+            <Chip size="small" color="primary" variant="outlined" label={uiText(UITextKey.Text1NodeDaNap)} />
           </Stack>
         </Stack>
       </DialogTitle>
@@ -152,8 +153,8 @@ export default function WorkMindMapLaunchDialog(props: WorkMindMapLaunchDialogPr
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  label={draftWorkType === WORK_TYPE.TASK ? "Chon nhiem vu" : "Chon chi tieu"}
-                  placeholder="Nhap ma hoac ten work..."
+                  label={draftWorkType === WORK_TYPE.TASK ? "Chọn nhiệm vụ" : "Chọn chỉ tiêu"}
+                  placeholder={uiText(UITextKey.TextNhapMaHoacTenWork)}
                   size="small"
                 />
               )}
@@ -178,8 +179,8 @@ export default function WorkMindMapLaunchDialog(props: WorkMindMapLaunchDialogPr
 
           {draftWork ? (
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Chip color="error" label="Huy" onClick={() => setDraftWork(null)} />
-              <Chip size="small" label={draftWorkType === WORK_TYPE.TASK ? "Nhiem vu" : "Chi tieu"} />
+              <Chip color="error" label={uiText(UITextKey.TextHuy)} onClick={() => setDraftWork(null)} />
+              <Chip size="small" label={draftWorkType === WORK_TYPE.TASK ? "Nhiệm vụ" : "Chỉ tiêu"} />
               <Typography variant="body2" color="text.secondary">
                 {draftWork.code} - {draftWork.name}
               </Typography>
@@ -189,14 +190,14 @@ export default function WorkMindMapLaunchDialog(props: WorkMindMapLaunchDialogPr
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose}>Huy</Button>
+        <Button onClick={onClose}>{uiText(UITextKey.TextHuy)}</Button>
         <Button
           variant="contained"
           startIcon={<AccountTreeOutlinedIcon />}
           onClick={handleOpenCanvas}
           disabled={!draftWork}
         >
-          Mo mind map canvas
+          Mở sơ đồ công việc
         </Button>
       </DialogActions>
     </Dialog>

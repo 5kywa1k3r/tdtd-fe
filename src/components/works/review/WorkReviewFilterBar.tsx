@@ -12,6 +12,7 @@ import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import SingleDayKeyField from "../../common/SingleDayKeyField";
 import type { ReviewStatusBucket } from "../../../types/reportReview";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type ReviewFilterOption = {
   id: string;
@@ -129,13 +130,13 @@ const WorkReviewFilterBar: React.FC<Props> = ({
           <TextField
             select
             size="small"
-            label="Đơn vị"
+            label={uiText(UITextKey.TextDonVi)}
             value={unitId}
             disabled={disabled}
             onChange={(e) => onUnitIdChange(e.target.value)}
             sx={fieldSx}
           >
-            <MenuItem value="">Tất cả đơn vị đã giao</MenuItem>
+            <MenuItem value="">{uiText(UITextKey.TextTatCaDonViDaGiao)}</MenuItem>
             {unitOptions.map((opt) => (
               <MenuItem key={opt.id} value={opt.id}>
                 {opt.label}
@@ -146,13 +147,13 @@ const WorkReviewFilterBar: React.FC<Props> = ({
           <TextField
             select
             size="small"
-            label="Tài khoản"
+            label={uiText(UITextKey.TextTaiKhoan)}
             value={userId}
             disabled={disabled}
             onChange={(e) => onUserIdChange(e.target.value)}
             sx={{ ...fieldSx, flex: { xs: "1 1 100%", sm: "1 1 260px", xl: "0 1 260px" } }}
           >
-            <MenuItem value="">Tất cả tài khoản đã giao</MenuItem>
+            <MenuItem value="">{uiText(UITextKey.TextTatCaTaiKhoanDaGiao)}</MenuItem>
             {userOptions.map((opt) => (
               <MenuItem key={opt.id} value={opt.id}>
                 {opt.label}
@@ -161,7 +162,7 @@ const WorkReviewFilterBar: React.FC<Props> = ({
           </TextField>
 
           <SingleDayKeyField
-            label="Ngày kỳ báo cáo"
+            label={uiText(UITextKey.TextNgayKyBaoCao)}
             value={periodDayKey}
             onChange={onPeriodDayKeyChange}
             onEnterPress={onSearch}
@@ -173,7 +174,7 @@ const WorkReviewFilterBar: React.FC<Props> = ({
           <TextField
             select
             size="small"
-            label="Trạng thái"
+            label={uiText(UITextKey.TextTrangThai)}
             value={reviewStatusBucket}
             disabled={disabled}
             onChange={(e) => onReviewStatusBucketChange(e.target.value as ReviewStatusBucket)}

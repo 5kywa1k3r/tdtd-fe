@@ -24,6 +24,7 @@ import {
   type DynamicFormRow,
   useSearchDynamicFormsMutation,
 } from "../../../api/dynamicFormApi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type DynamicFormPickerProps = {
   value?: string | null;
@@ -84,16 +85,16 @@ export const DynamicFormPicker: React.FC<DynamicFormPickerProps> = React.memo(fu
         <TextField
           fullWidth
           size="small"
-          label="Chon Dynamic Form"
+          label={uiText(UITextKey.TextChonDynamicForm)}
           disabled={disabled}
           value={displayValue}
-          placeholder="Chon form da publish"
+          placeholder={uiText(UITextKey.TextChonFormDaPublish)}
           onClick={handleOpen}
           slotProps={{ htmlInput: { readOnly: true } }}
         />
 
         {value && (
-          <Tooltip title="Xoa chon">
+          <Tooltip title={uiText(UITextKey.TextXoaChon2)}>
             <span>
               <IconButton onClick={handleClear} disabled={disabled}>
                 <ClearIcon />
@@ -104,14 +105,14 @@ export const DynamicFormPicker: React.FC<DynamicFormPickerProps> = React.memo(fu
       </Stack>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Chon Dynamic Form</DialogTitle>
+        <DialogTitle>{uiText(UITextKey.TextChonDynamicForm)}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <Stack direction="row" spacing={1}>
               <TextField
                 size="small"
                 fullWidth
-                label="Tim theo ma / ten"
+                label={uiText(UITextKey.TextTimTheoMaTen2)}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => {
@@ -148,8 +149,8 @@ export const DynamicFormPicker: React.FC<DynamicFormPickerProps> = React.memo(fu
                       secondaryTypographyProps={{ component: "div" }}
                       secondary={
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: "wrap" }}>
-                          {(x.labels ?? []).slice(0, 4).map((lb) => (
-                            <Chip key={lb} size="small" label={lb} />
+                          {(x.tagCodes ?? []).slice(0, 4).map((tagCode) => (
+                            <Chip key={tagCode} size="small" label={tagCode} />
                           ))}
                           <Typography variant="caption" color="text.secondary" component="span">
                             {x.createdByUsername}
@@ -163,7 +164,7 @@ export const DynamicFormPicker: React.FC<DynamicFormPickerProps> = React.memo(fu
                 {!isLoading && rows.length === 0 && (
                   <Box sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary" textAlign="center">
-                      Khong co Dynamic Form phu hop.
+                      Không có biểu mẫu động phù hợp.
                     </Typography>
                   </Box>
                 )}

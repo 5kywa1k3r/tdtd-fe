@@ -2,6 +2,7 @@ import { baseApi } from "./base/baseApi";
 import { type PagedResult } from "../types/pagedResult";
 
 export type LabelScopeType = "GLOBAL" | "LEVEL" | "UNIT";
+export type LabelDataType = "NUMBER" | "SHORT_TEXT" | "LONG_TEXT" | "DATE" | "BOOLEAN";
 
 export type LabelRow = {
   id: string;
@@ -10,6 +11,7 @@ export type LabelRow = {
   description?: string | null;
   color?: string | null;
   groupCode?: string | null;
+  dataType: LabelDataType;
   scopeType: LabelScopeType;
   scopeId?: string | null;
   isSystem: boolean;
@@ -39,6 +41,7 @@ export type CreateLabelReq = {
   description?: string | null;
   color?: string | null;
   groupCode?: string | null;
+  dataType?: LabelDataType | null;
   scopeType?: LabelScopeType | null;
   scopeId?: string | null;
   isActive?: boolean;
@@ -49,6 +52,7 @@ export type UpdateLabelReq = {
   description?: string | null;
   color?: string | null;
   groupCode?: string | null;
+  dataType?: LabelDataType | null;
   isActive?: boolean;
 };
 

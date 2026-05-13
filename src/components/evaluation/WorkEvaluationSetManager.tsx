@@ -31,6 +31,7 @@ import {
   useDeactivateEvaluationTemplateMutation,
   useGetEvaluationTemplatesQuery,
 } from "../../api/evaluationTemplateApi";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type Props = {
   disabled?: boolean;
@@ -148,16 +149,16 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
         <Stack spacing={2}>
           <Stack direction={{ xs: "column", md: "row" }} alignItems={{ xs: "stretch", md: "center" }} spacing={1.5}>
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h6">Bộ mã đánh giá thủ công</Typography>
+              <Typography variant="h6">{uiText(UITextKey.TextBoMaDanhGiaThuCong)}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Quản lý bộ mã đánh giá dùng chung. Work chọn một bộ để dùng, assignment chọn từ các mã con của bộ đó.
+                Quản lý bộ mã đánh giá dùng chung. Đầu việc chọn một bộ để dùng, công việc chọn từ các mã con của bộ đó.
               </Typography>
             </Box>
 
             <Stack direction="row" spacing={1} alignItems="center">
               <Chip size="small" color="primary" label={`Tổng bộ: ${options.length}`} />
               <Chip size="small" color="success" variant="outlined" label={`Đang dùng: ${options.filter((x) => x.isActive).length}`} />
-              <Tooltip title="Tải lại">
+              <Tooltip title={uiText(UITextKey.TextTaiLai)}>
                 <span>
                   <IconButton size="small" onClick={() => refetch()} disabled={isFetching}>
                     <RefreshOutlinedIcon fontSize="small" />
@@ -174,7 +175,7 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
               value={selected}
               onChange={(_, value) => setSelectedId(value?.id ?? "")}
               getOptionLabel={(option) => `${option.representativeLabel} (${option.representativeCode})`}
-              renderInput={(params) => <TextField {...params} size="small" label="Chọn bộ mã để xem nhanh" placeholder="Chọn bộ mã đánh giá" />}
+              renderInput={(params) => <TextField {...params} size="small" label={uiText(UITextKey.TextChonBoMaDeXemNhanh)} placeholder={uiText(UITextKey.TextChonBoMaDanhGia)} />}
               renderOption={(props, option) => (
                 <li {...props}>
                   <Stack spacing={0.25}>
@@ -231,13 +232,13 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
               </CardContent>
             </Card>
           ) : (
-            <Alert severity="info">Chưa có bộ mã đánh giá. Chọn Thêm mới để tạo.</Alert>
+            <Alert severity="info">{uiText(UITextKey.TextChuaCoBoMaDanhGiaChonThemMoi)}</Alert>
           )}
         </Stack>
       </CardContent>
 
       <Dialog open={dialogOpen} onClose={() => !busy && setDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Thêm bộ mã đánh giá</DialogTitle>
+        <DialogTitle>{uiText(UITextKey.TextThemBoMaDanhGia)}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
@@ -245,14 +246,14 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
               <TextField
                 size="small"
                 fullWidth
-                label="Mã đại diện"
+                label={uiText(UITextKey.TextMaDaiDien)}
                 value={form.representativeCode}
                 onChange={(e) => setForm((s) => ({ ...s, representativeCode: e.target.value }))}
               />
               <TextField
                 size="small"
                 fullWidth
-                label="Tên bộ mã"
+                label={uiText(UITextKey.TextTenBoMa)}
                 value={form.representativeLabel}
                 onChange={(e) => setForm((s) => ({ ...s, representativeLabel: e.target.value }))}
               />
@@ -260,19 +261,19 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
 
             <TextField
               size="small"
-              label="Phạm vi đơn vị"
+              label={uiText(UITextKey.TextPhamViDonVi)}
               value={form.unitCodeScope ?? ""}
               onChange={(e) => setForm((s) => ({ ...s, unitCodeScope: e.target.value || null }))}
-              helperText="Ví dụ: PV01"
+              helperText={uiText(UITextKey.TextViDuPV01)}
             />
 
             <Stack spacing={1}>
-              <Typography fontWeight={700}>Các mã con đi kèm</Typography>
+              <Typography fontWeight={700}>{uiText(UITextKey.TextCacMaConDiKem)}</Typography>
               {form.items.map((item, index) => (
                 <Stack key={`new-${index}`} direction={{ xs: "column", md: "row" }} spacing={1}>
                   <TextField
                     size="small"
-                    label="Mã con"
+                    label={uiText(UITextKey.TextMaCon)}
                     value={item.code}
                     onChange={(e) =>
                       setForm((s) => ({
@@ -284,7 +285,7 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
                   />
                   <TextField
                     size="small"
-                    label="Nhãn hiển thị"
+                    label={uiText(UITextKey.TextNhanHienThi)}
                     value={item.label}
                     onChange={(e) =>
                       setForm((s) => ({
@@ -314,7 +315,7 @@ export default function WorkEvaluationSetManager({ disabled, unitCodeScope = "PV
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)} disabled={busy}>Hủy</Button>
+          <Button onClick={() => setDialogOpen(false)} disabled={busy}>{uiText(UITextKey.TextHuy3)}</Button>
           <Button onClick={handleSave} variant="contained" disabled={busy}>
             {busy ? "Đang lưu..." : "Tạo mới"}
           </Button>

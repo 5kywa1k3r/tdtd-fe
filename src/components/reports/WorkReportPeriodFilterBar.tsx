@@ -1,5 +1,6 @@
 import { Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type WorkReportPeriodFilterValue = {
   statusBucket: "ALL" | "PENDING" | "SUBMITTED" | "OVERDUE" | "RETURNED";
@@ -33,7 +34,7 @@ export default function WorkReportPeriodFilterBar({ value, onChange, onReset }: 
           <TextField
             select
             size="small"
-            label="Trạng thái"
+            label={uiText(UITextKey.TextTrangThai)}
             value={value.statusBucket}
             onChange={(e) =>
               onChange({
@@ -42,11 +43,11 @@ export default function WorkReportPeriodFilterBar({ value, onChange, onReset }: 
             }
             sx={{ minWidth: 180 }}
           >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="PENDING">Chưa làm</MenuItem>
-            <MenuItem value="SUBMITTED">Đã nộp</MenuItem>
-            <MenuItem value="OVERDUE">Quá hạn</MenuItem>
-            <MenuItem value="RETURNED">Bị từ chối</MenuItem>
+            <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
+            <MenuItem value="PENDING">{uiText(UITextKey.TextChuaLam)}</MenuItem>
+            <MenuItem value="SUBMITTED">{uiText(UITextKey.TextDaNop)}</MenuItem>
+            <MenuItem value="OVERDUE">{uiText(UITextKey.TextQuaHan)}</MenuItem>
+            <MenuItem value="RETURNED">{uiText(UITextKey.TextBiTuChoi)}</MenuItem>
           </TextField>
 
           <Button

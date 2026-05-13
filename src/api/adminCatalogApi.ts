@@ -4,10 +4,18 @@ export type UnitTypeDto = {
   id: string;
   code: string;
   name: string;
+  positionRules?: UnitTypePositionRuleDto[];
   isDeleted: boolean;
   version: number;
   createdAtUtc: string;
   updatedAtUtc: string;
+};
+
+export type UnitTypePositionRuleDto = {
+  positionCode: string;
+  isEnabled: boolean;
+  maxUsersPerUnit?: number | null;
+  sortOrder: number;
 };
 
 export type CreateUnitTypeRequest = {
@@ -17,6 +25,7 @@ export type CreateUnitTypeRequest = {
 
 export type UpdateUnitTypeRequest = {
   name: string;
+  positionRules?: UnitTypePositionRuleDto[] | null;
   note?: string | null;
 };
 
@@ -31,6 +40,22 @@ export type PositionDto = {
   version: number;
   createdAtUtc: string;
   updatedAtUtc: string;
+};
+
+export type CreatePositionRequest = {
+  code: string;
+  name: string;
+  order: number;
+  rank: number;
+  unitTypeCodes: string[];
+};
+
+export type UpdatePositionRequest = {
+  name: string;
+  order: number;
+  rank: number;
+  unitTypeCodes: string[];
+  note?: string | null;
 };
 
 export const adminCatalogApi = baseApi.injectEndpoints({
@@ -81,6 +106,41 @@ export const adminCatalogApi = baseApi.injectEndpoints({
       }),
       providesTags: [{ type: 'Positions', id: 'LIST' }],
     }),
+
+    createPosition: b.mutation<PositionDto, CreatePositionRequest>({
+      query: (data) => ({
+        url: '/admin/positions',
+        method: 'POST',
+        data,
+      }),
+      invalidatesTags: [
+        { type: 'Positions', id: 'LIST' },
+        { type: 'UnitTypes', id: 'LIST' },
+      ],
+    }),
+
+    updatePosition: b.mutation<PositionDto, { id: string; data: UpdatePositionRequest }>({
+      query: ({ id, data }) => ({
+        url: `/admin/positions/${id}`,
+        method: 'PUT',
+        data,
+      }),
+      invalidatesTags: [
+        { type: 'Positions', id: 'LIST' },
+        { type: 'UnitTypes', id: 'LIST' },
+      ],
+    }),
+
+    deletePosition: b.mutation<void, string>({
+      query: (id) => ({
+        url: `/admin/positions/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: [
+        { type: 'Positions', id: 'LIST' },
+        { type: 'UnitTypes', id: 'LIST' },
+      ],
+    }),
   }),
   overrideExisting: true,
 });
@@ -91,4 +151,7 @@ export const {
   useUpdateUnitTypeMutation,
   useDeleteUnitTypeMutation,
   useListPositionsQuery,
+  useCreatePositionMutation,
+  useUpdatePositionMutation,
+  useDeletePositionMutation,
 } = adminCatalogApi;

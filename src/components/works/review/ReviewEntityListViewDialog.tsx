@@ -11,6 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type ReviewEntityListItem = {
   key: string;
@@ -93,7 +94,7 @@ const ReviewEntityListViewDialog: React.FC<Props> = ({
           >
             <TextField
               size="small"
-              label="Tìm nhanh"
+              label={uiText(UITextKey.TextTimNhanh2)}
               value={q}
               onChange={(e) => setQ(e.target.value)}
               fullWidth
@@ -120,7 +121,7 @@ const ReviewEntityListViewDialog: React.FC<Props> = ({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Đóng</Button>
+        <Button onClick={onClose}>{uiText(UITextKey.TextDong)}</Button>
       </DialogActions>
     </Dialog>
   );

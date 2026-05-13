@@ -13,11 +13,13 @@ import { useGetDashboardMindMapNodeSummaryQuery } from "../../../api/dashboardMi
 import type {
   DashboardMindMapBucket,
   DashboardMindMapFieldSummaryDto,
+  DashboardMindMapLabelSummaryDto,
   DashboardMindMapScopeRequest,
   DashboardMindMapTableSummaryDto,
 } from "../../../types/dashboardMindMap";
 import type { SummaryAnchorPosition } from "./AssignmentMindNode";
 import StatusStackedBar from "./StatusStackedBar";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type NodeSummaryPopoverProps = {
   open: boolean;
@@ -29,6 +31,7 @@ type NodeSummaryPopoverProps = {
   onOpenReportBucket: (nodeId: string, bucket: DashboardMindMapBucket) => void;
   onOpenTableMetric: (nodeId: string, metric: DashboardMindMapTableSummaryDto) => void;
   onOpenFieldMetric: (nodeId: string, metric: DashboardMindMapFieldSummaryDto) => void;
+  onOpenLabel: (nodeId: string, label: DashboardMindMapLabelSummaryDto) => void;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -38,7 +41,7 @@ function getErrorMessage(error: unknown): string {
     error?: string;
   };
 
-  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Khong tai duoc chi tiet node.";
+  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Không tải được chi tiết công việc.";
 }
 
 const metricNumberFormatter = new Intl.NumberFormat("vi-VN", {
@@ -71,14 +74,31 @@ function getTableMetricLabel(item: DashboardMindMapTableSummaryDto): string {
   return `${blockLabel}: ${axisLabel || item.metricKey}`;
 }
 
+function getTableModeLabel(tableMode?: string | null): string {
+  switch (tableMode) {
+    case "FIXED_GRID":
+      return "Bảng cố định";
+    case "APPEND_ROWS":
+      return "Thêm theo dòng";
+    case "APPEND_COLUMNS":
+      return "Thêm theo cột";
+    case "MATRIX":
+      return "Bảng ma trận";
+    case "SUMMARY_TEMPLATE":
+      return "Mẫu tổng hợp";
+    default:
+      return "Bảng";
+  }
+}
+
 function getTableMetricTitle(item: DashboardMindMapTableSummaryDto): string {
   return [
     item.metricKey,
-    `mode=${item.tableMode}`,
-    `sum=${formatMetricNumber(item.sum)}`,
-    `avg=${formatMetricNumber(item.average)}`,
-    `values=${item.valueCount}`,
-    `reports=${item.reportCount}`,
+    `kiểu bảng=${getTableModeLabel(item.tableMode)}`,
+    `tổng=${formatMetricNumber(item.sum)}`,
+    `trung bình=${formatMetricNumber(item.average)}`,
+    `giá trị=${item.valueCount}`,
+    `báo cáo=${item.reportCount}`,
   ].join(" | ");
 }
 
@@ -106,12 +126,12 @@ function getFieldMetricValue(item: DashboardMindMapFieldSummaryDto): string {
 function getFieldMetricTitle(item: DashboardMindMapFieldSummaryDto): string {
   return [
     item.fieldKey,
-    `type=${item.fieldType}`,
-    `values=${item.valueCount}`,
-    `reports=${item.reportCount}`,
-    item.sum != null ? `sum=${formatMetricNumber(item.sum)}` : null,
-    item.average != null ? `avg=${formatMetricNumber(item.average)}` : null,
-    item.latestDateUtc ? `latest=${formatMetricDate(item.latestDateUtc)}` : null,
+    `kiểu=${item.fieldType}`,
+    `giá trị=${item.valueCount}`,
+    `báo cáo=${item.reportCount}`,
+    item.sum != null ? `tổng=${formatMetricNumber(item.sum)}` : null,
+    item.average != null ? `trung bình=${formatMetricNumber(item.average)}` : null,
+    item.latestDateUtc ? `mới nhất=${formatMetricDate(item.latestDateUtc)}` : null,
   ]
     .filter(Boolean)
     .join(" | ");
@@ -128,6 +148,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
     onOpenReportBucket,
     onOpenTableMetric,
     onOpenFieldMetric,
+    onOpenLabel,
   } = props;
 
   const { data, isFetching, error } = useGetDashboardMindMapNodeSummaryQuery(
@@ -172,10 +193,10 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
           ) : (
             <>
               <Typography variant="caption" color="text.secondary" fontWeight={700}>
-                {data?.node.code || data?.node.dynamicExcelCode || "Assignment"}
+                {data?.node.code || data?.node.dynamicExcelCode || "Công việc"}
               </Typography>
               <Typography variant="h6" fontWeight={800} sx={{ mt: 0.35 }}>
-                {data?.node.dynamicExcelName || "Node detail"}
+                {data?.node.dynamicExcelName || "Chi tiết công việc"}
               </Typography>
             </>
           )}
@@ -185,7 +206,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
 
         {(scope.fromUtc || scope.toUtc || scope.unitIds.length > 0) && !isFetching ? (
           <Typography variant="caption" color="text.secondary">
-            Scope dang ap dung cho summary va drilldown.
+            Đang áp dụng phạm vi lọc cho phần tóm tắt và chi tiết.
           </Typography>
         ) : null}
 
@@ -198,10 +219,10 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
             </>
           ) : (
             <>
-              <Chip size="small" label={`${data?.activeAssignmentCount ?? 0} assignment`} />
-              <Chip size="small" label={`${data?.descendantAssignmentCount ?? 0} hau due`} />
-              <Chip size="small" label={`${data?.totalAssigneeCount ?? 0} don vi/nguoi`} />
-              <Chip size="small" label={`${data?.reportSummary.total ?? 0} report`} />
+              <Chip size="small" label={`${data?.activeAssignmentCount ?? 0} công việc`} />
+              <Chip size="small" label={`${data?.descendantAssignmentCount ?? 0} công việc con`} />
+              <Chip size="small" label={`${data?.totalAssigneeCount ?? 0} đơn vị/người`} />
+              <Chip size="small" label={`${data?.reportSummary.total ?? 0} báo cáo`} />
             </>
           )}
         </Stack>
@@ -216,8 +237,8 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
         ) : (
           <>
             <StatusStackedBar
-              title="Theo don vi / nguoi"
-              helperText="Click vao tung mau de mo danh sach don vi tuong ung."
+              title={uiText(UITextKey.TextTheoDonViNguoi)}
+              helperText={uiText(UITextKey.TextClickVaoTungMauDeMoDanhSachDon)}
               bar={data?.unitBar}
               onSegmentClick={(bucket) => {
                 if (!nodeId) return;
@@ -226,8 +247,8 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
             />
 
             <StatusStackedBar
-              title="Theo tong report"
-              helperText="Drilldown theo report/ky bao cao trong toan bo subtree cua node."
+              title={uiText(UITextKey.TextTheoTongReport)}
+              helperText={uiText(UITextKey.TextDrilldownTheoReportKyBaoCaoTrongToanBo)}
               bar={data?.reportBar}
               onSegmentClick={(bucket) => {
                 if (!nodeId) return;
@@ -240,7 +261,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
                 <Divider />
                 <Stack spacing={0.8}>
                   <Typography variant="subtitle2" fontWeight={800}>
-                    Field thong ke
+                    Trường thống kê
                   </Typography>
                   <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                     {data.fieldSummaries.map((item) => (
@@ -268,7 +289,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
                     ))}
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
-                    Chi hien field da bat showInTree trong Dynamic Form.
+                    Chỉ hiển thị trường đã bật hiện trên sơ đồ trong biểu mẫu động.
                   </Typography>
                 </Stack>
               </>
@@ -279,7 +300,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
                 <Divider />
                 <Stack spacing={0.8}>
                   <Typography variant="subtitle2" fontWeight={800}>
-                    Metric bang
+                    Chỉ số trong bảng
                   </Typography>
                   <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                     {data.tableSummaries.map((item) => (
@@ -307,7 +328,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
                     ))}
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
-                    Tong theo projection; click de xem report dong gop.
+                    Tổng theo dữ liệu đã tính sẵn; bấm để xem báo cáo đóng góp.
                   </Typography>
                 </Stack>
               </>
@@ -318,7 +339,7 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
                 <Divider />
                 <Stack spacing={0.8}>
                   <Typography variant="subtitle2" fontWeight={800}>
-                    Nhan thong ke
+                    Nhãn thống kê
                   </Typography>
                   <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                     {data.labelSummaries.map((item) => {
@@ -329,10 +350,15 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
                           size="small"
                           variant="outlined"
                           label={`${label}: ${item.rowCount}`}
+                          onClick={() => {
+                            if (!nodeId) return;
+                            onOpenLabel(nodeId, item);
+                          }}
                           sx={{
                             maxWidth: "100%",
                             borderColor: item.labelColor || "divider",
                             color: "text.primary",
+                            cursor: "pointer",
                             "& .MuiChip-label": {
                               overflow: "hidden",
                               textOverflow: "ellipsis",

@@ -21,6 +21,8 @@ export type WorkFormState = {
   note: string;
 };
 
+export type WorkFormDraft = Partial<Pick<WorkFormState, "name" | "description" | "note">>;
+
 const toYmd = (iso: string | null | undefined, fallback: string) =>
   iso ? dayjs(iso).format("YYYY-MM-DD") : fallback;
 
@@ -81,7 +83,13 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
     [state.startDate, state.endDate]
   );
 
-  const validate = (nameLabel: string) => {
+  const mergeDraft = (draft?: WorkFormDraft): WorkFormState => ({
+    ...state,
+    ...draft,
+  });
+
+  const validate = (nameLabel: string, draft?: WorkFormDraft) => {
+    const state = mergeDraft(draft);
     if (!state.name.trim()) return `${nameLabel} không được để trống.`;
     if (!state.type) return "Vui lòng chọn loại công việc.";
     if (!state.startDate || !state.endDate) return "Vui lòng chọn Từ ngày/Đến ngày.";
@@ -94,32 +102,40 @@ export function useWorkFormState(initialData?: WorkDetail, formType?: WorkUiType
     return null;
   };
 
-  const buildCreatePayload = (): WorkCreateReq => ({
-    name: state.name.trim(),
-    description: state.description.trim() ? state.description.trim() : null,
-    note: state.note.trim() ? state.note.trim() : null,
-    leaderDirectiveUserId: state.leaderDirectiveUserId.trim() || null,
-    leaderWatchUserIds: state.leaderWatchUserIds,
-    evaluationTemplateId: state.evaluationTemplateId.trim() || null,
-    startDate: isoOrNull(state.startDate),
-    endDate: isoOrNull(state.endDate),
-    dueDate: isoOrNull(state.dueDate),
-    priority: state.priority ?? null,
-    type: state.type,
-  });
+  const buildCreatePayload = (draft?: WorkFormDraft): WorkCreateReq => {
+    const current = mergeDraft(draft);
 
-  const buildUpdatePayload = (): WorkUpdateReq => ({
-    name: state.name.trim(),
-    description: state.description.trim() ? state.description.trim() : null,
-    note: state.note.trim() ? state.note.trim() : null,
-    leaderDirectiveUserId: state.leaderDirectiveUserId.trim() || null,
-    leaderWatchUserIds: state.leaderWatchUserIds,
-    evaluationTemplateId: state.evaluationTemplateId.trim() || null,
-    startDate: isoOrNull(state.startDate),
-    endDate: isoOrNull(state.endDate),
-    dueDate: isoOrNull(state.dueDate),
-    priority: state.priority ?? null,
-  });
+    return {
+      name: current.name.trim(),
+      description: current.description.trim() ? current.description.trim() : null,
+      note: current.note.trim() ? current.note.trim() : null,
+      leaderDirectiveUserId: current.leaderDirectiveUserId.trim() || null,
+      leaderWatchUserIds: current.leaderWatchUserIds,
+      evaluationTemplateId: current.evaluationTemplateId.trim() || null,
+      startDate: isoOrNull(current.startDate),
+      endDate: isoOrNull(current.endDate),
+      dueDate: isoOrNull(current.dueDate),
+      priority: current.priority ?? null,
+      type: current.type,
+    };
+  };
+
+  const buildUpdatePayload = (draft?: WorkFormDraft): WorkUpdateReq => {
+    const current = mergeDraft(draft);
+
+    return {
+      name: current.name.trim(),
+      description: current.description.trim() ? current.description.trim() : null,
+      note: current.note.trim() ? current.note.trim() : null,
+      leaderDirectiveUserId: current.leaderDirectiveUserId.trim() || null,
+      leaderWatchUserIds: current.leaderWatchUserIds,
+      evaluationTemplateId: current.evaluationTemplateId.trim() || null,
+      startDate: isoOrNull(current.startDate),
+      endDate: isoOrNull(current.endDate),
+      dueDate: isoOrNull(current.dueDate),
+      priority: current.priority ?? null,
+    };
+  };
 
   return { state, setState, dateValue, validate, buildCreatePayload, buildUpdatePayload };
 }

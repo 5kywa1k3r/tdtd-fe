@@ -62,7 +62,7 @@ export function useTusUpload() {
 
       onError: (err) => {
         const uploadId = extractUploadId(u.url);
-        setState({ status: 'error', error: err?.message || 'Upload error', uploadId });
+        setState({ status: 'error', error: err?.message || 'Tải tệp lên thất bại.', uploadId });
       },
 
       onProgress: (bytesUploaded, bytesTotal) => {
@@ -74,7 +74,7 @@ export function useTusUpload() {
       onSuccess: () => {
         const uploadId = extractUploadId(u.url);
         if (!uploadId) {
-          setState({ status: 'error', error: 'Cannot extract uploadId from tus url.' });
+          setState({ status: 'error', error: 'Không lấy được mã tệp đã tải lên.' });
           return;
         }
         setState({ status: 'success', uploadId });

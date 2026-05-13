@@ -87,6 +87,7 @@ export interface WorkDetail {
   owner?: UserRefDTO | null;
   leaderDirective?: UserRefDTO | null;
   leaderWatch?: UserRefDTO[];
+  canEdit?: boolean;
 }
 
 export interface ParentWork extends WorkListRow {

@@ -12,9 +12,10 @@ import {
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import FlagIcon from "@mui/icons-material/Flag";
-import TableChartIcon from "@mui/icons-material/TableChart";
 import DynamicFormIcon from "@mui/icons-material/DynamicForm";
+import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
 import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
+import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useGetMeQuery } from "../api/base/meApi";
@@ -33,6 +34,7 @@ export const Sidebar = () => {
       role === Role.MANAGER_LEVEL ||
       isManagerUnitRole(role),
   );
+  const canSeeOperations = canManageLabels;
 
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
@@ -49,7 +51,7 @@ export const Sidebar = () => {
           <ListItemIcon>
             <DashboardIcon />
           </ListItemIcon>
-          <ListItemText primary="Tong quan" />
+          <ListItemText primary="Tổng quan" />
         </ListItemButton>
       </List>
 
@@ -58,7 +60,7 @@ export const Sidebar = () => {
       <List
         subheader={(
           <ListSubheader component="div">
-            Nhiem vu
+            Nhiệm vụ
           </ListSubheader>
         )}
       >
@@ -69,7 +71,7 @@ export const Sidebar = () => {
           <ListItemIcon>
             <AssignmentIcon />
           </ListItemIcon>
-          <ListItemText primary="Danh sach nhiem vu" />
+          <ListItemText primary="Danh sách nhiệm vụ" />
         </ListItemButton>
       </List>
 
@@ -78,7 +80,7 @@ export const Sidebar = () => {
       <List
         subheader={(
           <ListSubheader component="div">
-            Chi tieu
+            Chỉ tiêu
           </ListSubheader>
         )}
       >
@@ -89,7 +91,7 @@ export const Sidebar = () => {
           <ListItemIcon>
             <FlagIcon />
           </ListItemIcon>
-          <ListItemText primary="Danh sach chi tieu" />
+          <ListItemText primary="Danh sách chỉ tiêu" />
         </ListItemButton>
       </List>
 
@@ -98,7 +100,7 @@ export const Sidebar = () => {
       <List
         subheader={(
           <ListSubheader component="div">
-            Cong cu
+            Công cụ
           </ListSubheader>
         )}
       >
@@ -107,9 +109,9 @@ export const Sidebar = () => {
           onClick={() => navigate("/dynamic-excel")}
         >
           <ListItemIcon>
-            <TableChartIcon />
+            <TableChartOutlinedIcon />
           </ListItemIcon>
-          <ListItemText primary="Bang bieu dong" />
+          <ListItemText primary="Bảng biểu động" />
         </ListItemButton>
         <ListItemButton
           selected={isActive("/dynamic-forms")}
@@ -118,7 +120,7 @@ export const Sidebar = () => {
           <ListItemIcon>
             <DynamicFormIcon />
           </ListItemIcon>
-          <ListItemText primary="Dynamic forms" />
+          <ListItemText primary="Biểu mẫu động" />
         </ListItemButton>
         {canManageLabels && (
           <ListItemButton
@@ -128,7 +130,18 @@ export const Sidebar = () => {
             <ListItemIcon>
               <LocalOfferOutlinedIcon />
             </ListItemIcon>
-            <ListItemText primary="Quan ly nhan" />
+            <ListItemText primary="Quản lý nhãn" />
+          </ListItemButton>
+        )}
+        {canSeeOperations && (
+          <ListItemButton
+            selected={isActive("/operations")}
+            onClick={() => navigate("/operations")}
+          >
+            <ListItemIcon>
+              <ManageSearchIcon />
+            </ListItemIcon>
+            <ListItemText primary="Vận hành hệ thống" />
           </ListItemButton>
         )}
       </List>

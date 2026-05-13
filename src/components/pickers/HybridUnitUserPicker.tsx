@@ -36,6 +36,7 @@ import {
   useLazySearchPickerLeadersByUnitQuery,
 } from "../../api/pickersApi";
 import { type UserRefDTO } from "../../types/userRefDto";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type PickerKind = "leaders" | "assignees";
 export type PickerMode = "single" | "multiple";
@@ -556,7 +557,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
             endAdornment: (
               <InputAdornment position="end">
                 {selected.length > 0 && (
-                  <Tooltip title="Xóa tất cả">
+                  <Tooltip title={uiText(UITextKey.TextXoaTatCa)}>
                     <IconButton
                       size="small"
                       tabIndex={-1}
@@ -570,7 +571,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
                     </IconButton>
                   </Tooltip>
                 )}
-                <Tooltip title="Chọn đơn vị và đánh dấu người dùng hoặc tìm kiếm theo tên tài khoản">
+                <Tooltip title={uiText(UITextKey.TextChonDonViVaDanhDauNguoiDungHoac)}>
                   <IconButton size="small" tabIndex={-1} sx={{ color: "text.disabled" }}>
                     <InfoOutlinedIcon fontSize="small" />
                   </IconButton>
@@ -651,7 +652,7 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
           <TextField
             size="small"
             fullWidth
-            label="Tìm theo tên tài khoản"
+            label={uiText(UITextKey.TextTimTheoTenTaiKhoan)}
             value={usernameText}
             onChange={(e) => setUsernameText(e.target.value)}
             onKeyDown={(e) => {
@@ -664,12 +665,12 @@ export const HybridUnitUserPicker: React.FC<HybridUnitUserPickerProps> = React.m
               input: {
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Tìm kiếm trong đơn vị đang chọn">
+                    <Tooltip title={uiText(UITextKey.TextTimKiemTrongDonViDangChon)}>
                       <IconButton size="small" onClick={handleSearchClick}>
                         <SearchIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Tìm kiếm nhanh theo tên tài khoản">
+                    <Tooltip title={uiText(UITextKey.TextTimKiemNhanhTheoTenTaiKhoan)}>
                       <Button
                         size="small"
                         variant="text"

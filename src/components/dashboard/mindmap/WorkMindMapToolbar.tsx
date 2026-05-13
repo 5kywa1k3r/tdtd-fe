@@ -16,6 +16,7 @@ import UnfoldLessRoundedIcon from "@mui/icons-material/UnfoldLessRounded";
 import type { WorkTypeCore } from "../../../types/work";
 import { WORK_TYPE, WORK_TYPE_OPTIONS } from "../../../types/work";
 import { getWorkStatusChipColor, getWorkStatusLabel } from "../../../utils/dashboardUi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type WorkMindMapOption = {
   id: string;
@@ -76,16 +77,16 @@ export default function WorkMindMapToolbar(props: WorkMindMapToolbarProps) {
         >
           <Box>
             <Typography variant="h5" fontWeight={800}>
-              Dashboard Mind Map
+              Sơ đồ công việc
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4, maxWidth: 860 }}>
-              Chon mot work de bat dau tu node work. Owner se thay root, user thuc hien se thay assignment dau vao trong nhanh duoc phan.
+              Chọn một đầu việc để bắt đầu. Người phụ trách thấy cây từ gốc, người thực hiện thấy công việc đầu vào trong nhánh được phân công.
             </Typography>
           </Box>
 
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip size="small" label={`${rootCount} assignment dang hien thi`} />
-            <Chip size="small" color="primary" variant="outlined" label={`${visibleNodeCount} node đã nạp`} />
+            <Chip size="small" label={`${rootCount} công việc đang hiển thị`} />
+            <Chip size="small" color="primary" variant="outlined" label={`${visibleNodeCount} mục đã nạp`} />
           </Stack>
         </Stack>
 
@@ -121,7 +122,7 @@ export default function WorkMindMapToolbar(props: WorkMindMapToolbarProps) {
               <TextField
                 {...params}
                 label={workType === WORK_TYPE.TASK ? "Chọn nhiệm vụ" : "Chọn chỉ tiêu"}
-                placeholder="Tìm theo mã hoặc tên work"
+                placeholder={uiText(UITextKey.TextTimTheoMaHoacTenWork)}
               />
             )}
             renderOption={(optionProps, option) => (
@@ -147,7 +148,7 @@ export default function WorkMindMapToolbar(props: WorkMindMapToolbarProps) {
               Thu gọn
             </Button>
             <Button variant="outlined" startIcon={<RestartAltRoundedIcon />} onClick={onResetWork}>
-              Đổi work
+              Đổi đầu việc
             </Button>
           </Stack>
         </Stack>
@@ -158,7 +159,7 @@ export default function WorkMindMapToolbar(props: WorkMindMapToolbarProps) {
               color={getWorkStatusChipColor(selectedWork.status)}
               label={getWorkStatusLabel(selectedWork.status)}
             />
-            <Chip variant="outlined" label={WORK_TYPE_OPTIONS.find((x) => x.value === selectedWork.type)?.label ?? "Work"} />
+            <Chip variant="outlined" label={WORK_TYPE_OPTIONS.find((x) => x.value === selectedWork.type)?.label ?? "Đầu việc"} />
             <Typography variant="body2" color="text.secondary" sx={{ alignSelf: "center" }}>
               {selectedWork.code} - {selectedWork.name}
             </Typography>

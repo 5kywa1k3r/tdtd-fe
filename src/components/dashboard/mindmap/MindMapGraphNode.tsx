@@ -18,6 +18,7 @@ import AddIcon from "@mui/icons-material/Add";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import Groups2OutlinedIcon from "@mui/icons-material/Groups2Outlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { Handle, Position, type NodeProps } from "reactflow";
@@ -29,8 +30,9 @@ import type {
   DashboardStackedBarDto,
 } from "../../../types/dashboardMindMap";
 import type { SummaryAnchorPosition } from "./AssignmentMindNode";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
-export type MindMapNodeKind = "work" | "assignment" | "template" | "user" | "report" | "loadMore";
+export type MindMapNodeKind = "work" | "assignment" | "template" | "user" | "report" | "loadMore" | "empty";
 export type AssignmentBranchKind = "assignments" | "reports";
 
 export type MindMapGraphChip = {
@@ -63,6 +65,7 @@ export type MindMapGraphNodeData = {
   assignmentBranch?: AssignmentBranchKind | null;
   canOpenSummary?: boolean;
   userOptions?: DashboardMindMapTemplateUserDto[];
+  userOptionsLoaded?: boolean;
   selectedUserIds?: string[];
   userSearchText?: string;
   reportFilters?: UserReportFilters;
@@ -78,6 +81,7 @@ export type MindMapGraphNodeData = {
   onLoadMore?: () => void;
   onSelectedUsersChange?: (userIds: string[]) => void;
   onUserSearchTextChange?: (value: string) => void;
+  onUserSearchFocus?: () => void;
   onReportFiltersChange?: (filters: UserReportFilters) => void;
   onResetReports?: () => void;
   onStackedBarSegmentClick?: (bucket: DashboardMindMapBucket) => void;
@@ -86,12 +90,33 @@ export type MindMapGraphNodeData = {
 const ALL_VALUE = "__ALL__";
 
 const DEFAULT_REPORT_STATUS_OPTIONS: Array<{ value: DashboardMindMapBucket; label: string }> = [
-  { value: "PENDING", label: "Chua mo" },
-  { value: "DRAFT", label: "Ban nhap" },
-  { value: "SUBMITTED", label: "Da gui" },
-  { value: "APPROVED", label: "Da duyet" },
-  { value: "OVERDUE", label: "Qua han" },
+  { value: "PENDING", label: "Chưa bắt đầu" },
+  { value: "DRAFT", label: "Bản nháp" },
+  { value: "SUBMITTED", label: "Đã gửi" },
+  { value: "APPROVED", label: "Đã duyệt" },
+  { value: "OVERDUE", label: "Quá hạn" },
 ];
+
+function getNodeMinHeight(kind: MindMapNodeKind): number {
+  switch (kind) {
+    case "template":
+      return 350;
+    case "user":
+      return 365;
+    case "assignment":
+      return 235;
+    case "work":
+      return 220;
+    case "report":
+      return 205;
+    case "empty":
+      return 132;
+    case "loadMore":
+      return 96;
+    default:
+      return 205;
+  }
+}
 
 function normalizeBucket(key: string): DashboardMindMapBucket | null {
   const upper = key.toUpperCase();
@@ -120,7 +145,7 @@ function CompactStackedBar(props: {
     <Stack spacing={0.55}>
       <Stack direction="row" justifyContent="space-between" spacing={1}>
         <Typography variant="caption" color="text.secondary" fontWeight={800}>
-          {bar.label || "Tong quan"}
+          {bar.label || "Tổng quan"}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {total}
@@ -210,6 +235,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
   };
 
   const isLoadMore = data.kind === "loadMore";
+  const isEmpty = data.kind === "empty";
   const accentColor = data.kind === "work"
     ? "rgba(20,184,166,0.26)"
     : data.kind === "template"
@@ -218,7 +244,9 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
         ? "rgba(59,130,246,0.22)"
         : data.kind === "report"
           ? "rgba(34,197,94,0.18)"
-          : "rgba(148,163,184,0.22)";
+          : isEmpty
+            ? "rgba(148,163,184,0.16)"
+            : "rgba(148,163,184,0.22)";
 
   return (
     <>
@@ -234,6 +262,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
         }}
         sx={{
           width: isLoadMore ? 220 : 340,
+          minHeight: getNodeMinHeight(data.kind),
           borderRadius: 4,
           border: "1px solid",
           borderColor: data.focused ? "primary.main" : data.statusAccent?.color ?? "rgba(148,163,184,0.35)",
@@ -318,6 +347,23 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
             />
           ) : null}
 
+          {isEmpty ? (
+            <Stack
+              direction="row"
+              spacing={0.8}
+              alignItems="flex-start"
+              sx={{
+                color: "text.secondary",
+                px: 0.2,
+              }}
+            >
+              <InfoOutlinedIcon fontSize="small" />
+              <Typography variant="caption">
+                {data.subtitle || "Không có dữ liệu trong nhánh này."}
+              </Typography>
+            </Stack>
+          ) : null}
+
           {data.kind === "work" ? (
             <Button
               size="small"
@@ -328,7 +374,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                 data.onToggleWork?.();
               }}
             >
-              {data.expanded ? "Thu gon root" : "Mo root assignment"}
+              {data.expanded ? "Thu gọn gốc" : "Mở công việc đầu vào"}
             </Button>
           ) : null}
 
@@ -343,7 +389,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                   data.onExpandAssignmentBranch?.(data.assignment!, "assignments");
                 }}
               >
-                Nhanh con
+                Nhánh con
               </Button>
               <Button
                 size="small"
@@ -354,7 +400,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                   data.onExpandAssignmentBranch?.(data.assignment!, "reports");
                 }}
               >
-                Report
+                Báo cáo
               </Button>
               <Button
                 size="small"
@@ -365,53 +411,64 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                   openSummary(event.currentTarget);
                 }}
               >
-                Tong quan
+                Tổng quan
               </Button>
             </Stack>
           ) : null}
 
           {data.kind === "template" ? (
-            <Stack spacing={0.8}>
+            <Stack spacing={0.8} className="nodrag nopan">
               <TextField
+                className="nodrag nopan"
                 size="small"
-                label="Tim user"
+                label={uiText(UITextKey.TextTimUser)}
                 value={data.userSearchText ?? ""}
-                placeholder="Username hoac ho ten"
+                placeholder={uiText(UITextKey.TextUsernameHoacHoTen)}
+                onFocus={() => data.onUserSearchFocus?.()}
                 onChange={(event) => data.onUserSearchTextChange?.(event.target.value)}
+                onPointerDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
               />
-              {data.userOptions?.length ? (
-                <Select
-                  multiple
-                  size="small"
-                  displayEmpty
-                  value={data.selectedUserIds ?? []}
-                  onChange={handleUserChange}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => event.stopPropagation()}
-                  renderValue={(selected) => {
-                    if (selected.length === 0) return "Chon tat ca user";
-                    return `${selected.length} user duoc chon`;
-                  }}
-                >
-                  <MenuItem value={ALL_VALUE}>
-                    <Checkbox checked={(data.selectedUserIds ?? []).length === 0} />
-                    <ListItemText primary="Chon tat ca" />
+              <Select
+                className="nodrag nopan"
+                multiple
+                size="small"
+                displayEmpty
+                value={data.selectedUserIds ?? []}
+                onChange={handleUserChange}
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                renderValue={(selected) => {
+                  if (selected.length === 0) return "Tất cả người dùng";
+                  return `${selected.length} người dùng được chọn`;
+                }}
+              >
+                <MenuItem value={ALL_VALUE}>
+                  <Checkbox checked={(data.selectedUserIds ?? []).length === 0} />
+                  <ListItemText primary="Tất cả người dùng" />
+                </MenuItem>
+                <Divider />
+                {(data.userOptions ?? []).length === 0 ? (
+                  <MenuItem disabled>
+                    <ListItemText
+                      primary={data.userOptionsLoaded ? "Không có người dùng phù hợp" : "Tìm hoặc mở danh sách người dùng"}
+                    />
                   </MenuItem>
-                  <Divider />
-                  {(data.userOptions ?? []).map((user) => (
-                    <MenuItem key={user.assigneeUserId} value={user.assigneeUserId}>
-                      <Checkbox checked={(data.selectedUserIds ?? []).includes(user.assigneeUserId)} />
-                      <ListItemText
-                        primary={user.assigneeFullName || user.assigneeUsername || user.assigneeUserId}
-                        secondary={user.unitLabel}
-                      />
-                    </MenuItem>
-                  ))}
-                </Select>
-              ) : null}
+                ) : null}
+                {(data.userOptions ?? []).map((user) => (
+                  <MenuItem key={user.assigneeUserId} value={user.assigneeUserId}>
+                    <Checkbox checked={(data.selectedUserIds ?? []).includes(user.assigneeUserId)} />
+                    <ListItemText
+                      primary={user.assigneeFullName || user.assigneeUsername || user.assigneeUserId}
+                      secondary={user.unitLabel}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
               <Button
+                className="nodrag nopan"
                 size="small"
                 variant={data.expanded ? "outlined" : "contained"}
                 startIcon={<Groups2OutlinedIcon />}
@@ -420,29 +477,31 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                   data.onToggleGeneric?.();
                 }}
               >
-                {data.expanded ? "Thu gon user" : "Mo user bao cao"}
+                {data.expanded ? "Thu gọn người dùng" : "Mở người báo cáo"}
               </Button>
             </Stack>
           ) : null}
 
           {data.kind === "user" ? (
-            <Stack spacing={0.8}>
+            <Stack spacing={0.8} className="nodrag nopan">
               <Select
+                className="nodrag nopan"
                 multiple
                 size="small"
                 displayEmpty
                 value={data.reportFilters?.statusBuckets ?? []}
                 onChange={handleReportStatusChange}
+                onPointerDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
                 renderValue={(selected) => {
-                  if (selected.length === 0) return "Tat ca trang thai";
-                  return `${selected.length} trang thai`;
+                  if (selected.length === 0) return "Tất cả trạng thái";
+                  return `${selected.length} trạng thái`;
                 }}
               >
                 <MenuItem value={ALL_VALUE}>
                   <Checkbox checked={(data.reportFilters?.statusBuckets ?? []).length === 0} />
-                  <ListItemText primary="Chon tat ca" />
+                  <ListItemText primary="Chọn tất cả" />
                 </MenuItem>
                 <Divider />
                 {(data.reportStatusOptions ?? DEFAULT_REPORT_STATUS_OPTIONS).map((option) => (
@@ -455,22 +514,26 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
 
               <Stack direction="row" spacing={0.75}>
                 <TextField
+                  className="nodrag nopan"
                   size="small"
                   type="date"
-                  label="Tu ngay"
+                  label={uiText(UITextKey.TextTuNgay)}
                   value={data.reportFilters?.fromDate ?? ""}
                   onChange={(event) => updateReportDateFilter("fromDate", event.target.value)}
+                  onPointerDown={(event) => event.stopPropagation()}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => event.stopPropagation()}
                   InputLabelProps={{ shrink: true }}
                   sx={{ flex: 1 }}
                 />
                 <TextField
+                  className="nodrag nopan"
                   size="small"
                   type="date"
-                  label="Den ngay"
+                  label={uiText(UITextKey.TextDenNgay)}
                   value={data.reportFilters?.toDate ?? ""}
                   onChange={(event) => updateReportDateFilter("toDate", event.target.value)}
+                  onPointerDown={(event) => event.stopPropagation()}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => event.stopPropagation()}
                   InputLabelProps={{ shrink: true }}
@@ -480,6 +543,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
 
               <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                 <Button
+                  className="nodrag nopan"
                   size="small"
                   variant={data.expanded ? "outlined" : "contained"}
                   startIcon={data.expanded ? <RemoveIcon /> : <ArticleOutlinedIcon />}
@@ -488,10 +552,11 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                     data.onToggleGeneric?.();
                   }}
                 >
-                  {data.expanded ? "Thu gon report" : "Mo report"}
+                  {data.expanded ? "Thu gọn báo cáo" : "Mở báo cáo"}
                 </Button>
                 {data.canResetReports ? (
                   <Button
+                    className="nodrag nopan"
                     size="small"
                     variant="text"
                     onClick={(event) => {
@@ -499,7 +564,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                       data.onResetReports?.();
                     }}
                   >
-                    Thu gon list
+                    Thu gọn danh sách
                   </Button>
                 ) : null}
               </Stack>
@@ -516,7 +581,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                 data.onLoadMore?.();
               }}
             >
-              {data.loadMoreLabel ?? "Tai them"}
+              {data.loadMoreLabel ?? "Tải thêm"}
             </Button>
           ) : null}
         </Stack>

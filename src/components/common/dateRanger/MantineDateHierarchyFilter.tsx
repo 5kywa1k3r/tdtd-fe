@@ -36,6 +36,8 @@ interface Props {
   zIndex?: number;
   disabled?: boolean;
   allowedTypes?: HierarchyRangeType[];
+  name?: string;
+  id?: string;
 }
 
 export type DateHierarchyType = "day" | "month" | "quarter" | "year";
@@ -61,9 +63,13 @@ export const MantineDateHierarchyFilter: React.FC<Props> = ({
   zIndex = 2000,
   disabled,
   allowedTypes = ["day", "month", "quarter", "year"],
+  name,
+  id,
 }) => {
   const [opened, setOpened] = useState(false);
   const [draft, setDraft] = useState<HierarchyRangeValue>(value ?? defaultValue);
+  const generatedId = React.useId();
+  const inputId = id ?? name ?? `date-hierarchy-${generatedId}`;
 
   useEffect(() => {
     setDraft(value ?? defaultValue);
@@ -121,6 +127,8 @@ export const MantineDateHierarchyFilter: React.FC<Props> = ({
     >
       <Popover.Target>
         <TextInput
+          id={inputId}
+          name={name ?? inputId}
           readOnly
           disabled={disabled}
           placeholder={placeholder}

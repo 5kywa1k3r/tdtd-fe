@@ -4,28 +4,106 @@ import type {
   DynamicFormField,
   DynamicFormFieldType,
   DynamicFormSection,
+  DynamicFormStatisticColumn,
+  DynamicFormStatisticColumnLabel,
   DynamicFormStatisticConfig,
   DynamicFormTableIndexMapItem,
   DynamicFormTableMode,
 } from "./dynamicForm.types";
 
 export const fieldTypeLabels: Record<DynamicFormFieldType, string> = {
-  shortText: "Text",
-  longText: "Long text",
-  number: "Number",
-  date: "Date",
-  singleSelect: "Single select",
-  multiSelect: "Multi select",
-  boolean: "Boolean",
+  shortText: "Văn bản ngắn",
+  longText: "Văn bản dài",
+  number: "Số",
+  date: "Ngày",
+  singleSelect: "Chọn một",
+  multiSelect: "Chọn nhiều",
+  boolean: "Có/không",
 };
 
 export const tableModeLabels: Record<DynamicFormTableMode, string> = {
-  FIXED_GRID: "Fixed grid",
-  APPEND_ROWS: "Append rows",
-  APPEND_COLUMNS: "Append columns",
-  MATRIX: "Matrix",
-  SUMMARY_TEMPLATE: "Summary template",
+  FIXED_GRID: "Bảng cố định",
+  APPEND_ROWS: "Thêm theo dòng",
+  APPEND_COLUMNS: "Thêm theo cột",
+  MATRIX: "Bảng ma trận",
+  SUMMARY_TEMPLATE: "Mẫu tổng hợp",
 };
+
+export type DynamicExcelSpecKind = "TOP" | "LEFT" | "MATRIX";
+
+export const excelSpecKindLabels: Record<DynamicExcelSpecKind, string> = {
+  TOP: "Bảng ngang",
+  LEFT: "Bảng dọc",
+  MATRIX: "Bảng ma trận",
+};
+
+const legacyFieldLabels: Partial<Record<DynamicFormFieldType, string[]>> = {
+  shortText: ["Short text", "shortText"],
+  longText: ["Long text", "LongDate", "longText"],
+  number: ["Number", "number"],
+  date: ["Date", "date"],
+  singleSelect: ["Single select", "singleSelect"],
+  multiSelect: ["Multi select", "multiSelect"],
+  boolean: ["Boolean", "boolean"],
+};
+
+export const FIELD_DISPLAY_NAME_PLACEHOLDER = "Chưa đặt tên hiển thị";
+
+const genericFieldDisplayNamePattern =
+  /^(field|truong|number|date|short\s*text|shorttext|long\s*text|longtext|boolean|single\s*select|singleselect|multi\s*select|multiselect|so|ngay|van\s*ban\s*ngan|van\s*ban\s*dai|chon\s*mot|chon\s*nhieu|co\s*khong)[\s_-]*\d*$/i;
+
+const baseTableModesBySpecKind: Record<DynamicExcelSpecKind, DynamicFormTableMode[]> = {
+  TOP: ["FIXED_GRID", "APPEND_ROWS"],
+  LEFT: ["FIXED_GRID", "APPEND_COLUMNS"],
+  MATRIX: ["FIXED_GRID", "MATRIX"],
+};
+
+const allInputTableModes: DynamicFormTableMode[] = [
+  "FIXED_GRID",
+  "APPEND_ROWS",
+  "APPEND_COLUMNS",
+  "MATRIX",
+];
+
+export function normalizeExcelSpecKind(value: unknown): DynamicExcelSpecKind | null {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return normalized === "TOP" || normalized === "LEFT" || normalized === "MATRIX"
+    ? normalized
+    : null;
+}
+
+export function isTableModeAllowedForExcelSpecKind(
+  tableMode: DynamicFormTableMode,
+  specKind: DynamicExcelSpecKind | null | undefined,
+) {
+  if (tableMode === "SUMMARY_TEMPLATE") return true;
+  if (!specKind) return true;
+  return baseTableModesBySpecKind[specKind].includes(tableMode);
+}
+
+export function getAllowedTableModesForExcelSpecKind(
+  specKind: DynamicExcelSpecKind | null | undefined,
+  currentMode?: DynamicFormTableMode | null,
+) {
+  const base = specKind ? baseTableModesBySpecKind[specKind] : allInputTableModes;
+  const modes = [...base];
+  if (currentMode && !modes.includes(currentMode)) {
+    modes.push(currentMode);
+  }
+  return modes;
+}
+
+export function getExcelSpecKindFromBlockLike(value: unknown) {
+  const obj = typeof value === "string" ? parseJsonObject(value) : isPlainObject(value) ? value : null;
+  if (!obj) return null;
+  return normalizeExcelSpecKind(
+    obj.excelSpecKind ?? obj.ExcelSpecKind ?? obj.sourceKind ?? obj.SourceKind ?? obj.kind,
+  );
+}
+
+export const MAX_DYNAMIC_FORM_FIELDS = 200;
+export const MAX_DYNAMIC_FORM_TABLE_BLOCKS = 10;
+export const MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS = 30;
 
 export function createId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -34,9 +112,9 @@ export function createId(prefix: string) {
 export function createDefaultSection(): DynamicFormSection {
   return {
     id: createId("section"),
-    title: "Section 1",
+    title: "Phần 1",
     description: null,
-    labelCodes: [],
+    tagCodes: [],
     order: 0,
   };
 }
@@ -68,7 +146,9 @@ export function createDefaultField(
     id,
     sectionId,
     key: `${type}_${order + 1}`,
-    label: fieldTypeLabels[type],
+    name: "",
+    displayName: "",
+    label: "",
     type,
     required: false,
     colSpan: 12,
@@ -77,11 +157,11 @@ export function createDefaultField(
     options:
       type === "singleSelect" || type === "multiSelect"
         ? [
-            { code: "A", label: "Option A" },
-            { code: "B", label: "Option B" },
+            { code: "A", label: "Lựa chọn A" },
+            { code: "B", label: "Lựa chọn B" },
           ]
         : undefined,
-    labelCodes: [],
+    statisticLabelCodes: [],
     isStatistic: false,
     statistic: undefined,
   };
@@ -103,37 +183,51 @@ export function normalizeSections(sections: DynamicFormSection[]): DynamicFormSe
   return rows
     .map((x, index) => ({
       id: x.id || createId("section"),
-      title: x.title?.trim() || `Section ${index + 1}`,
+      title: x.title?.trim() || `Phần ${index + 1}`,
       description: x.description ?? null,
-      labelCodes: normalizeLabelCodes(x.labelCodes),
+      tagCodes: normalizeLabelCodes(x.tagCodes),
       order: index,
     }))
     .sort((a, b) => a.order - b.order);
 }
 
+type NormalizeFieldsOptions = {
+  trimDisplayNames?: boolean;
+};
+
 export function normalizeFields(
   fields: DynamicFormField[],
   sections: DynamicFormSection[],
+  options: NormalizeFieldsOptions = {},
 ): DynamicFormField[] {
   const sectionIds = new Set(sections.map((x) => x.id));
   const fallbackSectionId = sections[0]?.id ?? createDefaultSection().id;
+  const trimDisplayNames = options.trimDisplayNames ?? true;
 
   return fields
     .map((x, index) => {
       const type = isFieldType(x.type) ? x.type : "shortText";
+      const statisticLabelCodes = normalizeLabelCodes(x.statisticLabelCodes);
       const isStatistic = Boolean(x.isStatistic);
+      const name = normalizeFieldDisplayName(
+        type,
+        x.name ?? x.displayName ?? x.label,
+        trimDisplayNames,
+      );
       return {
         id: x.id || createId("field"),
         sectionId: sectionIds.has(x.sectionId) ? x.sectionId : fallbackSectionId,
         key: x.key?.trim() || `field_${index + 1}`,
-        label: x.label?.trim() || fieldTypeLabels[type],
+        name,
+        displayName: name,
+        label: name,
         type,
         required: Boolean(x.required),
         colSpan: clampSpan(x.colSpan),
         minHeight: clampHeight(x.minHeight),
         order: index,
         options: normalizeOptions(type, x.options),
-        labelCodes: normalizeLabelCodes(x.labelCodes),
+        statisticLabelCodes,
         isStatistic,
         statistic: isStatistic
           ? {
@@ -149,56 +243,323 @@ export function normalizeFields(
     .sort((a, b) => a.order - b.order);
 }
 
+export function getDynamicFormFieldNameValue(
+  field: Pick<DynamicFormField, "name" | "displayName" | "label" | "type">,
+) {
+  return normalizeOptionalFieldText(field.name ?? field.displayName ?? field.label) ?? "";
+}
+
+export function getDynamicFormFieldDisplayName(
+  field: Pick<DynamicFormField, "name" | "displayName" | "label" | "type">,
+) {
+  return getDynamicFormFieldNameValue(field) || FIELD_DISPLAY_NAME_PLACEHOLDER;
+}
+
+export function isGenericFieldDisplayName(
+  type: DynamicFormFieldType,
+  value: string | null | undefined,
+) {
+  const trimmed = normalizeOptionalFieldText(value);
+  if (!trimmed) return false;
+
+  const normalized = normalizeForComparison(trimmed);
+  const genericValues = [
+    type,
+    fieldTypeLabels[type],
+    ...(legacyFieldLabels[type] ?? []),
+  ].map(normalizeForComparison);
+
+  return genericValues.includes(normalized) || genericFieldDisplayNamePattern.test(normalized);
+}
+
+export function validateFieldDisplayNames(
+  fields: DynamicFormField[],
+  sections: DynamicFormSection[] = [],
+) {
+  const sectionTitles = new Map(sections.map((section) => [section.id, section.title]));
+  const invalid = fields.find((field) => {
+    const name = getDynamicFormFieldNameValue(field);
+    return !name || isGenericFieldDisplayName(field.type, name);
+  });
+  if (!invalid) return;
+
+  const sectionTitle = sectionTitles.get(invalid.sectionId);
+  const locator = sectionTitle
+    ? ` trong phần "${sectionTitle}"`
+    : invalid.key
+      ? ` "${invalid.key}"`
+      : "";
+  throw new Error(
+    `Trường dữ liệu${locator} cần có Tên hiển thị riêng cho người nhập. Không dùng tên kiểu dữ liệu như Number, Date, Số hoặc Ngày; nhãn dữ liệu/thống kê được cấu hình riêng bằng label code.`,
+  );
+}
+
+function normalizeFieldDisplayName(
+  _type: DynamicFormFieldType,
+  value: string | null | undefined,
+  trimDisplayName = true,
+) {
+  if (!trimDisplayName) return value ?? "";
+  return normalizeOptionalFieldText(value) ?? "";
+}
+
+function normalizeOptionalFieldText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeForComparison(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
 export function buildEditorValue(input: {
   code?: string | null;
   name?: string | null;
   description?: string | null;
-  labels?: string[] | null;
+  tagCodes?: string[] | null;
   schemaVersion?: number | null;
   isActive?: boolean | null;
   sectionsJson?: string | null;
   fieldsJson?: string | null;
   excelBlockJson?: string | null;
+  blocksJson?: string | null;
 }): DynamicFormEditorValue {
   const sections = normalizeSections(parseJsonArray<DynamicFormSection>(input.sectionsJson, []));
   const fields = normalizeFields(parseJsonArray<DynamicFormField>(input.fieldsJson, []), sections);
+  const blocksJson = normalizeBlocksJson(input.blocksJson, input.excelBlockJson, sections[0]?.id);
 
   return {
     code: input.code ?? null,
     name: input.name ?? "",
     description: input.description ?? "",
-    labels: normalizeLabelCodes(input.labels),
+    tagCodes: normalizeLabelCodes(input.tagCodes),
     schemaVersion: Math.max(1, input.schemaVersion ?? 1),
     isActive: input.isActive ?? true,
     sections,
     fields,
-    excelBlockJson: normalizeExcelBlockJson(input.excelBlockJson),
+    excelBlockJson: getPrimaryDynamicFormBlockJson(blocksJson, input.excelBlockJson),
+    blocksJson,
   };
 }
 
 export function toSubmit(value: DynamicFormEditorValue): DynamicFormEditorSubmit {
   const sections = normalizeSections(value.sections);
+
   const fields = normalizeFields(value.fields, sections);
+  if (fields.length > MAX_DYNAMIC_FORM_FIELDS) {
+    throw new Error(`Biểu mẫu động chỉ được có tối đa ${MAX_DYNAMIC_FORM_FIELDS} trường dữ liệu.`);
+  }
+  validateFieldDisplayNames(fields, sections);
+  const blocksJson = normalizeBlocksJson(value.blocksJson, value.excelBlockJson, sections[0]?.id);
+  const blockCount = getDynamicFormBlockJsonList(blocksJson, null, sections[0]?.id).length;
+  if (blockCount > MAX_DYNAMIC_FORM_TABLE_BLOCKS) {
+    throw new Error(`Biểu mẫu động chỉ được có tối đa ${MAX_DYNAMIC_FORM_TABLE_BLOCKS} bảng Excel động.`);
+  }
+  validateExcelBlockTableModeCompatibility(blocksJson);
+  validateUniqueLabelStatisticTargets(fields, blocksJson);
+
+  const excelBlockJson = getPrimaryDynamicFormBlockJson(blocksJson, value.excelBlockJson);
   return {
     code: value.code ?? null,
     name: value.name.trim(),
     description: value.description?.trim() || null,
-    labels: normalizeLabelCodes(value.labels),
+    tagCodes: normalizeLabelCodes(value.tagCodes),
     schemaVersion: Math.max(1, value.schemaVersion || 1),
     isActive: value.isActive,
     sectionsJson: JSON.stringify(sections),
     fieldsJson: JSON.stringify(fields),
-    excelBlockJson: normalizeExcelBlockJson(value.excelBlockJson),
+    excelBlockJson,
+    blocksJson,
   };
 }
 
-export function normalizeExcelBlockJson(json?: string | null): string | null {
+export function normalizeExcelBlockJson(
+  json?: string | null,
+  fallbackSectionId?: string | null,
+): string | null {
   const obj = parseJsonObject(json);
   if (!obj) return json?.trim() ? json : null;
 
+  return JSON.stringify(normalizeExcelBlockObject(obj, fallbackSectionId));
+}
+
+export function normalizeBlocksJson(
+  json?: string | null,
+  excelBlockJson?: string | null,
+  fallbackSectionId?: string | null,
+): string | null {
+  const normalizedExcelBlock = parseJsonObject(normalizeExcelBlockJson(excelBlockJson, fallbackSectionId));
+  if (!json?.trim()) {
+    return normalizedExcelBlock ? JSON.stringify([normalizedExcelBlock]) : null;
+  }
+
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return json.trim();
+    if (parsed.length <= 1 && normalizedExcelBlock) {
+      return JSON.stringify([normalizedExcelBlock]);
+    }
+
+    return JSON.stringify(
+      parsed.map((item) =>
+        isPlainObject(item) ? normalizeExcelBlockObject(item, fallbackSectionId) : item,
+      ),
+    );
+  } catch {
+    return json.trim();
+  }
+}
+
+export function getDynamicFormBlockJsonList(
+  blocksJson?: string | null,
+  excelBlockJson?: string | null,
+  fallbackSectionId?: string | null,
+): string[] {
+  const blocks = parseJsonObjectArray(blocksJson);
+  if (blocks.length > 0) {
+    return blocks.map((block) => JSON.stringify(normalizeExcelBlockObject(block, fallbackSectionId)));
+  }
+
+  const excelBlock = normalizeExcelBlockJson(excelBlockJson, fallbackSectionId);
+  return excelBlock ? [excelBlock] : [];
+}
+
+export function getDynamicFormBlockCount(
+  blocksJson?: string | null,
+  excelBlockJson?: string | null,
+) {
+  return getDynamicFormBlockJsonList(blocksJson, excelBlockJson).length;
+}
+
+export function getPrimaryDynamicFormBlockJson(
+  blocksJson?: string | null,
+  excelBlockJson?: string | null,
+): string | null {
+  return getDynamicFormBlockJsonList(blocksJson, excelBlockJson)[0] ?? null;
+}
+
+export function setDynamicFormBlockJson(
+  blocksJson: string | null | undefined,
+  excelBlockJson: string | null | undefined,
+  blockIndex: number,
+  nextBlockJson: string | null | undefined,
+): Pick<DynamicFormEditorValue, "excelBlockJson" | "blocksJson"> {
+  const normalizedNextBlock = normalizeExcelBlockJson(nextBlockJson);
+  const blocks = getDynamicFormBlockJsonList(blocksJson, excelBlockJson);
+
+  if (normalizedNextBlock) {
+    const targetIndex = Math.min(
+      Math.max(0, Math.floor(blockIndex)),
+      Math.max(0, blocks.length - 1),
+    );
+    if (blocks.length === 0) {
+      blocks.push(normalizedNextBlock);
+    } else {
+      blocks[targetIndex] = normalizedNextBlock;
+    }
+  }
+
+  return buildBlocksPatch(blocks);
+}
+
+export function setDynamicFormBlockSectionId(
+  blockJson: string | null | undefined,
+  sectionId: string,
+): string | null {
+  const obj = parseJsonObject(blockJson);
+  if (!obj) return blockJson?.trim() ? blockJson : null;
+
+  obj.sectionId = sectionId;
+  return JSON.stringify(normalizeExcelBlockObject(obj, sectionId));
+}
+
+export function removeDynamicFormBlockJson(
+  blocksJson: string | null | undefined,
+  excelBlockJson: string | null | undefined,
+  blockIndex: number,
+): Pick<DynamicFormEditorValue, "excelBlockJson" | "blocksJson"> {
+  const blocks = getDynamicFormBlockJsonList(blocksJson, excelBlockJson);
+  const targetIndex = Math.floor(blockIndex);
+  if (targetIndex < 0 || targetIndex >= blocks.length) {
+    return buildBlocksPatch(blocks);
+  }
+
+  blocks.splice(targetIndex, 1);
+  return buildBlocksPatch(blocks);
+}
+
+export function moveDynamicFormBlockJson(
+  blocksJson: string | null | undefined,
+  excelBlockJson: string | null | undefined,
+  blockIndex: number,
+  direction: -1 | 1,
+): Pick<DynamicFormEditorValue, "excelBlockJson" | "blocksJson"> {
+  const blocks = getDynamicFormBlockJsonList(blocksJson, excelBlockJson);
+  const fromIndex = Math.floor(blockIndex);
+  const toIndex = fromIndex + direction;
+  if (
+    fromIndex < 0 ||
+    fromIndex >= blocks.length ||
+    toIndex < 0 ||
+    toIndex >= blocks.length
+  ) {
+    return buildBlocksPatch(blocks);
+  }
+
+  const [block] = blocks.splice(fromIndex, 1);
+  blocks.splice(toIndex, 0, block);
+  return buildBlocksPatch(blocks);
+}
+
+function buildBlocksPatch(
+  blocks: Array<string | null | undefined>,
+): Pick<DynamicFormEditorValue, "excelBlockJson" | "blocksJson"> {
+  const blockObjects = blocks
+    .map((block) => parseJsonObject(block))
+    .filter((block): block is Record<string, unknown> => Boolean(block))
+    .map((block) => normalizeExcelBlockObject(block));
+
+  return {
+    excelBlockJson: blockObjects[0] ? JSON.stringify(blockObjects[0]) : null,
+    blocksJson: blockObjects.length > 0 ? JSON.stringify(blockObjects) : null,
+  };
+}
+
+function normalizeExcelBlockObject(
+  obj: Record<string, unknown>,
+  fallbackSectionId?: string | null,
+): Record<string, unknown> {
+  obj = { ...obj };
+  delete obj.rawWorkbookDataJson;
+  delete obj.RawWorkbookDataJson;
+  delete obj.rawWorkbookData;
+  delete obj.RawWorkbookData;
+  delete obj.specJson;
+  delete obj.SpecJson;
+  delete obj.spec;
+  delete obj.Spec;
+
   const blockId = normalizeBlockId(obj);
   obj.blockId = blockId;
+  const excelSpecKind = normalizeExcelSpecKind(
+    obj.excelSpecKind ?? obj.ExcelSpecKind ?? obj.sourceKind ?? obj.SourceKind ?? obj.kind,
+  );
+  delete obj.ExcelSpecKind;
+  delete obj.SourceKind;
+  if (excelSpecKind) {
+    obj.excelSpecKind = excelSpecKind;
+  } else {
+    delete obj.excelSpecKind;
+  }
   obj.tableMode = normalizeTableMode(obj.tableMode);
+  const sectionId = readString(obj.sectionId) ?? readString(obj.SectionId) ?? fallbackSectionId ?? null;
+  delete obj.SectionId;
+  if (sectionId) obj.sectionId = sectionId;
 
   if (obj.tableMode === "FIXED_GRID") {
     const indexMap = normalizeIndexMap(obj.indexMap, blockId);
@@ -211,7 +572,40 @@ export function normalizeExcelBlockJson(json?: string | null): string | null {
     normalizeSummaryTemplateLayout(obj, blockId);
   }
 
-  return JSON.stringify(obj);
+  const statisticColumns = normalizeStatisticColumns(obj.statisticColumns);
+  if (statisticColumns.length > 0) {
+    obj.statisticColumns = statisticColumns;
+  } else {
+    delete obj.statisticColumns;
+  }
+
+  const statisticColumnKeys = new Set(statisticColumns.map(getStatisticColumnIdentity));
+  const statisticColumnLabels = normalizeStatisticColumnLabels(
+    obj.statisticColumnLabels,
+    statisticColumnKeys,
+  );
+  if (statisticColumnLabels.length > 0) {
+    obj.statisticColumnLabels = statisticColumnLabels;
+  } else {
+    delete obj.statisticColumnLabels;
+  }
+
+  return obj;
+}
+
+function validateExcelBlockTableModeCompatibility(blocksJson?: string | null) {
+  if (!blocksJson?.trim()) return;
+  const blocks = parseJsonObjectArray(blocksJson);
+  blocks.forEach((block, index) => {
+    const tableMode = normalizeTableMode(block.tableMode);
+    const excelSpecKind = getExcelSpecKindFromBlockLike(block);
+    if (isTableModeAllowedForExcelSpecKind(tableMode, excelSpecKind)) return;
+
+    const specLabel = excelSpecKind ? excelSpecKindLabels[excelSpecKind] : "không xác định";
+    throw new Error(
+      `Bảng Excel động ${index + 1} thuộc loại ${specLabel}, không dùng được kiểu nhập "${tableModeLabels[tableMode]}".`,
+    );
+  });
 }
 
 export function normalizeTableMode(value: unknown): DynamicFormTableMode {
@@ -226,6 +620,125 @@ export function normalizeLabelCodes(values?: string[] | null): string[] {
         .filter(Boolean),
     ),
   );
+}
+
+function normalizeStatisticColumns(value: unknown): DynamicFormStatisticColumn[] {
+  const rows = Array.isArray(value) ? value : [];
+  const byColumn = new Map<string, DynamicFormStatisticColumn>();
+
+  for (const item of rows) {
+    if (!isPlainObject(item)) continue;
+
+    const columnIndex = getNonNegativeInt(item.columnIndex);
+    const columnKey = readString(item.columnKey) ?? (columnIndex != null ? `col_${columnIndex + 1}` : null);
+    const header = readString(item.header);
+    const key = columnKey ?? header;
+    if (!key) continue;
+
+    byColumn.set(key.toLowerCase(), {
+      ...(columnIndex != null ? { columnIndex } : {}),
+      ...(columnKey ? { columnKey: normalizeMetricPart(columnKey, columnKey) } : {}),
+      ...(header ? { header } : {}),
+      aggregateOps: ["count", "sum"],
+      showInDetail: true,
+      showInTree: false,
+    });
+  }
+
+  return Array.from(byColumn.values());
+}
+
+function normalizeStatisticColumnLabels(
+  value: unknown,
+  statisticColumnKeys?: Set<string>,
+): DynamicFormStatisticColumnLabel[] {
+  const rows = Array.isArray(value) ? value : [];
+  const byColumn = new Map<string, DynamicFormStatisticColumnLabel>();
+
+  for (const item of rows) {
+    if (!isPlainObject(item)) continue;
+    const statisticLabelCode = normalizeLabelCodes([readString(item.statisticLabelCode) ?? ""])[0];
+    if (!statisticLabelCode) continue;
+
+    const columnIndex = getNonNegativeInt(item.columnIndex);
+    const columnKey = readString(item.columnKey) ?? (columnIndex != null ? `col_${columnIndex + 1}` : null);
+    const header = readString(item.header);
+    const key = columnKey ?? header;
+    if (!key) continue;
+
+    const normalizedColumn: DynamicFormStatisticColumn = {
+      ...(columnIndex != null ? { columnIndex } : {}),
+      ...(columnKey ? { columnKey: normalizeMetricPart(columnKey, columnKey) } : {}),
+      ...(header ? { header } : {}),
+    };
+    const identity = getStatisticColumnIdentity(normalizedColumn);
+    if (statisticColumnKeys && !statisticColumnKeys.has(identity)) continue;
+
+    byColumn.set(identity, {
+      ...normalizedColumn,
+      statisticLabelCode,
+      aggregateOps: ["count", "sum"],
+      showInDetail: true,
+      showInTree: false,
+    });
+  }
+
+  return Array.from(byColumn.values());
+}
+
+function getStatisticColumnIdentity(column: DynamicFormStatisticColumn) {
+  return (column.columnKey || column.header || `col_${Number(column.columnIndex ?? -1) + 1}`).toLowerCase();
+}
+
+function validateUniqueLabelStatisticTargets(
+  fields: DynamicFormField[],
+  blocksJson?: string | null,
+) {
+  const seen = new Map<string, string>();
+  let targetCount = 0;
+
+  for (const field of fields) {
+    if (!field.isStatistic && normalizeLabelCodes(field.statisticLabelCodes).length > 0) {
+      throw new Error("Trường gắn nhãn phải được bật thống kê.");
+    }
+    if (!field.isStatistic) continue;
+    const labels = normalizeLabelCodes(field.statisticLabelCodes);
+    targetCount += 1;
+    for (const label of labels) {
+      addUniqueLabelTarget(seen, label, `field:${field.key || field.id}`);
+    }
+  }
+
+  for (const blockJson of getDynamicFormBlockJsonList(blocksJson, null)) {
+    const block = parseJsonObject(blockJson);
+    const blockId = block ? normalizeBlockId(block) : "excel_block";
+    const statisticColumns = normalizeStatisticColumns(block?.statisticColumns);
+    const statisticColumnKeys = new Set(statisticColumns.map(getStatisticColumnIdentity));
+    targetCount += statisticColumns.length;
+    const columns = normalizeStatisticColumnLabels(block?.statisticColumnLabels, statisticColumnKeys);
+    for (const column of columns) {
+      addUniqueLabelTarget(
+        seen,
+        column.statisticLabelCode,
+        `table:${blockId}.column:${column.columnKey || column.header || column.columnIndex}`,
+      );
+    }
+  }
+
+  if (targetCount > MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS) {
+    throw new Error(
+      `Biểu mẫu động chỉ được có tối đa ${MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS} trường hoặc cột gắn nhãn thống kê.`,
+    );
+  }
+}
+
+function addUniqueLabelTarget(seen: Map<string, string>, labelCode: string, target: string) {
+  const existing = seen.get(labelCode);
+  if (existing) {
+    throw new Error(`Nhãn '${labelCode}' đã gắn cho ${existing}, không được gắn tiếp cho ${target}.`);
+  }
+
+  seen.set(labelCode, target);
 }
 
 function isFieldType(value: unknown): value is DynamicFormFieldType {
@@ -259,6 +772,18 @@ function parseJsonObject(json?: string | null): Record<string, unknown> | null {
       : null;
   } catch {
     return null;
+  }
+}
+
+function parseJsonObjectArray(json?: string | null): Record<string, unknown>[] {
+  if (!json?.trim()) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed)
+      ? parsed.filter(isPlainObject).map((item) => ({ ...item }))
+      : [];
+  } catch {
+    return [];
   }
 }
 
@@ -446,6 +971,11 @@ function getPositiveInt(value: unknown) {
   return Number.isInteger(n) && n > 0 ? n : 0;
 }
 
+function getNonNegativeInt(value: unknown) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 function clampInt(value: unknown, min: number, max: number, fallback: number) {
   const n = Number(value);
   if (!Number.isInteger(n)) return fallback;
@@ -483,9 +1013,9 @@ function normalizeOptions(
   options: DynamicFormField["options"],
 ): DynamicFormField["options"] {
   if (type !== "singleSelect" && type !== "multiSelect") return undefined;
-  const rows = options?.length ? options : [{ code: "A", label: "Option A" }];
+  const rows = options?.length ? options : [{ code: "A", label: "Lựa chọn A" }];
   return rows.map((x, index) => ({
     code: x.code?.trim() || `OPT_${index + 1}`,
-    label: x.label?.trim() || `Option ${index + 1}`,
+    label: x.label?.trim() || `Lựa chọn ${index + 1}`,
   }));
 }

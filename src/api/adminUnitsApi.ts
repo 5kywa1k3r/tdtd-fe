@@ -80,11 +80,25 @@ export type ImportResult = {
   errorRows: number;
   errors: ImportRowError[];
   createdIds: string[];
+  rows?: {
+    rowNumber: number;
+    externalKey?: string | null;
+    fullName?: string | null;
+    parentCode?: string | null;
+    generatedCode?: string | null;
+    createdId?: string | null;
+  }[];
 };
 
 type Tag =
   | { type: 'Units'; id: string }
-  | { type: 'UnitHistory'; id: string };
+  | { type: 'UnitHistory'; id: string }
+  | { type: 'PickersUnits'; id: string };
+
+const invalidateUnitPickers = (): Tag[] => [
+  { type: 'PickersUnits', id: 'TREE' },
+  { type: 'PickersUnits', id: 'SEARCH' },
+];
 
 // ===== Helper filters =====
 
@@ -150,11 +164,14 @@ export const adminUnitsApi = baseApi.injectEndpoints({
     }),
 
     searchSubtreeByCodePrefix: b.query<UnitDto[], string>({
-      query: (prefix) => ({
-        url: '/admin/units/search-by-code-prefix',
-        method: 'GET',
-        params: { prefix },
-      }),
+      query: (prefix) => {
+        const normalizedPrefix = prefix.trim();
+        return {
+          url: '/admin/units/search-by-code-prefix',
+          method: 'GET',
+          params: normalizedPrefix ? { prefix: normalizedPrefix } : undefined,
+        };
+      },
       transformResponse: (res: UnitDto[]) => filterVisible(res),
 
       //  thêm TREE để create/update invalidates TREE thì query này refetch
@@ -168,6 +185,7 @@ export const adminUnitsApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/admin/units', method: 'POST', data: body }),
       invalidatesTags: (_res, _err, body): Tag[] => {
         const tags: Tag[] = [
+          ...invalidateUnitPickers(),
           { type: 'Units', id: 'TREE' }, // nếu có view tree/prefix cache
         ];
 
@@ -192,6 +210,7 @@ export const adminUnitsApi = baseApi.injectEndpoints({
         { type: 'UnitHistory', id: arg.unitId },
         { type: 'Units', id: 'ROOTS' },
         { type: 'Units', id: 'TREE' },
+        ...invalidateUnitPickers(),
         // NOTE: nếu UI đang đứng ở parent children list thì parent invalidation nên do component biết parentId
       ],
     }),
@@ -208,6 +227,7 @@ export const adminUnitsApi = baseApi.injectEndpoints({
           { type: 'UnitHistory', id: arg.unitId },
           { type: 'Units', id: 'ROOTS' },
           { type: 'Units', id: 'TREE' },
+          ...invalidateUnitPickers(),
         ];
 
         if (arg.parentUnitId) {
@@ -258,7 +278,9 @@ export const adminUnitsApi = baseApi.injectEndpoints({
         };
       },
       invalidatesTags: (_res, _err, arg): Tag[] =>
-        arg.dryRun === false ? [{ type: 'Units', id: 'TREE' }, { type: 'Units', id: 'ROOTS' }] : [],
+        arg.dryRun === false
+          ? [{ type: 'Units', id: 'TREE' }, { type: 'Units', id: 'ROOTS' }, ...invalidateUnitPickers()]
+          : [],
     }),
   }),
   overrideExisting: true,

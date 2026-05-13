@@ -19,6 +19,8 @@ interface Props {
   dropdownWidth?: number;
   zIndex?: number;
   disabled?: boolean;
+  name?: string;
+  id?: string;
 }
 
 export const MantineDateRangeFilter: React.FC<Props> = ({
@@ -29,6 +31,8 @@ export const MantineDateRangeFilter: React.FC<Props> = ({
   dropdownWidth,
   zIndex,
   disabled,
+  name,
+  id,
 }) => {
   const mappedValue: HierarchyRangeValue = {
     type: "day",
@@ -52,6 +56,8 @@ export const MantineDateRangeFilter: React.FC<Props> = ({
       dropdownWidth={dropdownWidth}
       zIndex={zIndex}
       disabled={disabled}
+      name={name}
+      id={id}
     />
   );
 };

@@ -3,6 +3,7 @@ import type {
   WorkAssignmentReportStatus,
   WorkReportPeriodStatus,
 } from "./reportStatus";
+import type { DynamicFormAggregateRequest } from "./reportAggregate";
 
 export interface PagedResult<T> {
   rows: T[];
@@ -27,7 +28,10 @@ export interface MyReportTemplateSearchRequest {
 }
 
 export interface MyReportTemplateRow {
-  dynamicExcelId: string;
+  dynamicFormTemplateId: string;
+  dynamicFormTemplateCode: string;
+  dynamicFormTemplateName: string;
+  dynamicExcelId?: string | null;
   dynamicExcelCode: string;
   dynamicExcelName: string;
 
@@ -94,7 +98,10 @@ export interface WorkReportPeriodRow {
 
 export interface MyReportTemplateDetailResponse {
   workId: string;
-  dynamicExcelId: string;
+  dynamicFormTemplateId: string;
+  dynamicFormTemplateCode: string;
+  dynamicFormTemplateName: string;
+  dynamicExcelId?: string | null;
   dynamicExcelCode: string;
   dynamicExcelName: string;
 
@@ -110,6 +117,14 @@ export interface MyReportTemplateDetailResponse {
 /* =========================
  * Report detail / editor
  * ========================= */
+
+export type WorkReportDataOrigin =
+  | "MANUAL_INPUT"
+  | "AUTO_SUMMARY"
+  | "COPIED_SUMMARY"
+  | "PARTIAL_MAPPING";
+
+export type WorkReportCumulativeContributionMode = "INCLUDE" | "EXCLUDE";
 
 export interface WorkAssignmentReportResponse {
   id: string;
@@ -138,6 +153,8 @@ export interface WorkAssignmentReportResponse {
   dynamicExcelTemplateId?: string | null;
   dynamicExcelTemplateCode?: string | null;
   dynamicExcelTemplateName?: string | null;
+  tableKind?: "NUMERIC_GRID" | "RECORD_TABLE" | string | null;
+  recordTableSpecJson?: string | null;
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
@@ -154,6 +171,17 @@ export interface WorkAssignmentReportResponse {
   values1DJson?: string | null;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
+  dataOrigin?: WorkReportDataOrigin | string | null;
+  cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
+  cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
+  aggregateSourceReportIds?: string[] | null;
+  aggregateSourceAssignmentIds?: string[] | null;
+  aggregateSourceUpdatedAtUtc?: string | null;
+  aggregateSnapshotDirty?: boolean | null;
+  aggregateSnapshotDirtyAtUtc?: string | null;
+  aggregateSnapshotRefreshedAtUtc?: string | null;
+  aggregateRefreshError?: string | null;
 
   currentProgressStatus?: string | null;
   reportReason?: string | null;
@@ -168,6 +196,12 @@ export interface WorkAssignmentReportResponse {
 
   versionNo: number;
   isCurrent: boolean;
+  isActive: boolean;
+  deactivatedAtUtc?: string | null;
+  deactivatedByUserId?: string | null;
+  deactivationReason?: string | null;
+  reactivatedAtUtc?: string | null;
+  reactivatedByUserId?: string | null;
 
   submittedAtUtc?: string | null;
   submittedByUserId?: string | null;
@@ -215,6 +249,11 @@ export interface WorkAssignmentReportListRow {
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  dataOrigin?: WorkReportDataOrigin | string | null;
+  aggregateSnapshotDirty?: boolean | null;
+  aggregateSnapshotDirtyAtUtc?: string | null;
+  aggregateSnapshotRefreshedAtUtc?: string | null;
+  aggregateRefreshError?: string | null;
 
   currentProgressStatus?: string | null;
   reportReason?: string | null;
@@ -223,6 +262,9 @@ export interface WorkAssignmentReportListRow {
 
   versionNo: number;
   isCurrent: boolean;
+  isActive: boolean;
+  deactivatedAtUtc?: string | null;
+  deactivationReason?: string | null;
 
   submittedAtUtc?: string | null;
   submittedByUserId?: string | null;
@@ -248,6 +290,7 @@ export interface WorkAssignmentReportSearchRequest {
   status?: WorkAssignmentReportStatus | number | null;
 
   isCurrent?: boolean | null;
+  isActive?: boolean | null;
   isLateSubmission?: boolean | null;
 
   dueFromUtc?: string | null;
@@ -267,6 +310,10 @@ export interface SaveWorkAssignmentReportDraftRequest {
   values1D: Array<string | number | null>;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
+  dataOrigin?: WorkReportDataOrigin | string | null;
+  cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
+  cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
 
   currentProgressStatus?: string | null;
   reportReason?: string | null;
@@ -275,6 +322,17 @@ export interface SaveWorkAssignmentReportDraftRequest {
   lateReason?: string | null;
 
   note?: string | null;
+}
+
+export interface ApplyDynamicFormAggregateDraftRequest {
+  aggregateRequest: DynamicFormAggregateRequest;
+  dataOrigin?: WorkReportDataOrigin | string | null;
+  cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
+  cumulativeContributionPolicyJson?: string | null;
+  targetBlockId?: string | null;
+  valueSelector?: "SUM" | "AVERAGE" | "MIN" | "MAX" | "COUNT" | string | null;
+  clearExistingValues?: boolean | null;
+  allowSubmittedSources?: boolean | null;
 }
 
 export interface ReturnWorkAssignmentReportRequest {
@@ -286,6 +344,10 @@ export interface SubmitWorkAssignmentReportRequest {
   values1D?: Array<string | number | null>;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
+  dataOrigin?: WorkReportDataOrigin | string | null;
+  cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
+  cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
 
   currentProgressStatus?: string | null;
   reportReason?: string | null;

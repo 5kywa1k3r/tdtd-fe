@@ -89,34 +89,34 @@ export function formatDateTime(value?: string | null): string {
 export function getWorkStatusLabel(status: number): string {
   switch (status) {
     case 1:
-      return "Chua bat dau";
+      return "Chưa bắt đầu";
     case 2:
-      return "Dang thuc hien";
+      return "Đang thực hiện";
     case 3:
-      return "Hoan thanh";
+      return "Hoàn thành";
     case 4:
-      return "Co nguy co qua han";
+      return "Có nguy cơ quá hạn";
     case 5:
-      return "Qua han";
+      return "Quá hạn";
     default:
-      return `Trang thai ${status}`;
+      return `Trạng thái ${status}`;
   }
 }
 
 export function getProgressStatusLabel(status: number): string {
   switch (status) {
     case 0:
-      return "Chua thuc hien";
+      return "Chưa thực hiện";
     case 1:
-      return "Dang thuc hien";
+      return "Đang thực hiện";
     case 2:
-      return "Da hoan thanh";
+      return "Đã hoàn thành";
     case 3:
-      return "Co nguy co cham muon";
+      return "Có nguy cơ chậm muộn";
     case 4:
-      return "Cham muon";
+      return "Chậm muộn";
     default:
-      return `Tien do ${status}`;
+      return `Tiến độ ${status}`;
   }
 }
 
@@ -198,11 +198,11 @@ export function buildProgressPieData(counts?: DashboardProgressCountDto | null):
   };
 
   return [
-    { key: "notStarted", label: "Chua thuc hien", value: Number(source.notStarted ?? 0), color: PROGRESS_COLORS.notStarted },
-    { key: "inProgress", label: "Dang thuc hien", value: Number(source.inProgress ?? 0), color: PROGRESS_COLORS.inProgress },
-    { key: "completed", label: "Da hoan thanh", value: Number(source.completed ?? 0), color: PROGRESS_COLORS.completed },
-    { key: "atRiskOverdue", label: "Co nguy co cham muon", value: Number(source.atRiskOverdue ?? 0), color: PROGRESS_COLORS.atRiskOverdue },
-    { key: "overdue", label: "Cham muon", value: Number(source.overdue ?? 0), color: PROGRESS_COLORS.overdue },
+    { key: "notStarted", label: "Chưa thực hiện", value: Number(source.notStarted ?? 0), color: PROGRESS_COLORS.notStarted },
+    { key: "inProgress", label: "Đang thực hiện", value: Number(source.inProgress ?? 0), color: PROGRESS_COLORS.inProgress },
+    { key: "completed", label: "Đã hoàn thành", value: Number(source.completed ?? 0), color: PROGRESS_COLORS.completed },
+    { key: "atRiskOverdue", label: "Có nguy cơ chậm muộn", value: Number(source.atRiskOverdue ?? 0), color: PROGRESS_COLORS.atRiskOverdue },
+    { key: "overdue", label: "Chậm muộn", value: Number(source.overdue ?? 0), color: PROGRESS_COLORS.overdue },
   ].filter((x) => x.value > 0);
 }
 
@@ -210,13 +210,13 @@ export function buildReportPieData(summary?: DashboardNodeReportSummaryDto | nul
   if (!summary) return [];
 
   return [
-    { key: "pendingCount", label: "Chua mo", value: Number(summary.pendingCount ?? 0), color: REPORT_COLORS.pendingCount },
-    { key: "draftCount", label: "Ban nhap", value: Number(summary.draftCount ?? 0), color: REPORT_COLORS.draftCount },
-    { key: "submittedCount", label: "Da gui", value: Number(summary.submittedCount ?? 0), color: REPORT_COLORS.submittedCount },
-    { key: "approvedCount", label: "Da duyet", value: Number(summary.approvedCount ?? 0), color: REPORT_COLORS.approvedCount },
-    { key: "overduePendingCount", label: "Qua han chua mo", value: Number(summary.overduePendingCount ?? 0), color: REPORT_COLORS.overduePendingCount },
-    { key: "overdueDraftCount", label: "Qua han ban nhap", value: Number(summary.overdueDraftCount ?? 0), color: REPORT_COLORS.overdueDraftCount },
-    { key: "overdueSubmittedCount", label: "Qua han da gui", value: Number(summary.overdueSubmittedCount ?? 0), color: REPORT_COLORS.overdueSubmittedCount },
-    { key: "overdueApprovedCount", label: "Qua han da duyet", value: Number(summary.overdueApprovedCount ?? 0), color: REPORT_COLORS.overdueApprovedCount },
+    { key: "pendingCount", label: "Chưa mở", value: Number(summary.pendingCount ?? 0), color: REPORT_COLORS.pendingCount },
+    { key: "draftCount", label: "Bản nháp", value: Number(summary.draftCount ?? 0), color: REPORT_COLORS.draftCount },
+    { key: "submittedCount", label: "Đã gửi", value: Number(summary.submittedCount ?? 0), color: REPORT_COLORS.submittedCount },
+    { key: "approvedCount", label: "Đã duyệt", value: Number(summary.approvedCount ?? 0), color: REPORT_COLORS.approvedCount },
+    { key: "overduePendingCount", label: "Quá hạn chưa mở", value: Number(summary.overduePendingCount ?? 0), color: REPORT_COLORS.overduePendingCount },
+    { key: "overdueDraftCount", label: "Quá hạn bản nháp", value: Number(summary.overdueDraftCount ?? 0), color: REPORT_COLORS.overdueDraftCount },
+    { key: "overdueSubmittedCount", label: "Quá hạn đã gửi", value: Number(summary.overdueSubmittedCount ?? 0), color: REPORT_COLORS.overdueSubmittedCount },
+    { key: "overdueApprovedCount", label: "Quá hạn đã duyệt", value: Number(summary.overdueApprovedCount ?? 0), color: REPORT_COLORS.overdueApprovedCount },
   ].filter((x) => x.value > 0);
 }

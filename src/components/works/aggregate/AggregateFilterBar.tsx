@@ -10,6 +10,7 @@ import type {
   SourceStatusMode,
 } from "../../../types/aggregateTypes";
 import AggregatePeriodPicker from "./AggregatePeriodPicker";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type AggregateFilterBarProps = {
   value: AggregateFilterState;
@@ -59,7 +60,7 @@ const WorkAggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", lg: "row" }} spacing={2}>
         <TextField
-          label="Biểu mẫu"
+          label={uiText(UITextKey.TextBieuMau)}
           size="small"
           value={value.dynamicExcelId}
           onChange={(e) => setField("dynamicExcelId", e.target.value)}
@@ -68,48 +69,48 @@ const WorkAggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
           helperText={
             defaultDynamicExcelCode || defaultDynamicExcelName
               ? `${defaultDynamicExcelCode || ""} ${defaultDynamicExcelName || ""}`.trim()
-              : "Nhập DynamicExcelId để lấy template"
+              : "Nhập mã biểu mẫu Excel để lấy mẫu"
           }
         />
 
         <TextField
           select
-          label="Nguồn lấy báo cáo"
+          label={uiText(UITextKey.TextNguonLayBaoCao)}
           size="small"
           value={value.sourceStatusMode}
           onChange={(e) => setField("sourceStatusMode", e.target.value as SourceStatusMode)}
           sx={{ minWidth: 230 }}
+          helperText="Chỉ số liệu đã duyệt được cộng vào tổng hợp."
         >
-          <MenuItem value="APPROVED_ONLY">Chỉ báo cáo đã duyệt</MenuItem>
-          <MenuItem value="APPROVED_AND_SUBMITTED">Đã duyệt + đã nộp</MenuItem>
+          <MenuItem value="APPROVED_ONLY">{uiText(UITextKey.TextChiBaoCaoDaDuyet)}</MenuItem>
         </TextField>
 
         {showScopeMode && (
           <TextField
             select
-            label="Scope"
+            label={uiText(UITextKey.TextScope)}
             size="small"
             value={value.scopeMode}
             onChange={(e) => setField("scopeMode", e.target.value as AggregateScopeMode)}
             sx={{ minWidth: 210 }}
           >
-            <MenuItem value="DIRECT_CHILDREN">Direct children</MenuItem>
-            <MenuItem value="SUBTREE">Full subtree</MenuItem>
+            <MenuItem value="DIRECT_CHILDREN">{uiText(UITextKey.TextDirectChildren)}</MenuItem>
+            <MenuItem value="SUBTREE">{uiText(UITextKey.TextFullSubtree)}</MenuItem>
           </TextField>
         )}
 
         {showAggregateMode && (
           <TextField
             select
-            label="Kiểu tổng hợp"
+            label={uiText(UITextKey.TextKieuTongHop)}
             size="small"
             value={value.aggregateMode}
             onChange={(e) => setField("aggregateMode", e.target.value as AggregateMode)}
             sx={{ minWidth: 220 }}
           >
-            <MenuItem value="SUM_BY_CELL">Cộng vào biểu mẫu</MenuItem>
-            <MenuItem value="HORIZONTAL_BY_USER">Ghép ngang theo người</MenuItem>
-            <MenuItem value="VERTICAL_BY_USER">Ghép dọc theo người</MenuItem>
+            <MenuItem value="SUM_BY_CELL">{uiText(UITextKey.TextCongVaoBieuMau)}</MenuItem>
+            <MenuItem value="HORIZONTAL_BY_USER">{uiText(UITextKey.TextGhepNgangTheoNguoi)}</MenuItem>
+            <MenuItem value="VERTICAL_BY_USER">{uiText(UITextKey.TextGhepDocTheoNguoi)}</MenuItem>
           </TextField>
         )}
       </Stack>
@@ -127,7 +128,7 @@ const WorkAggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Metric filter"
+              label={uiText(UITextKey.TextMetricFilter)}
             />
           )}
         />
@@ -136,7 +137,7 @@ const WorkAggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
       <Box>
         <LazyUnitMultiSelect
           mode="multiple"
-          label="Đơn vị tổng hợp"
+          label={uiText(UITextKey.TextDonViTongHop)}
           value={value.selectedUnitIds}
           onChange={(next) => setField("selectedUnitIds", next)}
         />

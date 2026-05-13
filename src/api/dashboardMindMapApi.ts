@@ -3,6 +3,8 @@ import type {
   DashboardMindMapCursorNodeResult,
   DashboardMindMapFieldMetricReportsResult,
   DashboardMindMapFieldMetricReportsSearchRequest,
+  DashboardMindMapLabelReportsResult,
+  DashboardMindMapLabelReportsSearchRequest,
   DashboardMindMapNodeChildrenSearchRequest,
   DashboardMindMapNodeChildrenResult,
   DashboardMindMapNodeReportsResult,
@@ -141,19 +143,19 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
       DashboardMindMapTemplateUsersResult,
       {
         assignmentId: string;
-        dynamicExcelId: string;
+        dynamicFormTemplateId: string;
         q?: string | null;
         cursor?: string | null;
         limit?: number;
       }
     >({
-      query: ({ assignmentId, dynamicExcelId, q, cursor, limit = 5 }) => {
+      query: ({ assignmentId, dynamicFormTemplateId, q, cursor, limit = 5 }) => {
         const params = new URLSearchParams();
         if (q) params.set("q", q);
         if (cursor) params.set("cursor", cursor);
         params.set("limit", String(limit));
         return {
-          url: `dashboard-mindmap/nodes/${assignmentId}/templates/${dynamicExcelId}/users?${params.toString()}`,
+          url: `dashboard-mindmap/nodes/${assignmentId}/forms/${dynamicFormTemplateId}/users?${params.toString()}`,
           method: "GET",
         };
       },
@@ -161,7 +163,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapNode" as const,
-          id: `USERS_${arg.assignmentId}_${arg.dynamicExcelId}_${arg.cursor ?? "0"}_${arg.q ?? ""}`,
+          id: `USERS_${arg.assignmentId}_${arg.dynamicFormTemplateId}_${arg.cursor ?? "0"}_${arg.q ?? ""}`,
         },
       ],
     }),
@@ -170,12 +172,12 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
       DashboardMindMapTemplateReportsResult,
       {
         assignmentId: string;
-        dynamicExcelId: string;
+        dynamicFormTemplateId: string;
         req?: DashboardMindMapTemplateReportsSearchRequest;
       }
     >({
-      query: ({ assignmentId, dynamicExcelId, req }) => ({
-        url: `dashboard-mindmap/nodes/${assignmentId}/templates/${dynamicExcelId}/reports/search`,
+      query: ({ assignmentId, dynamicFormTemplateId, req }) => ({
+        url: `dashboard-mindmap/nodes/${assignmentId}/forms/${dynamicFormTemplateId}/reports/search`,
         method: "POST",
         data: req ?? { assigneeUserIds: [], limit: 5 },
       }),
@@ -183,7 +185,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapReports" as const,
-          id: `TEMPLATE_REPORTS_${arg.assignmentId}_${arg.dynamicExcelId}_${arg.req?.cursor ?? "0"}_${(arg.req?.assigneeUserIds ?? []).join(",")}_${(arg.req?.statusBuckets ?? []).join(",")}_${arg.req?.fromUtc ?? ""}_${arg.req?.toUtc ?? ""}_${arg.req?.q ?? ""}`,
+          id: `TEMPLATE_REPORTS_${arg.assignmentId}_${arg.dynamicFormTemplateId}_${arg.req?.cursor ?? "0"}_${(arg.req?.assigneeUserIds ?? []).join(",")}_${(arg.req?.statusBuckets ?? []).join(",")}_${arg.req?.fromUtc ?? ""}_${arg.req?.toUtc ?? ""}_${arg.req?.q ?? ""}`,
         },
       ],
     }),
@@ -294,6 +296,28 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         },
       ],
     }),
+
+    searchDashboardMindMapLabelReports: build.query<
+      DashboardMindMapLabelReportsResult,
+      { assignmentId: string; req: DashboardMindMapLabelReportsSearchRequest }
+    >({
+      query: ({ assignmentId, req }) => ({
+        url: `dashboard-mindmap/nodes/${assignmentId}/labels/reports/search`,
+        method: "POST",
+        data: req,
+      }),
+      keepUnusedDataFor: 180,
+      providesTags: (_result, _error, arg) => [
+        {
+          type: "DashboardMindMapReports" as const,
+          id: `LABEL_${arg.assignmentId}_${arg.req.labelCode}_${arg.req.dynamicFormTemplateId ?? ""}_${arg.req.dynamicExcelTemplateId ?? ""}_${arg.req.blockId ?? ""}_${arg.req.reportStatus ?? ""}_${arg.req.page ?? 0}_${arg.req.pageSize ?? 10}_${JSON.stringify({
+            fromUtc: arg.req.fromUtc ?? null,
+            toUtc: arg.req.toUtc ?? null,
+            unitIds: arg.req.unitIds ?? [],
+          })}`,
+        },
+      ],
+    }),
   }),
   overrideExisting: true,
 });
@@ -311,4 +335,5 @@ export const {
   useSearchDashboardMindMapNodeReportsQuery,
   useSearchDashboardMindMapTableMetricReportsQuery,
   useSearchDashboardMindMapFieldMetricReportsQuery,
+  useSearchDashboardMindMapLabelReportsQuery,
 } = dashboardMindMapApi;

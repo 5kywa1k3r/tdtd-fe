@@ -10,6 +10,7 @@ import {
   getWorkStatusLabel,
 } from "../../../utils/dashboardUi";
 import DashboardPieChart from "../charts/DashboardPieChart";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   work: MyWorkSummaryRowDto;
@@ -38,22 +39,22 @@ export default function WorkOverviewCard({ work }: Props) {
                     label={getWorkStatusLabel(work.status)}
                     color={getWorkStatusChipColor(work.status)}
                   />
-                  {work.hasManualEvaluations ? <Chip color="warning" label="Có đánh giá thủ công" /> : null}
+                  {work.hasManualEvaluations ? <Chip color="warning" label={uiText(UITextKey.TextCoDanhGiaThuCong)} /> : null}
                 </Stack>
               </Stack>
 
               <Grid container spacing={2}>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <SummaryCard title="Công việc được giao active" value={work.activeRootAssignmentCount} />
+                  <SummaryCard title={uiText(UITextKey.TextCongViecDuocGiaoActive)} value={work.activeRootAssignmentCount} />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <SummaryCard title="Đã đánh giá" value={work.evaluatedAssignmentCount} valueColor="warning.main" />
+                  <SummaryCard title={uiText(UITextKey.TextDaDanhGia)} value={work.evaluatedAssignmentCount} valueColor="warning.main" />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <SummaryCard title="Hạn hoàn thành" value={formatDateOnly(work.dueDate)} />
+                  <SummaryCard title={uiText(UITextKey.TextHanHoanThanh)} value={formatDateOnly(work.dueDate)} />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <SummaryCard title="Cập nhật gần nhất" value={formatDateTime(work.updatedAtUtc)} />
+                  <SummaryCard title={uiText(UITextKey.TextCapNhatGanNhat)} value={formatDateTime(work.updatedAtUtc)} />
                 </Grid>
               </Grid>
 
@@ -69,7 +70,7 @@ export default function WorkOverviewCard({ work }: Props) {
 
       <Grid size={{ xs: 12, lg: 4 }}>
         <DashboardPieChart
-          title="Phân bố tiến độ công việc được giao"
+          title={uiText(UITextKey.TextPhanBoTienDoCongViecDuocGiao)}
           data={buildProgressPieData(progress)}
           height={280}
           emptyText="Chưa có dữ liệu tiến độ để hiển thị."

@@ -56,9 +56,13 @@ export type DashboardMindMapNodeDto = {
   rootAssignmentId: string;
   level: number;
   code: string;
+  dynamicFormTemplateId?: string | null;
+  dynamicFormTemplateCode?: string | null;
+  dynamicFormTemplateName?: string | null;
   dynamicExcelCode: string;
   dynamicExcelName: string;
   description?: string | null;
+  summaryText: string;
   isActive: boolean;
   progressStatus: number;
   hasAnyDuePeriod: boolean;
@@ -90,9 +94,12 @@ export type DashboardMindMapCursorResult<T> = {
 
 export type DashboardMindMapTemplateGroupDto = {
   assignmentId: string;
-  dynamicExcelId: string;
-  dynamicExcelCode: string;
-  dynamicExcelName: string;
+  dynamicFormTemplateId: string;
+  dynamicFormTemplateCode: string;
+  dynamicFormTemplateName: string;
+  dynamicExcelId?: string | null;
+  dynamicExcelCode?: string | null;
+  dynamicExcelName?: string | null;
   userCount: number;
   reportCount: number;
   overdueCount: number;
@@ -102,7 +109,10 @@ export type DashboardMindMapTemplateGroupDto = {
 
 export type DashboardMindMapTemplateUserDto = {
   assignmentId: string;
-  dynamicExcelId: string;
+  dynamicFormTemplateId: string;
+  dynamicFormTemplateCode: string;
+  dynamicFormTemplateName: string;
+  dynamicExcelId?: string | null;
   assigneeUserId: string;
   assigneeUsername: string;
   assigneeFullName: string;
@@ -158,6 +168,16 @@ export type DashboardMindMapFieldMetricReportsSearchRequest = DashboardMindMapSc
   dynamicFormTemplateId?: string | null;
   fieldId: string;
   bucketKey?: string | null;
+  reportStatus?: number | null;
+  page?: number;
+  pageSize?: number;
+};
+
+export type DashboardMindMapLabelReportsSearchRequest = DashboardMindMapScopeRequest & {
+  dynamicFormTemplateId?: string | null;
+  dynamicExcelTemplateId?: string | null;
+  blockId?: string | null;
+  labelCode: string;
   reportStatus?: number | null;
   page?: number;
   pageSize?: number;
@@ -363,6 +383,35 @@ export type DashboardMindMapFieldMetricReportRowDto = {
   approvedAtUtc?: string | null;
 };
 
+export type DashboardMindMapLabelReportRowDto = {
+  workAssignmentReportId: string;
+  workReportPeriodId: string;
+  assignmentId: string;
+  assignmentCode?: string | null;
+  assignmentName: string;
+  assigneeUserId?: string | null;
+  assigneeFullName?: string | null;
+  assigneeUsername?: string | null;
+  unitId?: string | null;
+  unitLabel?: string | null;
+  periodKey: string;
+  periodInstanceKey: string;
+  periodKind: string;
+  reportStatus: number;
+  dynamicFormTemplateId?: string | null;
+  dynamicFormTemplateName?: string | null;
+  dynamicExcelTemplateId?: string | null;
+  labelCode: string;
+  labelName?: string | null;
+  labelColor?: string | null;
+  rowCount: number;
+  blockIds: string[];
+  rowKeys: string[];
+  sources: string[];
+  submittedAtUtc?: string | null;
+  approvedAtUtc?: string | null;
+};
+
 export type DashboardMindMapNodeChildrenResult = PagedResult<DashboardMindMapNodeDto>;
 export type DashboardMindMapCursorNodeResult = DashboardMindMapCursorResult<DashboardMindMapNodeDto>;
 export type DashboardMindMapTemplateUsersResult = DashboardMindMapCursorResult<DashboardMindMapTemplateUserDto>;
@@ -371,3 +420,4 @@ export type DashboardMindMapNodeUnitsResult = PagedResult<DashboardMindMapUnitRo
 export type DashboardMindMapNodeReportsResult = PagedResult<DashboardMindMapReportRowDto>;
 export type DashboardMindMapTableMetricReportsResult = PagedResult<DashboardMindMapTableMetricReportRowDto>;
 export type DashboardMindMapFieldMetricReportsResult = PagedResult<DashboardMindMapFieldMetricReportRowDto>;
+export type DashboardMindMapLabelReportsResult = PagedResult<DashboardMindMapLabelReportRowDto>;

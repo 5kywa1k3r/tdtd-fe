@@ -1,6 +1,7 @@
 import { Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type WorkAssignmentFilterValue = {
   q: string;
@@ -17,7 +18,14 @@ type Props = {
   loading?: boolean;
 };
 
-const fieldSx = { flex: { xs: "1 1 100%", sm: "1 1 220px", xl: "0 1 220px" }, minWidth: 0 };
+const fieldSx = {
+  flex: { xs: "1 1 100%", sm: "1 1 180px", lg: "0 1 178px" },
+  minWidth: 0,
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "8px",
+    bgcolor: "#fff",
+  },
+};
 
 export default function WorkAssignmentFilterBar({
   value,
@@ -29,17 +37,26 @@ export default function WorkAssignmentFilterBar({
   const emit = (patch: Partial<WorkAssignmentFilterValue>) => onChange({ ...value, ...patch });
 
   return (
-    <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 }, borderRadius: 3 }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: { xs: 1.5, md: 2 },
+        borderRadius: "8px",
+        borderColor: "#e2e8f0",
+        boxShadow: "0 10px 26px rgba(15, 23, 42, 0.04)",
+        bgcolor: "rgba(255,255,255,0.96)",
+      }}
+    >
       <Stack spacing={1.5}>
         <Stack
-          direction={{ xs: "column", xl: "row" }}
+          direction={{ xs: "column", lg: "row" }}
           spacing={1}
-          alignItems={{ xs: "stretch", xl: "center" }}
+          alignItems={{ xs: "stretch", lg: "center" }}
           justifyContent="space-between"
         >
           <Stack spacing={0.25}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Lọc danh sách assignment
+            <Typography variant="subtitle1" sx={{ fontWeight: 850, color: "#0f172a" }}>
+              Bộ lọc tìm kiếm
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Tìm nhanh theo biểu mẫu, người được giao và trạng thái thực hiện.
@@ -52,7 +69,7 @@ export default function WorkAssignmentFilterBar({
               onClick={onReset}
               disabled={loading}
               startIcon={<RestartAltOutlinedIcon />}
-              sx={{ minWidth: 116, borderRadius: 2 }}
+              sx={{ minWidth: 116, borderRadius: "8px", bgcolor: "#fff", borderColor: "#dbe4f0" }}
             >
               Đặt lại
             </Button>
@@ -62,7 +79,7 @@ export default function WorkAssignmentFilterBar({
               onClick={onReload}
               disabled={loading}
               startIcon={<RefreshOutlinedIcon />}
-              sx={{ minWidth: 116, borderRadius: 2 }}
+              sx={{ minWidth: 116, borderRadius: "8px", bgcolor: "#fff", borderColor: "#dbe4f0" }}
             >
               Làm mới
             </Button>
@@ -78,46 +95,46 @@ export default function WorkAssignmentFilterBar({
         >
           <TextField
             size="small"
-            label="Tìm theo biểu mẫu / người được giao"
+            label={uiText(UITextKey.TextTimTheoBieuMauNguoiDuocGiao)}
             value={value.q}
             onChange={(e) => emit({ q: e.target.value })}
-            sx={{ ...fieldSx, flex: { xs: "1 1 100%", lg: "1 1 320px" } }}
+            sx={{ ...fieldSx, flex: { xs: "1 1 100%", lg: "1 1 300px" } }}
           />
 
           <TextField
             select
             size="small"
-            label="Loại giao"
+            label={uiText(UITextKey.TextLoaiGiao)}
             value={value.assignmentType}
             onChange={(e) =>
               emit({ assignmentType: e.target.value as WorkAssignmentFilterValue["assignmentType"] })
             }
             sx={fieldSx}
           >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ONCE">Một lần</MenuItem>
-            <MenuItem value="PERIODIC_REPORT">Định kỳ</MenuItem>
+            <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
+            <MenuItem value="ONCE">{uiText(UITextKey.TextMotLan)}</MenuItem>
+            <MenuItem value="PERIODIC_REPORT">{uiText(UITextKey.TextDinhKy)}</MenuItem>
           </TextField>
 
           <TextField
             select
             size="small"
-            label="Hiệu lực"
+            label={uiText(UITextKey.TextHieuLuc)}
             value={value.isActive}
             onChange={(e) =>
               emit({ isActive: e.target.value as WorkAssignmentFilterValue["isActive"] })
             }
             sx={fieldSx}
           >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="ACTIVE">Đang hiệu lực</MenuItem>
-            <MenuItem value="INACTIVE">Ngừng hiệu lực</MenuItem>
+            <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
+            <MenuItem value="ACTIVE">{uiText(UITextKey.TextDangHieuLuc)}</MenuItem>
+            <MenuItem value="INACTIVE">{uiText(UITextKey.TextNgungHieuLuc)}</MenuItem>
           </TextField>
 
           <TextField
             select
             size="small"
-            label="Tiến độ"
+            label={uiText(UITextKey.TextTienDo)}
             value={value.progressStatus}
             onChange={(e) =>
               emit({
@@ -126,12 +143,12 @@ export default function WorkAssignmentFilterBar({
             }
             sx={fieldSx}
           >
-            <MenuItem value="ALL">Tất cả</MenuItem>
-            <MenuItem value="NOT_STARTED">Chưa bắt đầu</MenuItem>
-            <MenuItem value="IN_PROGRESS">Đang thực hiện</MenuItem>
-            <MenuItem value="COMPLETED">Hoàn thành</MenuItem>
-            <MenuItem value="AT_RISK">Có rủi ro</MenuItem>
-            <MenuItem value="OVERDUE">Quá hạn</MenuItem>
+            <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
+            <MenuItem value="NOT_STARTED">{uiText(UITextKey.TextChuaBatDau)}</MenuItem>
+            <MenuItem value="IN_PROGRESS">{uiText(UITextKey.TextDangThucHien)}</MenuItem>
+            <MenuItem value="COMPLETED">{uiText(UITextKey.TextHoanThanh)}</MenuItem>
+            <MenuItem value="AT_RISK">{uiText(UITextKey.TextCoRuiRo)}</MenuItem>
+            <MenuItem value="OVERDUE">{uiText(UITextKey.TextQuaHan)}</MenuItem>
           </TextField>
         </Stack>
       </Stack>

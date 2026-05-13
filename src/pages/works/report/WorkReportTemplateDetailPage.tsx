@@ -26,6 +26,7 @@ import { parseMyReportTemplateDetail } from "../../../types/report.parses";
 import { WorkReportPeriodStatus } from "../../../types/reportStatus";
 
 import WorkReportEditorPage from "./WorkReportEditorPage";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export interface WorkReportTemplateDetailPageProps {
   workId: string;
@@ -88,10 +89,10 @@ export default function WorkReportTemplateDetailPage(
   const { data, isLoading, isFetching, error, refetch } = useGetMyReportTemplateDetailQuery(
     {
       workId,
-      dynamicExcelId: group.dynamicExcelId,
+      dynamicFormTemplateId: group.dynamicFormTemplateId,
     },
     {
-      skip: !workId || !group.dynamicExcelId,
+      skip: !workId || !group.dynamicFormTemplateId,
     }
   );
 
@@ -198,9 +199,9 @@ export default function WorkReportTemplateDetailPage(
       </Stack>
 
       {error ? (
-        <Alert severity="error">Không tải được chi tiết biểu mẫu báo cáo.</Alert>
+        <Alert severity="error">{uiText(UITextKey.TextKhongTaiDuocChiTietBieuMauBaoCao)}</Alert>
       ) : filteredPeriods.length === 0 ? (
-        <Alert severity="info">Không có kỳ báo cáo phù hợp với bộ lọc hiện tại.</Alert>
+        <Alert severity="info">{uiText(UITextKey.TextKhongCoKyBaoCaoPhuHopVoiBo)}</Alert>
       ) : (
         <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3, overflow: "hidden" }}>
           <WorkReportPeriodTable

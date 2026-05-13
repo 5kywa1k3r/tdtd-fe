@@ -25,6 +25,7 @@ import {
   useListWorkFilesQuery,
 } from "../../../../api/workFilesApi";
 import { useLazyVerifyUploadQuery, useLazyPresignDownloadQuery } from "../../../../api/uploadApi";
+import { UITextKey, uiText } from '../../../../constants/uiText';
 
 export type WorkBasisFilesProps = {
   workId: string;
@@ -66,7 +67,6 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // giữ fileName để verify khi tus success
   const pendingRef = useRef<{ fileName: string } | null>(null);
 
   const busyUpload = tus.state.status === "uploading" || creatingSession;
@@ -86,7 +86,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
   const openProgress = busyUpload || !!pendingRef.current;
 
   const uploadOne = async (file: File) => {
-    if (!workId) throw new Error("Thiếu workId.");
+    if (!workId) throw new Error("Thiếu mã đầu việc.");
 
     // 1) session
     const sess = await createSession({
@@ -98,7 +98,6 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
       },
     }).unwrap();
 
-    // 2) start tus
     pendingRef.current = { fileName: file.name };
     await tus.start({
       file,
@@ -107,10 +106,8 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
       chunkSize: sess.chunkSize,
     });
 
-    // verify sẽ chạy ở effect
   };
 
-  // auto verify sau success
   useEffect(() => {
     const st = tus.state;
     const pending = pendingRef.current;
@@ -121,7 +118,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
       pendingRef.current = null;
 
       console.error(st.error);
-      alert(st.error || "Upload thất bại.");
+      alert(st.error || "Tải tệp lên thất bại.");
       return;
     }
 
@@ -131,7 +128,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
 
       if (!uploadId) {
         pendingRef.current = null;
-        alert("Upload xong nhưng thiếu uploadId.");
+        alert("Tệp đã tải lên nhưng thiếu mã xác nhận.");
         return;
       }
 
@@ -139,13 +136,13 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
         try {
           const ver = await triggerVerify({ uploadId, fileName }).unwrap();
           const ok = (ver as any)?.ok;
-          if (ok !== true) throw new Error((ver as any)?.reason || "Verify thất bại.");
+          if (ok !== true) throw new Error((ver as any)?.reason || "Không kiểm tra được tệp đã tải lên.");
 
           await refetchFiles();
         } catch (err: any) {
 
           console.error(err);
-          alert(err?.message || "Verify thất bại.");
+          alert(err?.message || "Không kiểm tra được tệp đã tải lên.");
         } finally {
           pendingRef.current = null;
         }
@@ -169,14 +166,14 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
 
       console.error(err);
       pendingRef.current = null;
-      alert(err?.message || "Upload thất bại.");
+      alert(err?.message || "Tải tệp lên thất bại.");
     }
   };
 
   const handleDelete = async (fileId: string) => {
     if (!workId) return;
     if (disabled) return;
-    if (!confirm("Xóa file này? (File sẽ được dọn MinIO bởi job cleanup)")) return;
+    if (!confirm("Xóa tệp này? Tệp sẽ được dọn dẹp tự động.")) return;
 
     try {
       await deleteFile({ workId, fileId }).unwrap();
@@ -184,7 +181,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
     } catch (err: any) {
 
       console.error(err);
-      alert(err?.message || "Xóa file thất bại.");
+      alert(err?.message || "Xóa tệp thất bại.");
     }
   };
 
@@ -192,7 +189,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
     try {
       const res = await triggerPresign({ fileId }).unwrap();
       const url = (res as any)?.url;
-      if (!url) throw new Error("Không lấy được presign url.");
+      if (!url) throw new Error("Không lấy được liên kết tải xuống.");
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
 
@@ -230,12 +227,12 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
               <Stack direction="row" spacing={1} alignItems="center">
                 <CircularProgress size={18} />
                 <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                  Đang tải danh sách file...
+                  Đang tải danh sách tệp...
                 </Typography>
               </Stack>
             ) : (files?.length ?? 0) === 0 ? (
               <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                Chưa có file nào.
+                Chưa có tệp nào.
               </Typography>
             ) : (
               <Stack spacing={0.5}>
@@ -269,12 +266,12 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
                       </Typography>
                     </Box>
 
-                    <IconButton onClick={() => handleDownload(f.id)} title="Tải xuống">
+                    <IconButton onClick={() => handleDownload(f.id)} title={uiText(UITextKey.TextTaiXuong)}>
                       <DownloadOutlinedIcon />
                     </IconButton>
 
                     {!disabled && (
-                      <IconButton onClick={() => handleDelete(f.id)} title="Xóa" disabled={deletingFile}>
+                      <IconButton onClick={() => handleDelete(f.id)} title={uiText(UITextKey.TextXoa)} disabled={deletingFile}>
                         <DeleteOutlineIcon />
                       </IconButton>
                     )}
@@ -287,7 +284,7 @@ export const WorkBasisFiles: React.FC<WorkBasisFilesProps> = ({
       </Card>
 
       <Dialog open={openProgress} onClose={() => {}} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>Đang tải lên…</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>{uiText(UITextKey.TextDangTaiLen)}</DialogTitle>
         <DialogContent>
           <Stack spacing={1.25} sx={{ py: 1 }}>
             <LinearProgress

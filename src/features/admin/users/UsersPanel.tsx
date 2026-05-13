@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
   Alert,
   Button,
@@ -33,19 +33,24 @@ import { UserEditorDialog } from './UserEditorDialog';
 import { ResetPasswordDialog } from './ResetPasswordDialog';
 
 import { UsersTable, type AdminUserRow } from '../../../components/admin/UsersTable';
-import { LazyUnitMultiSelect } from '../../../components/common/LazyUnitMultiSelect';
+import { LazyUnitMultiSelect, type UnitPickMeta } from '../../../components/common/LazyUnitMultiSelect';
 import { PositionSelect } from '../../../components/common/PositionSelect';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 
 import { Permission } from '../../../constants/permissions';
 import { hasPermission } from '../../../utils/rbac';
+import { releaseFocusBeforeModal } from '../../../utils/focus';
+import { UITextKey, uiText } from '../../../constants/uiText';
+import { getApiErrorMessage } from '../../../utils/apiError';
 
 const DEFAULT_PASSWORD = '123456@Aa';
 
 const toolbarButtonSx = {
   height: 40,
-  px: 1.75,
+  px: 1.5,
   whiteSpace: 'nowrap',
+  flexShrink: 0,
+  minWidth: 'max-content',
 };
 
 async function downloadTemplate(url: string, format: 'xlsx' | 'csv', fileName: string) {
@@ -62,11 +67,16 @@ export function UsersPanel() {
   const { data: me } = useGetMeQuery();
   const roles = me?.roles ?? [];
   const isAdmin = roles.includes('ADMIN');
-  const isSys = roles.includes('SYSTEM_ADMIN');
+  const isSys = roles.includes('SYSTEM_ADMIN') || me?.accountKind === 'SYSTEM_ADMIN';
+  const isManagerAccount =
+    roles.includes('MANAGER_LEVEL') ||
+    roles.some((role) => role.startsWith('MANAGER_UNIT:')) ||
+    me?.accountKind === 'LEVEL_MANAGER' ||
+    me?.accountKind === 'UNIT_MANAGER';
 
   const canCreate = useMemo(
-    () => isAdmin || hasPermission(roles, Permission.USER_CREATE),
-    [isAdmin, roles],
+    () => isAdmin || isSys || isManagerAccount || hasPermission(roles, Permission.USER_CREATE),
+    [isAdmin, isManagerAccount, isSys, roles],
   );
 
   const canUpdate = useMemo(
@@ -81,7 +91,7 @@ export function UsersPanel() {
   const isDeleted = deleteFilter === 'all' ? undefined : deleteFilter === 'deleted';
 
   // ===== INPUT FILTERS (chỉ là UI, chưa apply) =====
-  const [qInput, setQInput] = useState('');
+  const qInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedUnitIdInput, setSelectedUnitIdInput] = useState<string>('');
   const [unitCodePrefixInput, setUnitCodePrefixInput] = useState<string>('');
   const [unitTypeCodeInput, setUnitTypeCodeInput] = useState<string>('');
@@ -120,14 +130,14 @@ export function UsersPanel() {
   // snackbar
   const [snack, setSnack] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const notifySuccess = (msg: string) => {
+  const notifySuccess = useCallback((msg: string) => {
     setSnack({ type: 'success', message: msg });
     refetch();
-  };
+  }, [refetch]);
 
-  const notifyError = (e: any, fallback: string) => {
-    setSnack({ type: 'error', message: e?.data?.title ?? e?.message ?? fallback });
-  };
+  const notifyError = useCallback((e: any, fallback: string) => {
+    setSnack({ type: 'error', message: getApiErrorMessage(e) || fallback });
+  }, []);
 
   const rows: AdminUserRow[] = useMemo(() => {
     const src = data?.rows ?? [];
@@ -166,18 +176,42 @@ export function UsersPanel() {
   const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
   const [resetConfirmTarget, setResetConfirmTarget] = useState<AdminUserRow | null>(null);
 
-  const applySearch = () => {
+  const selectedUnitValue = useMemo(
+    () => (selectedUnitIdInput ? [selectedUnitIdInput] : []),
+    [selectedUnitIdInput],
+  );
+
+  const handleUnitFilterChange = useCallback((v: string[]) => {
+    const id = v?.[0] ?? '';
+    setSelectedUnitIdInput(id);
+    if (!id) {
+      setUnitCodePrefixInput('');
+      setUnitTypeCodeInput('');
+    }
+  }, []);
+
+  const handleUnitFilterMetaChange = useCallback((selected: UnitPickMeta[]) => {
+    const first = selected?.[0];
+    setUnitCodePrefixInput(first?.code ?? '');
+    setUnitTypeCodeInput(first?.primaryUnitTypeCode ?? '');
+  }, []);
+
+  const handlePositionFilterChange = useCallback((v: string) => setPositionCodeInput(v), []);
+
+  const applySearch = useCallback(() => {
     const next = {
-      q: qInput.trim(),
+      q: qInputRef.current?.value.trim() ?? '',
       unitCodePrefix: unitCodePrefixInput.trim() ? unitCodePrefixInput.trim() : undefined,
       positionCode: positionCodeInput || undefined,
     };
     setApplied(next);
     setPage(0);
-  };
+  }, [positionCodeInput, unitCodePrefixInput]);
 
-  const clearFilters = () => {
-    setQInput('');
+  const clearFilters = useCallback(() => {
+    if (qInputRef.current) {
+      qInputRef.current.value = '';
+    }
     setSelectedUnitIdInput('');
     setUnitCodePrefixInput('');
     setUnitTypeCodeInput('');
@@ -185,76 +219,119 @@ export function UsersPanel() {
 
     setApplied({ q: '', unitCodePrefix: undefined, positionCode: undefined });
     setPage(0);
-  };
+  }, []);
+
+  const handlePageChange = useCallback((p: number) => setPage(p), []);
+  const handlePageSizeChange = useCallback((s: number) => {
+    setPageSize(s);
+    setPage(0);
+  }, []);
+  const handleSortChange = useCallback((f: string, d: 'asc' | 'desc') => {
+    setSortField(f);
+    setSortDirection(d);
+    setPage(0);
+  }, []);
+
+  const handleOpenCreate = useCallback((event: MouseEvent<HTMLElement>) => {
+    releaseFocusBeforeModal(event);
+    setEditor({ mode: 'create' });
+  }, []);
+
+  const handleRowDoubleClick = useCallback((row: AdminUserRow) => {
+    if (!canUpdate) return;
+    releaseFocusBeforeModal();
+    setEditor({ mode: 'edit', userId: row.id });
+  }, [canUpdate]);
+
+  const handleEdit = useCallback((row: AdminUserRow) => {
+    releaseFocusBeforeModal();
+    setEditor({ mode: 'edit', userId: row.id });
+  }, []);
+
+  const handleDelete = useCallback((row: AdminUserRow) => {
+    if (!canDelete) return;
+    releaseFocusBeforeModal();
+    setDeleteTarget(row);
+  }, [canDelete]);
+
+  const handleResetPassword = useCallback((row: AdminUserRow) => {
+    releaseFocusBeforeModal();
+    setResetConfirmTarget(row);
+  }, []);
 
   return (
-    <Card>
-      <CardContent>
+    <Card variant="outlined" sx={{ borderRadius: 1 }}>
+      <CardContent sx={{ p: 2.25, '&:last-child': { pb: 2.25 } }}>
         {/* Filters */}
         <Box
           sx={{
             display: 'flex',
             flexWrap: 'wrap',
             alignItems: 'flex-start',
-            gap: 1,
-            mb: 2,
+            gap: 1.25,
+            mb: 1.5,
           }}
         >
           {/* LEFT FILTERS */}
           <Box
             sx={{
-              display: 'flex',
-              flexWrap: 'wrap',
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'minmax(220px, 1.1fr) minmax(220px, 1fr)',
+                lg: 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(220px, 0.8fr)',
+                xl: 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(220px, 0.8fr) auto',
+              },
               alignItems: 'flex-start',
               gap: 1,
-              flex: '1 1 720px',
-              minWidth: 280,
+              flex: '1 1 760px',
+              minWidth: { xs: '100%', md: 0 },
             }}
           >
             <TextField
+              id="admin-users-search-q"
+              name="adminUsersSearch"
               size="small"
-              placeholder="Tìm username / fullName"
-              value={qInput}
-              onChange={(e) => setQInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') applySearch();
-              }}
-              sx={{ flex: '1 1 260px', minWidth: 220 }}
+              placeholder={uiText(UITextKey.TextTimUsernameFullName)}
+              inputRef={qInputRef}
+              sx={{ minWidth: 0 }}
             />
 
-            <Box sx={{ flex: '1 1 260px', minWidth: 220 }}>
+            <Box sx={{ minWidth: 0 }}>
               <LazyUnitMultiSelect
-                value={selectedUnitIdInput ? [selectedUnitIdInput] : []}
-                onChange={(v) => {
-                  const id = v?.[0] ?? '';
-                  setSelectedUnitIdInput(id);
-                  if (!id) {
-                    setUnitCodePrefixInput('');
-                    setUnitTypeCodeInput('');
-                  }
-                }}
-                onChangeMeta={(selected) => {
-                  const first = selected?.[0];
-                  setUnitCodePrefixInput(first?.code ?? '');
-                  setUnitTypeCodeInput(first?.primaryUnitTypeCode ?? '');
-                }}
+                value={selectedUnitValue}
+                onChange={handleUnitFilterChange}
+                onChangeMeta={handleUnitFilterMetaChange}
                 mode="single"
-                label="Đơn vị"
+                id="admin-users-unit-filter"
+                name="adminUsersUnitId"
+                label={uiText(UITextKey.TextDonVi)}
               />
             </Box>
 
-            <Box sx={{ flex: '1 1 260px', minWidth: 220 }}>
+            <Box sx={{ minWidth: 0 }}>
               <PositionSelect
                 value={positionCodeInput}
-                onChange={(v) => setPositionCodeInput(v)}
+                onChange={handlePositionFilterChange}
                 unitCode={unitCodePrefixInput || null}
                 unitTypeCode={unitTypeCodeInput || null}
-                label="Chức vụ"
+                id="admin-users-position-filter"
+                name="adminUsersPositionCode"
+                label={uiText(UITextKey.TextChucVu)}
               />
             </Box>
 
             {/* ACTION BUTTONS: Search + Clear */}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 1,
+                alignItems: 'center',
+                gridColumn: { xs: '1 / -1', md: '1 / -1', xl: 'auto' },
+                minWidth: 0,
+              }}
+            >
               <Button
                 variant="outlined"
                 size="small"
@@ -284,10 +361,11 @@ export function UsersPanel() {
               alignItems: 'flex-start',
               alignSelf: 'flex-start',
               flexWrap: 'wrap',
-              justifyContent: { xs: 'flex-start', lg: 'flex-end' },
+              justifyContent: { xs: 'flex-start', sm: 'flex-end' },
               gap: 1,
-              flex: '0 0 auto',
-              marginLeft: { xs: 0, sm: 'auto' },
+              flex: '1 1 420px',
+              minWidth: 0,
+              marginLeft: 0,
             }}
           >
             {canCreate && (
@@ -303,9 +381,10 @@ export function UsersPanel() {
                     if (!file) return;
                     try {
                       const result = await importUsers({ file, dryRun: true }).unwrap();
+                      releaseFocusBeforeModal();
                       setImportPreview({ file, result });
                     } catch (e: any) {
-                      notifyError(e, 'Kiểm tra file import thất bại.');
+                      notifyError(e, 'Kiểm tra tệp nhập thất bại.');
                     }
                   }}
                 />
@@ -331,10 +410,13 @@ export function UsersPanel() {
                   variant="outlined"
                   size="small"
                   startIcon={<UploadFileIcon />}
-                  onClick={() => importInputRef.current?.click()}
+                  onClick={(event) => {
+                    releaseFocusBeforeModal(event);
+                    importInputRef.current?.click();
+                  }}
                   sx={toolbarButtonSx}
                 >
-                  Import
+                  Nhập dữ liệu
                 </Button>
               </>
             )}
@@ -343,11 +425,11 @@ export function UsersPanel() {
                 variant="contained"
                 size="small"
                 startIcon={<AddIcon />}
-                onClick={() => setEditor({ mode: 'create' })}
+                onClick={handleOpenCreate}
                 sx={toolbarButtonSx}
               >
                 <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                  Tạo user
+                  Tạo người dùng
                 </Box>
               </Button>
             )}
@@ -365,28 +447,13 @@ export function UsersPanel() {
           totalRows={data?.totalRows ?? 0}
           sortField={sortField}
           sortDirection={sortDirection}
-          onPageChange={(p) => setPage(p)}
-          onPageSizeChange={(s) => {
-            setPageSize(s);
-            setPage(0);
-          }}
-          onSortChange={(f, d) => {
-            setSortField(f);
-            setSortDirection(d);
-            setPage(0);
-          }}
-          onRowDoubleClick={(row) => {
-            if (!canUpdate) return;
-            setEditor({ mode: 'edit', userId: row.id });
-          }}
-          onEdit={(row) => setEditor({ mode: 'edit', userId: row.id })}
-          onDelete={(row) => {
-            if (!canDelete) return;
-            setDeleteTarget(row);
-          }}
-          onResetPassword={(row) => {
-            setResetConfirmTarget(row);
-          }}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          onSortChange={handleSortChange}
+          onRowDoubleClick={handleRowDoubleClick}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onResetPassword={handleResetPassword}
         />
 
         <UserEditorDialog
@@ -401,7 +468,7 @@ export function UsersPanel() {
         />
 
         <Dialog open={!!importPreview} onClose={() => setImportPreview(null)} fullWidth maxWidth="md">
-          <DialogTitle>Kết quả kiểm tra import user</DialogTitle>
+          <DialogTitle>{uiText(UITextKey.TextKetQuaKiemTraImportUser)}</DialogTitle>
           <DialogContent>
             {importPreview && (
               <Stack spacing={1.5} sx={{ mt: 1 }}>
@@ -435,13 +502,13 @@ export function UsersPanel() {
                 try {
                   await importUsers({ file: importPreview.file, dryRun: false }).unwrap();
                   setImportPreview(null);
-                  notifySuccess('Import user thành công.');
+                  notifySuccess('Nhập người dùng thành công.');
                 } catch (e: any) {
-                  notifyError(e, 'Import user thất bại.');
+                  notifyError(e, 'Nhập người dùng thất bại.');
                 }
               }}
             >
-              Xác nhận import
+              Xác nhận nhập
             </Button>
           </DialogActions>
         </Dialog>
@@ -455,10 +522,10 @@ export function UsersPanel() {
         {/* Confirm delete */}
         <ConfirmDialog
           open={!!deleteTarget}
-          title="Ngừng dùng user"
+          title={uiText(UITextKey.TextNgungDungUser)}
           message={
             <Box>
-              Bạn có chắc muốn ngừng dùng user <b>{deleteTarget?.username}</b>?
+              Bạn có chắc muốn ngừng dùng người dùng <b>{deleteTarget?.username}</b>?
             </Box>
           }
           confirmText="Ngừng dùng"
@@ -470,9 +537,9 @@ export function UsersPanel() {
             if (!deleteTarget) return;
             try {
               await softDeleteUser({ userId: deleteTarget.id }).unwrap();
-              notifySuccess('Đã ngừng dùng user.');
+              notifySuccess('Đã ngừng dùng người dùng.');
             } catch (e: any) {
-              setSnack({ type: 'error', message: e?.data?.title ?? e?.message ?? 'Ngừng dùng user thất bại.' });
+              setSnack({ type: 'error', message: e?.data?.title ?? e?.message ?? 'Ngừng dùng người dùng thất bại.' });
             } finally {
               setDeleteTarget(null);
             }
@@ -482,10 +549,10 @@ export function UsersPanel() {
         {/* Confirm reset password (quick reset to default) */}
         <ConfirmDialog
           open={!!resetConfirmTarget}
-          title="Đặt lại mật khẩu"
+          title={uiText(UITextKey.TextDatLaiMatKhau)}
           message={
             <Box>
-              Reset mật khẩu cho <b>{resetConfirmTarget?.username}</b> về{' '}
+              Đặt lại mật khẩu cho <b>{resetConfirmTarget?.username}</b> về{' '}
               <b>{DEFAULT_PASSWORD}</b>?
             </Box>
           }

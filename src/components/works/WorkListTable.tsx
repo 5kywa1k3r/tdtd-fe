@@ -8,6 +8,7 @@ import type { WorkListRow } from "../../types/work";
 import { WorkStatusChip } from "../common/WorkStatusChip";
 import CommonDateText from "../common/CommonDateText";
 import CommonLabelText from "../common/CommonLabelText";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type WorkSortField = "autoCode" | "name" | "dueDate" | "createdAtUtc" | "priority";
 
@@ -63,7 +64,7 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Xem">
+            <Tooltip title={uiText(UITextKey.TextXem)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -74,7 +75,7 @@ export const WorkListTable: React.FC<WorkListTableProps> = ({
                 <VisibilityIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Xóa">
+            <Tooltip title={uiText(UITextKey.TextXoa)}>
               <IconButton
                 size="small"
                 onClick={(e) => {

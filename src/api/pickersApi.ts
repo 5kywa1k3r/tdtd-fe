@@ -100,6 +100,7 @@ export const pickersApi = baseApi.injectEndpoints({
           .filter((row: UnitPickRow) => !isHiddenRootUnit(row)),
 
       providesTags: (_res, _err, arg): Tag[] => [
+        { type: 'PickersUnits', id: 'TREE' },
         { type: 'PickersUnits', id: `CHILDREN:${normParentId(arg.parentId) || 'ROOT'}` },
       ],
 
@@ -133,7 +134,10 @@ export const pickersApi = baseApi.injectEndpoints({
         pageSize: Number(res?.pageSize ?? 20),
       }),
 
-      providesTags: (): Tag[] => [{ type: 'PickersUnits', id: 'SEARCH' }],
+      providesTags: (): Tag[] => [
+        { type: 'PickersUnits', id: 'TREE' },
+        { type: 'PickersUnits', id: 'SEARCH' },
+      ],
 
       ...pickerQueryDefaults,
     }),

@@ -30,6 +30,7 @@ import {
   useGetUnitChildrenQuery,
   type UnitPickNode,
 } from '../../api/adminUnitsApi';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 const emptyIcon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
@@ -56,6 +57,8 @@ export interface LazyUnitMultiSelectProps {
   mode?: UnitSelectMode;
   label?: string;
   virtualUnitBehavior?: VirtualUnitBehavior;
+  id?: string;
+  name?: string;
 }
 
 type Ref<T> = { current: T };
@@ -110,6 +113,10 @@ function measureSummary(names: string[], maxWidth: number): string {
   return result;
 }
 
+function scheduleSelectionUpdate(run: () => void) {
+  React.startTransition(run);
+}
+
 type ColumnViewProps = {
   open: boolean;
   col: Column;
@@ -160,11 +167,14 @@ function ColumnView({
 }: ColumnViewProps) {
   const level = col.level;
   const parentId = col.parentId;
+  const searchIdSeed = React.useId().replace(/:/g, '');
+  const searchId = `unit-picker-column-search-${searchIdSeed}-${level}`;
 
   const q = useGetUnitChildrenQuery({ parentId: parentId ?? null }, { skip: !open });
 
   const nodes: UnitPickNode[] = q.data ?? [];
   const loading = q.isFetching;
+  const deferredSearchValue = React.useDeferredValue(searchValue);
 
   React.useEffect(() => {
     const map = infoMapRef.current;
@@ -211,7 +221,7 @@ function ColumnView({
   }, [nodes, parentId, level, infoMapRef, childrenCountRef, setActivePath]);
 
   const filtered = React.useMemo(() => {
-    const key = normalizeVi(searchValue);
+    const key = normalizeVi(deferredSearchValue);
     if (!key) return nodes;
 
     return nodes.filter((n: any) => {
@@ -219,7 +229,7 @@ function ColumnView({
       const fn = n.fullName ?? n.fullname ?? '';
       return normalizeVi(sn || fn).includes(key);
     });
-  }, [nodes, searchValue]);
+  }, [nodes, deferredSearchValue]);
 
   const columnIds = React.useMemo(
     () => filtered.map((n: any) => n.id as string).filter(Boolean),
@@ -260,7 +270,7 @@ function ColumnView({
           </Typography>
 
           {!isRoot && (
-            <Tooltip title="Thu gọn cấp này">
+            <Tooltip title={uiText(UITextKey.TextThuGonCapNay)}>
               <IconButton size="small" onClick={() => handleCloseFromLevel(level)}>
                 <ChevronLeftIcon fontSize="small" />
               </IconButton>
@@ -270,6 +280,8 @@ function ColumnView({
 
         <TextField
           size="small"
+          id={searchId}
+          name={searchId}
           placeholder={isRoot ? 'Tìm đơn vị...' : 'Tìm đơn vị cấp dưới...'}
           fullWidth
           value={searchValue}
@@ -375,18 +387,18 @@ function ColumnView({
                           <Tooltip
                             title={
                               virtualUnitBehavior === 'reject'
-                                ? 'Unit ao khong the dung lam don vi chua user'
-                                : 'Unit ao'
+                                ? 'Đơn vị ảo không thể dùng làm đơn vị chứa người dùng'
+                                : 'Đơn vị ảo'
                             }
                           >
-                            <Chip size="small" label="VU" variant="outlined" sx={{ height: 18 }} />
+                            <Chip size="small" label={uiText(UITextKey.TextVU)} variant="outlined" sx={{ height: 18 }} />
                           </Tooltip>
                         )}
                       </Stack>
                     }
                   />
 
-                  <Tooltip title="Xem đơn vị cấp dưới">
+                  <Tooltip title={uiText(UITextKey.TextXemDonViCapDuoi)}>
                     <IconButton
                       size="small"
                       edge="end"
@@ -416,6 +428,8 @@ function ColumnView({
   );
 }
 
+const MemoizedColumnView = React.memo(ColumnView);
+
 export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
   value,
   onChange,
@@ -423,7 +437,12 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
   mode = 'multiple',
   virtualUnitBehavior,
   label = 'Đơn vị',
+  id,
+  name,
 }) => {
+  const generatedInputId = React.useId().replace(/:/g, '');
+  const inputId = id ?? `unit-picker-${generatedInputId}`;
+  const inputName = name ?? inputId;
   const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
@@ -447,8 +466,8 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
 
   const selectedSet = React.useMemo(() => new Set<string>(effectiveValue), [effectiveValue]);
 
-  const handleOpen = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
-  const handleClose = () => setAnchorEl(null);
+  const handleOpen = React.useCallback((e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget), []);
+  const handleClose = React.useCallback(() => setAnchorEl(null), []);
 
   const getInfo = React.useCallback((id: string) => infoMapRef.current.get(id), []);
 
@@ -504,8 +523,10 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
   const commitSelection = React.useCallback(
     (next: Set<string>) => {
       const nextIds = Array.from(next);
-      onChange(nextIds);
-      emitMeta(nextIds);
+      scheduleSelectionUpdate(() => {
+        onChange(nextIds);
+        emitMeta(nextIds);
+      });
     },
     [emitMeta, onChange],
   );
@@ -543,12 +564,17 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
 
       if (mode === 'single') {
         if (current.has(id)) {
-          onChange([]);
-          emitMeta([]);
+          scheduleSelectionUpdate(() => {
+            onChange([]);
+            emitMeta([]);
+          });
         } else {
-          onChange([id]);
-          emitMeta([id]);
+          scheduleSelectionUpdate(() => {
+            onChange([id]);
+            emitMeta([id]);
+          });
         }
+        handleClose();
         return;
       }
 
@@ -581,6 +607,7 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
       effectiveValue,
       emitMeta,
       getInfo,
+      handleClose,
       isAncestor,
       mode,
       onChange,
@@ -691,6 +718,8 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
           <TextField
             size="small"
             fullWidth
+            id={inputId}
+            name={inputName}
             label={label}
             value={summaryLabel}
             onClick={handleOpen}
@@ -700,7 +729,7 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
                 sx: { cursor: 'pointer' },
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Có thể chọn từng đơn vị hoặc dùng “Chọn tất cả” ở từng cột để lấy toàn bộ các đơn vị đang hiển thị trong cột đó.">
+                    <Tooltip title={uiText(UITextKey.TextCoTheChonTungDonViHoacDungChon)}>
                       <IconButton size="small" tabIndex={-1} sx={{ color: 'text.disabled', mr: 0.5 }}>
                         <InfoOutlinedIcon fontSize="small" />
                       </IconButton>
@@ -731,7 +760,7 @@ export const LazyUnitMultiSelect: React.FC<LazyUnitMultiSelectProps> = ({
         }}
       >
         {columns.map((col, idx) => (
-          <ColumnView
+          <MemoizedColumnView
             key={`${col.level}:${col.parentId ?? 'ROOT'}`}
             open={open}
             col={col}

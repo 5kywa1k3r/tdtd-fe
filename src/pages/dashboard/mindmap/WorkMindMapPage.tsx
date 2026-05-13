@@ -21,6 +21,7 @@ import type {
   MindMapStatusAccent,
   UserReportFilters,
 } from "../../../components/dashboard/mindmap/MindMapGraphNode";
+import LabelDrilldownDrawer from "../../../components/dashboard/mindmap/LabelDrilldownDrawer";
 import NodeSummaryPopover from "../../../components/dashboard/mindmap/NodeSummaryPopover";
 import FieldMetricDrilldownDrawer from "../../../components/dashboard/mindmap/FieldMetricDrilldownDrawer";
 import ReportDrilldownDrawer from "../../../components/dashboard/mindmap/ReportDrilldownDrawer";
@@ -46,6 +47,7 @@ import {
 import type {
   DashboardMindMapNodeDto,
   DashboardMindMapFieldSummaryDto,
+  DashboardMindMapLabelSummaryDto,
   DashboardMindMapReportRowDto,
   DashboardMindMapScopeRequest,
   DashboardMindMapTemplateGroupDto,
@@ -76,11 +78,11 @@ const EMPTY_SCOPE: DashboardMindMapScopeRequest = {
 };
 
 const REPORT_STATUS_OPTIONS = [
-  { value: "PENDING" as const, label: "Chua mo" },
-  { value: "DRAFT" as const, label: "Ban nhap" },
-  { value: "SUBMITTED" as const, label: "Da gui" },
-  { value: "APPROVED" as const, label: "Da duyet" },
-  { value: "OVERDUE" as const, label: "Qua han" },
+  { value: "PENDING" as const, label: "Chưa bắt đầu" },
+  { value: "DRAFT" as const, label: "Bản nháp" },
+  { value: "SUBMITTED" as const, label: "Đã gửi" },
+  { value: "APPROVED" as const, label: "Đã duyệt" },
+  { value: "OVERDUE" as const, label: "Quá hạn" },
 ];
 
 const DEFAULT_REPORT_FILTERS: UserReportFilters = {
@@ -106,6 +108,12 @@ const ASSIGNMENT_PROGRESS_STATUS = {
 } as const;
 
 type MindMapChipColor = NonNullable<MindMapGraphChip["color"]>;
+type EmptyNodeReason =
+  | "root-assignments"
+  | "assignment-children"
+  | "assignment-reports"
+  | "template-users"
+  | "user-reports";
 
 const STATUS_ACCENTS: Record<string, MindMapStatusAccent> = {
   default: { color: "rgba(148,163,184,0.42)", background: "rgba(248,250,252,0.86)" },
@@ -125,21 +133,21 @@ function isOverdueDoneWork(work: DashboardMindMapWorkDto): boolean {
 }
 
 function getMindMapWorkStatusLabel(work: DashboardMindMapWorkDto): string {
-  if (isOverdueDoneWork(work)) return "Qua han da lam";
+  if (isOverdueDoneWork(work)) return "Quá hạn đã làm";
 
   switch (work.status) {
     case WORK_STATUS.NotStarted:
-      return "Chua bat dau";
+      return "Chưa bắt đầu";
     case WORK_STATUS.InProgress:
-      return "Dang thuc hien";
+      return "Đang thực hiện";
     case WORK_STATUS.Completed:
-      return "Hoan thanh";
+      return "Hoàn thành";
     case WORK_STATUS.AtRiskOverdue:
-      return "Co nguy co qua han";
+      return "Có nguy cơ quá hạn";
     case WORK_STATUS.Overdue:
-      return "Qua han";
+      return "Quá hạn";
     default:
-      return `Trang thai ${work.status}`;
+      return `Trạng thái ${work.status}`;
   }
 }
 
@@ -165,21 +173,21 @@ function isOverdueDoneAssignment(node: DashboardMindMapNodeDto): boolean {
 }
 
 function getMindMapAssignmentStatusLabel(node: DashboardMindMapNodeDto): string {
-  if (isOverdueDoneAssignment(node)) return "Qua han da lam";
+  if (isOverdueDoneAssignment(node)) return "Quá hạn đã làm";
 
   switch (node.progressStatus) {
     case ASSIGNMENT_PROGRESS_STATUS.NotStarted:
-      return "Chua thuc hien";
+      return "Chưa thực hiện";
     case ASSIGNMENT_PROGRESS_STATUS.InProgress:
-      return "Dang thuc hien";
+      return "Đang thực hiện";
     case ASSIGNMENT_PROGRESS_STATUS.Completed:
-      return "Da hoan thanh";
+      return "Đã hoàn thành";
     case ASSIGNMENT_PROGRESS_STATUS.AtRiskOverdue:
-      return "Co nguy co cham muon";
+      return "Có nguy cơ chậm muộn";
     case ASSIGNMENT_PROGRESS_STATUS.Overdue:
-      return "Cham muon";
+      return "Chậm muộn";
     default:
-      return `Tien do ${node.progressStatus}`;
+      return `Tiến độ ${node.progressStatus}`;
   }
 }
 
@@ -203,26 +211,26 @@ function getMindMapAssignmentStatusChipColor(node: DashboardMindMapNodeDto): Min
 function getMindMapReportPeriodStatusLabel(status?: number | null): string {
   switch (status) {
     case 0:
-      return "Chua bat dau";
+      return "Chưa bắt đầu";
     case 1:
-      return "Nhap";
+      return "Bản nháp";
     case 2:
-      return "Da nop";
+      return "Đã nộp";
     case 3:
-      return "Da duyet";
+      return "Đã duyệt";
     case 4:
-      return "Qua han chua lam";
+      return "Quá hạn chưa bắt đầu";
     case 5:
-      return "Qua han nhap";
+      return "Quá hạn bản nháp";
     case 6:
-      return "Qua han da nop";
+      return "Quá hạn đã gửi";
     case 7:
-      return "Qua han da duyet";
+      return "Quá hạn đã duyệt";
     case null:
     case undefined:
-      return "Chua co";
+      return "Chưa có";
     default:
-      return `Trang thai ky ${status}`;
+      return `Trạng thái kỳ ${status}`;
   }
 }
 
@@ -276,12 +284,12 @@ function workNodeId(workId: string) {
   return `work:${workId}`;
 }
 
-function templateNodeId(assignmentId: string, dynamicExcelId: string) {
-  return `template:${assignmentId}:${dynamicExcelId}`;
+function templateNodeId(assignmentId: string, dynamicFormTemplateId: string) {
+  return `template:${assignmentId}:${dynamicFormTemplateId}`;
 }
 
-function userNodeId(assignmentId: string, dynamicExcelId: string, assigneeUserId: string) {
-  return `user:${assignmentId}:${dynamicExcelId}:${assigneeUserId}`;
+function userNodeId(assignmentId: string, dynamicFormTemplateId: string, assigneeUserId: string) {
+  return `user:${assignmentId}:${dynamicFormTemplateId}:${assigneeUserId}`;
 }
 
 function reportNodeId(report: DashboardMindMapReportRowDto) {
@@ -290,6 +298,18 @@ function reportNodeId(report: DashboardMindMapReportRowDto) {
 
 function loadMoreNodeId(parentId: string) {
   return `load-more:${parentId}`;
+}
+
+function emptyNodeId(parentId: string, reason: EmptyNodeReason) {
+  return `empty:${reason}:${parentId}`;
+}
+
+function getEmptyNodeReason(id: string): EmptyNodeReason {
+  return (id.split(":")[1] as EmptyNodeReason) || "assignment-children";
+}
+
+function hasOwn<T extends object>(source: T, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(source, key);
 }
 
 function makeMeta(totalRows: number, nextCursor?: string | null): CursorMeta {
@@ -302,16 +322,16 @@ function makeMeta(totalRows: number, nextCursor?: string | null): CursorMeta {
 
 function reportText(report: DashboardMindMapReportRowDto) {
   const parts = [
-    report.currentProgressStatus ? `Tien do: ${report.currentProgressStatus}` : "",
-    report.reportReason ? `Ly do BC: ${report.reportReason}` : "",
-    report.difficulties ? `Kho khan: ${report.difficulties}` : "",
-    report.proposedSolution ? `De xuat: ${report.proposedSolution}` : "",
-    report.lateReason ? `Ly do cham: ${report.lateReason}` : "",
-    report.reviewerComment ? `Nhan xet: ${report.reviewerComment}` : "",
-    report.reviewerEvaluation ? `Danh gia: ${report.reviewerEvaluation}` : "",
+    report.currentProgressStatus ? `Tiến độ: ${report.currentProgressStatus}` : "",
+    report.reportReason ? `Lý do báo cáo: ${report.reportReason}` : "",
+    report.difficulties ? `Khó khăn: ${report.difficulties}` : "",
+    report.proposedSolution ? `Đề xuất: ${report.proposedSolution}` : "",
+    report.lateReason ? `Lý do chậm: ${report.lateReason}` : "",
+    report.reviewerComment ? `Nhận xét: ${report.reviewerComment}` : "",
+    report.reviewerEvaluation ? `Đánh giá: ${report.reviewerEvaluation}` : "",
   ].filter(Boolean);
 
-  return parts.length ? parts.join(" | ") : "Chua co noi dung bao cao tom tat.";
+  return parts.length ? parts.join(" | ") : "Chưa có nội dung báo cáo tóm tắt.";
 }
 
 type WorkMindMapPageProps = {
@@ -376,6 +396,15 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     open: false,
     nodeId: null,
     metric: null,
+  });
+  const [labelDrawer, setLabelDrawer] = useState<{
+    open: boolean;
+    nodeId: string | null;
+    label: DashboardMindMapLabelSummaryDto | null;
+  }>({
+    open: false,
+    nodeId: null,
+    label: null,
   });
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance | null>(null);
   const fitViewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -555,33 +584,65 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       if (cursorMetaByParentId[currentWorkNodeId]?.hasMore) {
         childMap[currentWorkNodeId] = [...childMap[currentWorkNodeId], loadMoreNodeId(currentWorkNodeId)];
       }
+      if (
+        workTreeData?.work &&
+        expandedNodeIds.includes(currentWorkNodeId) &&
+        rootAssignmentIds.length === 0 &&
+        !cursorMetaByParentId[currentWorkNodeId]?.hasMore &&
+        !loadingByNodeId[currentWorkNodeId]
+      ) {
+        childMap[currentWorkNodeId] = [emptyNodeId(currentWorkNodeId, "root-assignments")];
+      }
     }
 
     Object.keys(assignmentNodesById).forEach((assignmentId) => {
       const branch = assignmentBranchById[assignmentId];
       if (branch === "assignments") {
-        childMap[assignmentId] = assignmentChildIdsByParentId[assignmentId] ?? [];
+        const childIds = assignmentChildIdsByParentId[assignmentId] ?? [];
+        const hasLoaded = hasOwn(assignmentChildIdsByParentId, assignmentId);
+        const hasMore = cursorMetaByParentId[assignmentId]?.hasMore;
+        childMap[assignmentId] = childIds;
         if (cursorMetaByParentId[assignmentId]?.hasMore) {
           childMap[assignmentId] = [...childMap[assignmentId], loadMoreNodeId(assignmentId)];
+        }
+        if (hasLoaded && childIds.length === 0 && !hasMore && !loadingByNodeId[assignmentId]) {
+          childMap[assignmentId] = [emptyNodeId(assignmentId, "assignment-children")];
         }
       }
 
       if (branch === "reports") {
-        childMap[assignmentId] = templateGroupIdsByAssignmentId[assignmentId] ?? [];
+        const groupIds = templateGroupIdsByAssignmentId[assignmentId] ?? [];
+        const hasLoaded = hasOwn(templateGroupIdsByAssignmentId, assignmentId);
+        childMap[assignmentId] = groupIds;
+        if (hasLoaded && groupIds.length === 0 && !loadingByNodeId[assignmentId]) {
+          childMap[assignmentId] = [emptyNodeId(assignmentId, "assignment-reports")];
+        }
       }
     });
 
     Object.keys(templateGroupsById).forEach((templateId) => {
-      childMap[templateId] = getTemplateUserIdsForDisplay(templateId);
-      if (cursorMetaByParentId[templateId]?.hasMore && (templateSelectedUserIdsById[templateId] ?? []).length === 0) {
+      const userIds = getTemplateUserIdsForDisplay(templateId);
+      const hasLoaded = hasOwn(templateUserIdsByTemplateId, templateId);
+      const hasMore = cursorMetaByParentId[templateId]?.hasMore && (templateSelectedUserIdsById[templateId] ?? []).length === 0;
+      childMap[templateId] = userIds;
+      if (hasMore) {
         childMap[templateId] = [...childMap[templateId], loadMoreNodeId(templateId)];
+      }
+      if (hasLoaded && userIds.length === 0 && !hasMore && !loadingByNodeId[templateId]) {
+        childMap[templateId] = [emptyNodeId(templateId, "template-users")];
       }
     });
 
     Object.keys(templateUsersById).forEach((userId) => {
-      childMap[userId] = reportIdsByUserNodeId[userId] ?? [];
-      if (cursorMetaByParentId[userId]?.hasMore) {
+      const reportIds = reportIdsByUserNodeId[userId] ?? [];
+      const hasLoaded = hasOwn(reportIdsByUserNodeId, userId);
+      const hasMore = cursorMetaByParentId[userId]?.hasMore;
+      childMap[userId] = reportIds;
+      if (hasMore) {
         childMap[userId] = [...childMap[userId], loadMoreNodeId(userId)];
+      }
+      if (hasLoaded && reportIds.length === 0 && !hasMore && !loadingByNodeId[userId]) {
+        childMap[userId] = [emptyNodeId(userId, "user-reports")];
       }
     });
 
@@ -596,7 +657,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
 
   const canAddNodes = (count: number) => {
     if (visibleNodeCount + count <= MAX_VISIBLE_NODE_COUNT) return true;
-    setGraphError(`Canvas dang hien ${visibleNodeCount} node. Thu gon bot nhanh truoc khi mo them de giu hieu nang.`);
+    setGraphError(`Màn hình đang hiển thị ${visibleNodeCount} mục. Thu gọn bớt nhánh trước khi mở thêm để giữ hiệu năng.`);
     return false;
   };
 
@@ -634,7 +695,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         [currentWorkNodeId]: makeMeta(result.totalRows, result.nextCursor),
       }));
     } catch (error) {
-      setGraphError(getErrorMessage(error, "Khong tai them duoc assignment dau vao."));
+      setGraphError(getErrorMessage(error, "Không tải thêm được công việc đầu vào."));
     } finally {
       setLoading(currentWorkNodeId, false);
     }
@@ -661,7 +722,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         [node.id]: makeMeta(result.totalRows, result.nextCursor),
       }));
     } catch (error) {
-      setGraphError(getErrorMessage(error, "Khong tai duoc assignment con."));
+      setGraphError(getErrorMessage(error, "Không tải được công việc con."));
     } finally {
       setLoading(node.id, false);
     }
@@ -672,17 +733,17 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     setLoading(node.id, true);
     try {
       const result = await triggerTemplateGroups({ assignmentId: node.id }).unwrap();
-      const ids = result.map((group) => templateNodeId(group.assignmentId, group.dynamicExcelId));
+      const ids = result.map((group) => templateNodeId(group.assignmentId, group.dynamicFormTemplateId));
       setTemplateGroupsById((prev) => {
         const next = { ...prev };
         result.forEach((group) => {
-          next[templateNodeId(group.assignmentId, group.dynamicExcelId)] = group;
+          next[templateNodeId(group.assignmentId, group.dynamicFormTemplateId)] = group;
         });
         return next;
       });
       setTemplateGroupIdsByAssignmentId((prev) => ({ ...prev, [node.id]: ids }));
     } catch (error) {
-      setGraphError(getErrorMessage(error, "Khong tai duoc nhom report theo template."));
+      setGraphError(getErrorMessage(error, "Không tải được nhóm báo cáo theo biểu mẫu."));
     } finally {
       setLoading(node.id, false);
     }
@@ -702,16 +763,16 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     try {
       const result = await triggerTemplateUsers({
         assignmentId: group.assignmentId,
-        dynamicExcelId: group.dynamicExcelId,
+        dynamicFormTemplateId: group.dynamicFormTemplateId,
         q: q.trim() || undefined,
         cursor,
         limit: GRAPH_INITIAL_LIMIT,
       }).unwrap();
-      const ids = result.rows.map((user) => userNodeId(group.assignmentId, group.dynamicExcelId, user.assigneeUserId));
+      const ids = result.rows.map((user) => userNodeId(group.assignmentId, group.dynamicFormTemplateId, user.assigneeUserId));
       setTemplateUsersById((prev) => {
         const next = { ...prev };
         result.rows.forEach((user) => {
-          next[userNodeId(group.assignmentId, group.dynamicExcelId, user.assigneeUserId)] = user;
+          next[userNodeId(group.assignmentId, group.dynamicFormTemplateId, user.assigneeUserId)] = user;
         });
         return next;
       });
@@ -724,7 +785,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         [templateId]: makeMeta(result.totalRows, result.nextCursor),
       }));
     } catch (error) {
-      setGraphError(getErrorMessage(error, "Khong tai duoc user theo template."));
+      setGraphError(getErrorMessage(error, "Không tải được người dùng theo biểu mẫu."));
     } finally {
       setLoading(templateId, false);
     }
@@ -744,7 +805,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     try {
       const result = await triggerTemplateReports({
         assignmentId: user.assignmentId,
-        dynamicExcelId: user.dynamicExcelId,
+        dynamicFormTemplateId: user.dynamicFormTemplateId,
         req: {
           assigneeUserIds: [user.assigneeUserId],
           statusBuckets: filters.statusBuckets,
@@ -771,7 +832,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         [userId]: makeMeta(result.totalRows, result.nextCursor),
       }));
     } catch (error) {
-      setGraphError(getErrorMessage(error, "Khong tai duoc report cua user."));
+      setGraphError(getErrorMessage(error, "Không tải được báo cáo của người dùng."));
     } finally {
       setLoading(userId, false);
     }
@@ -936,6 +997,22 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     });
   };
 
+  const handleOpenLabel = (nodeId: string, label: DashboardMindMapLabelSummaryDto) => {
+    setLabelDrawer({
+      open: true,
+      nodeId,
+      label,
+    });
+  };
+
+  const handleCloseLabel = () => {
+    setLabelDrawer({
+      open: false,
+      nodeId: null,
+      label: null,
+    });
+  };
+
   const handleFitView = () => {
     if (!flowInstance || visibleNodeCount === 0) return;
     flowInstance.fitView({ duration: 420, padding: 0.18 });
@@ -979,11 +1056,45 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     const remain = Math.max((meta?.totalRows ?? 0) - Number(meta?.nextCursor ?? 0), 0);
     return {
       kind: "loadMore",
-      title: "Tai them node",
-      subtitle: remain > 0 ? `Con khoang ${remain} item chua hien thi` : undefined,
-      loadMoreLabel: "Tai them",
+      title: "Tải thêm mục",
+      subtitle: remain > 0 ? `Còn khoảng ${remain} item chưa hiển thị` : undefined,
+      loadMoreLabel: "Tải thêm",
       loading: Boolean(loadingByNodeId[parentId]),
       onLoadMore: () => void handleLoadMore(parentId),
+    };
+  };
+
+  const makeEmptyNode = (id: string): MindMapGraphNodeData => {
+    const reason = getEmptyNodeReason(id);
+    const content: Record<EmptyNodeReason, { title: string; subtitle: string }> = {
+      "root-assignments": {
+        title: "Không có công việc đầu vào",
+        subtitle: "Đầu việc này chưa có công việc trong phạm vi hiện tại.",
+      },
+      "assignment-children": {
+        title: "Không có công việc con",
+        subtitle: "Mục này chưa có nhánh con. Có thể mở nhánh báo cáo để xem kỳ báo cáo của mục hiện tại.",
+      },
+      "assignment-reports": {
+        title: "Chưa có kỳ báo cáo",
+        subtitle: "Mục này chưa có kỳ báo cáo sẵn sàng hoặc không có báo cáo trong phạm vi hiện tại.",
+      },
+      "template-users": {
+        title: "Không có người dùng phù hợp",
+        subtitle: "Thử đổi từ khóa tìm kiếm hoặc chọn tất cả người dùng.",
+      },
+      "user-reports": {
+        title: "Không có báo cáo phù hợp",
+        subtitle: "Thử đổi trạng thái, khoảng ngày hoặc chờ job materialize period chạy xong.",
+      },
+    };
+
+    return {
+      kind: "empty",
+      eyebrow: "EMPTY",
+      title: content[reason].title,
+      subtitle: content[reason].subtitle,
+      chips: [{ label: "Không có dữ liệu", color: "default" }],
     };
   };
 
@@ -996,10 +1107,10 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         kind: "work",
         eyebrow: "WORK",
         title: `${workTreeData.work.code} - ${workTreeData.work.name}`,
-        subtitle: `Assignment dau vao: ${rootAssignmentIds.length}/${workTreeData.rootAssignments.totalRows}. Canvas toi da ${MAX_VISIBLE_NODE_COUNT} node.`,
+        subtitle: `Công việc đầu vào: ${rootAssignmentIds.length}/${workTreeData.rootAssignments.totalRows}. Màn hình tối đa ${MAX_VISIBLE_NODE_COUNT} mục.`,
         chips: [
           { label: getMindMapWorkStatusLabel(workTreeData.work), color: workStatusColor },
-          { label: `${rootAssignmentIds.length}/${workTreeData.rootAssignments.totalRows} assignment`, color: "info" },
+          { label: `${rootAssignmentIds.length}/${workTreeData.rootAssignments.totalRows} công việc`, color: "info" },
         ],
         statusAccent: statusColorEnabled ? chipColorToAccent(workStatusColor) : undefined,
         expanded: expandedNodeIds.includes(currentWorkNodeId),
@@ -1012,18 +1123,18 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       const progressColor = getMindMapAssignmentStatusChipColor(node);
       const chips: MindMapGraphChip[] = [
         { label: getMindMapAssignmentStatusLabel(node), color: progressColor },
-        { label: `${node.activeChildCount} nhanh con`, color: node.activeChildCount > 0 ? "primary" : "default" },
+        { label: `${node.activeChildCount} nhánh con`, color: node.activeChildCount > 0 ? "primary" : "default" },
       ];
-      if (node.hasAnyDuePeriod) chips.push({ label: "Co ky bao cao", color: "success" });
-      if (node.hasOverduePeriod) chips.push({ label: "Co report cham", color: "error" });
+      if (node.hasAnyDuePeriod) chips.push({ label: "Có kỳ báo cáo", color: "success" });
+      if (node.hasOverduePeriod) chips.push({ label: "Có báo cáo chậm", color: "error" });
 
       next[node.id] = {
         kind: "assignment",
-        eyebrow: node.code || node.dynamicExcelCode,
-        title: node.dynamicExcelName,
+        eyebrow: node.code || node.dynamicFormTemplateCode || node.dynamicExcelCode,
+        title: node.dynamicFormTemplateName || node.dynamicExcelName,
         subtitle: node.assignees?.length
-          ? `Phu trach: ${node.assignees[0].fullName || node.assignees[0].username}${node.assignees.length > 1 ? ` +${node.assignees.length - 1}` : ""}`
-          : "Chua co nguoi phu trach",
+          ? `Phụ trách: ${node.assignees[0].fullName || node.assignees[0].username}${node.assignees.length > 1 ? ` +${node.assignees.length - 1}` : ""}`
+          : "Chưa có người phụ trách",
         chips,
         expanded: expandedNodeIds.includes(node.id),
         focused: focusedNodeId === node.id,
@@ -1043,24 +1154,30 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         .filter(Boolean);
       next[id] = {
         kind: "template",
-        eyebrow: group.dynamicExcelCode || "TEMPLATE",
-        title: group.dynamicExcelName,
-        subtitle: "Nhom report theo template. Chon user neu can loc nhanh tren canvas.",
+        eyebrow: group.dynamicFormTemplateCode || group.dynamicExcelCode || "BIỂU MẪU",
+        title: group.dynamicFormTemplateName || group.dynamicExcelName || "Biểu mẫu động",
+        subtitle: "Nhóm báo cáo theo biểu mẫu. Chọn người dùng nếu cần lọc nhanh trên màn hình.",
         chips: [
-          { label: `${group.userCount} user`, color: "primary" },
-          { label: `${group.reportCount} report`, color: "info" },
+          { label: `${group.userCount} người dùng`, color: "primary" },
+          { label: `${group.reportCount} báo cáo`, color: "info" },
           ...(group.overdueCount > 0 ? [{ label: `${group.overdueCount} cham`, color: "error" as const }] : []),
         ],
         stackedBar: group.reportBar,
         expanded: expandedNodeIds.includes(id),
         loading: Boolean(loadingByNodeId[id]),
         userOptions,
+        userOptionsLoaded: hasOwn(templateUserIdsByTemplateId, id),
         selectedUserIds: templateSelectedUserIdsById[id] ?? [],
         userSearchText: templateUserSearchTextById[id] ?? "",
         onSelectedUsersChange: (userIds) => {
           setTemplateSelectedUserIdsById((prev) => ({ ...prev, [id]: userIds }));
         },
         onUserSearchTextChange: (value) => handleUserSearchTextChange(id, value),
+        onUserSearchFocus: () => {
+          if (!hasOwn(templateUserIdsByTemplateId, id)) {
+            void loadTemplateUsers(id, null, templateUserSearchTextById[id] ?? "", true);
+          }
+        },
         onToggleGeneric: () => void handleToggleTemplate(id),
       };
     });
@@ -1069,12 +1186,12 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       const currentReportIds = reportIdsByUserNodeId[id] ?? [];
       next[id] = {
         kind: "user",
-        eyebrow: user.unitLabel || "USER",
+        eyebrow: user.unitLabel || "NGƯỜI DÙNG",
         title: user.assigneeFullName || user.assigneeUsername || user.assigneeUserId,
-        subtitle: `Report gan nhat: ${formatDateOnly(user.latestDueAtUtc)}`,
+        subtitle: `Báo cáo gần nhất: ${formatDateOnly(user.latestDueAtUtc)}`,
         chips: [
-          { label: `${user.totalReports} report`, color: "info" },
-          ...(user.overdueCount > 0 ? [{ label: `${user.overdueCount} cham`, color: "error" as const }] : []),
+          { label: `${user.totalReports} báo cáo`, color: "info" },
+          ...(user.overdueCount > 0 ? [{ label: `${user.overdueCount} chậm`, color: "error" as const }] : []),
         ],
         stackedBar: user.reportBar,
         expanded: expandedNodeIds.includes(id),
@@ -1104,11 +1221,11 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     Object.entries(reportsById).forEach(([id, report]) => {
       next[id] = {
         kind: "report",
-        eyebrow: report.periodKey || "REPORT",
+        eyebrow: report.periodKey || "BÁO CÁO",
         title: getMindMapReportPeriodStatusLabel(report.periodStatus),
         subtitle: reportText(report),
         chips: [
-          { label: `Han ${formatDateOnly(report.dueAtUtc)}`, color: report.bucket === "OVERDUE" ? "error" : "default" },
+          { label: `Hạn ${formatDateOnly(report.dueAtUtc)}`, color: report.bucket === "OVERDUE" ? "error" : "default" },
           ...(report.reportStatus != null
             ? [{ label: getWorkAssignmentReportStatusLabel(report.reportStatus), color: "success" as const }]
             : []),
@@ -1123,6 +1240,12 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         .forEach((id) => {
           const parentId = id.replace("load-more:", "");
           next[id] = makeLoadMoreNode(parentId);
+        });
+
+      childIds
+        .filter((id) => id.startsWith("empty:"))
+        .forEach((id) => {
+          next[id] = makeEmptyNode(id);
         });
     });
 
@@ -1151,6 +1274,10 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         }}
         onOpenFieldMetric={(nodeId, metric) => {
           handleOpenFieldMetric(nodeId, metric);
+          handleCloseSummary();
+        }}
+        onOpenLabel={(nodeId, label) => {
+          handleOpenLabel(nodeId, label);
           handleCloseSummary();
         }}
       />
@@ -1190,6 +1317,15 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         scope={EMPTY_SCOPE}
         onClose={handleCloseFieldMetric}
       />
+
+      <LabelDrilldownDrawer
+        key={`label_${labelDrawer.nodeId ?? "none"}_${labelDrawer.label?.labelCode ?? "none"}`}
+        open={labelDrawer.open}
+        nodeId={labelDrawer.nodeId}
+        label={labelDrawer.label}
+        scope={EMPTY_SCOPE}
+        onClose={handleCloseLabel}
+      />
     </>
   );
 
@@ -1201,7 +1337,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
             severity="error"
             sx={{ position: "absolute", zIndex: 20, top: 16, left: 16, maxWidth: 560 }}
           >
-            {getErrorMessage(workTreeError, "Khong tai duoc du lieu work mind map.")}
+            {getErrorMessage(workTreeError, "Không tải được dữ liệu sơ đồ công việc.")}
           </Alert>
         ) : null}
 
@@ -1225,8 +1361,8 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
           onReady={(instance) => {
             setFlowInstance(instance);
           }}
-          emptyTitle={selectedWorkId ? "Chua tai duoc node work" : "Chon work de mo mind map"}
-          emptyDescription="Mind map se bat dau tu work, sau do mo assignment dau vao va cac nhanh report theo click."
+          emptyTitle={selectedWorkId ? "Chưa tải được đầu việc" : "Chọn công việc để mở sơ đồ"}
+          emptyDescription="Sơ đồ bắt đầu từ đầu việc, sau đó mở các công việc đầu vào và nhánh báo cáo khi bấm vào từng mục."
           onRetry={() => {
             if (selectedWorkId) {
               void refetchWorkTree();
@@ -1279,7 +1415,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
 
       {workTreeError ? (
         <Alert severity="error">
-          {getErrorMessage(workTreeError, "Khong tai duoc du lieu work mind map.")}
+          {getErrorMessage(workTreeError, "Không tải được dữ liệu sơ đồ công việc.")}
         </Alert>
       ) : null}
 
@@ -1306,8 +1442,8 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
                   {workTreeData.work.code} - {workTreeData.work.name}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                  Work la node goc. Assignment dau vao da tai {rootAssignmentIds.length}/
-                  {workTreeData.rootAssignments.totalRows}. Gioi han hien thi {MAX_VISIBLE_NODE_COUNT} node.
+                  Đầu việc là mục gốc. Công việc đầu vào đã tải {rootAssignmentIds.length}/
+                  {workTreeData.rootAssignments.totalRows}. Giới hạn hiển thị {MAX_VISIBLE_NODE_COUNT} mục.
                 </Typography>
               </Box>
 
@@ -1316,7 +1452,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
                   color={getMindMapWorkStatusChipColor(workTreeData.work)}
                   label={getMindMapWorkStatusLabel(workTreeData.work)}
                 />
-                <Chip variant="outlined" label={`${visibleNodeCount} node dang hien`} />
+                <Chip variant="outlined" label={`${visibleNodeCount} mục đang hiển thị`} />
               </Stack>
             </Stack>
           ) : (
@@ -1325,8 +1461,8 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
                 Che do xem cay theo tung cap
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                Chon mot work o phia tren de bat dau tu node work, sau do mo assignment dau vao,
-                assignment con hoac report theo template.
+                Chọn một công việc ở phía trên để bắt đầu từ mục gốc, sau đó mở công việc đầu vào,
+                công việc con hoặc báo cáo theo biểu mẫu.
               </Typography>
             </Box>
           )}
@@ -1342,8 +1478,8 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
             onReady={(instance) => {
               setFlowInstance(instance);
             }}
-            emptyTitle={selectedWorkId ? "Chua tai duoc node work" : "Chon work de mo mind map"}
-            emptyDescription="Mind map se bat dau tu work, sau do mo assignment dau vao va cac nhanh report theo click."
+            emptyTitle={selectedWorkId ? "Chưa tải được đầu việc" : "Chọn công việc để mở sơ đồ"}
+            emptyDescription="Sơ đồ bắt đầu từ đầu việc, sau đó mở các công việc đầu vào và nhánh báo cáo khi bấm vào từng mục."
             onRetry={() => {
               if (selectedWorkId) {
                 void refetchWorkTree();

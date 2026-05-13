@@ -14,6 +14,7 @@ import type {
   DynamicExcelRow as DynamicExcelItem,
   DynamicExcelSearchReq,
 } from "../../api/dynamicExcelApi";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 type SortField = NonNullable<DynamicExcelSearchReq["sortField"]>;
 
@@ -68,7 +69,7 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Xem">
+            <Tooltip title={uiText(UITextKey.TextXem)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -81,7 +82,7 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Sửa">
+            <Tooltip title={uiText(UITextKey.TextSua)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -93,7 +94,7 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Tao Dynamic Form">
+            <Tooltip title={uiText(UITextKey.TextTaoDynamicForm)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -105,7 +106,7 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Xóa">
+            <Tooltip title={uiText(UITextKey.TextXoa)}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -145,7 +146,7 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
               />
             </Tooltip>
 
-            <Tooltip title="Copy mã">
+            <Tooltip title={uiText(UITextKey.TextCopyMa)}>
               <IconButton
                 size="small"
                 onClick={(e) => {

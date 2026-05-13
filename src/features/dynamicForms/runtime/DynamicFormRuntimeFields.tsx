@@ -12,6 +12,8 @@ import {
 } from "@mui/material";
 
 import type { DynamicFormField, DynamicFormSection } from "../dynamicForm.types";
+import { getDynamicFormFieldDisplayName } from "../dynamicFormSchema";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type DynamicFormRuntimeValue =
   | string
@@ -62,6 +64,8 @@ function renderField(
   locked: boolean,
   onChange: (value: DynamicFormRuntimeValue) => void,
 ) {
+  const displayName = getDynamicFormFieldDisplayName(field);
+
   if (field.type === "boolean") {
     return (
       <Box
@@ -86,10 +90,10 @@ function renderField(
               onChange={(event) => onChange(event.target.checked)}
             />
           }
-          label={field.label}
+          label={displayName}
           sx={{ m: 0, minWidth: 0 }}
         />
-        {field.isStatistic && <Chip size="small" variant="outlined" label="Thống kê" />}
+        {field.isStatistic && <Chip size="small" variant="outlined" label={uiText(UITextKey.TextThongKe)} />}
       </Box>
     );
   }
@@ -100,7 +104,7 @@ function renderField(
         fullWidth
         select
         size="small"
-        label={field.label}
+        label={displayName}
         required={field.required}
         disabled={locked}
         value={asText(value)}
@@ -119,10 +123,10 @@ function renderField(
   if (field.type === "multiSelect") {
     return (
       <TextField
-        fullWidth
-        select
-        size="small"
-        label={field.label}
+       fullWidth
+       select
+       size="small"
+        label={displayName}
         required={field.required}
         disabled={locked}
         value={asStringArray(value)}
@@ -155,7 +159,7 @@ function renderField(
       fullWidth
       size="small"
       type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-      label={field.label}
+      label={displayName}
       required={field.required}
       disabled={locked}
       value={field.type === "number" ? asNumberText(value) : asText(value)}
@@ -250,7 +254,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                           <Chip
                             size="small"
                             variant="outlined"
-                            label="Thống kê"
+                            label={uiText(UITextKey.TextThongKe)}
                             sx={{ alignSelf: "flex-start" }}
                           />
                         )}

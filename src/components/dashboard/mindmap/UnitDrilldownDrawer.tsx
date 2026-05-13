@@ -18,6 +18,7 @@ import type {
 } from "../../../types/dashboardMindMap";
 import { formatDateTime } from "../../../utils/dashboardUi";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type UnitDrilldownDrawerProps = {
   open: boolean;
@@ -28,10 +29,10 @@ type UnitDrilldownDrawerProps = {
 };
 
 const BUCKET_LABELS: Partial<Record<DashboardMindMapBucket, string>> = {
-  ALL: "Tat ca",
-  TODO: "Chua lam",
-  DONE: "Da lam",
-  OVERDUE: "Cham muon",
+  ALL: "Tất cả",
+  TODO: "Chưa làm",
+  DONE: "Đã làm",
+  OVERDUE: "Chậm muộn",
 };
 
 function getErrorMessage(error: unknown): string {
@@ -41,7 +42,7 @@ function getErrorMessage(error: unknown): string {
     error?: string;
   };
 
-  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Khong tai duoc danh sach don vi.";
+  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Không tải được danh sách đơn vị.";
 }
 
 function renderTextBlock(title: string, value?: string | null) {
@@ -84,12 +85,12 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
     () => [
       {
         field: "assigneeFullName",
-        header: "Nguoi / don vi",
+        header: "Người / đơn vị",
         width: 220,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assigneeFullName || row.assigneeUsername || "Chua ro nguoi dung"}
+              {row.assigneeFullName || row.assigneeUsername || "Chưa rõ người dùng"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {row.assigneeUsername || "-"}
@@ -97,7 +98,7 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
             <Chip
               size="small"
               variant="outlined"
-              label={row.unitLabel || "Chua ro don vi"}
+              label={row.unitLabel || "Chưa rõ đơn vị"}
               sx={{ width: "fit-content" }}
             />
           </Stack>
@@ -105,20 +106,20 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
       },
       {
         field: "totalReports",
-        header: "Tong quan",
+        header: "Tổng quan",
         width: 180,
         render: (row) => (
           <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
-            <Chip size="small" label={`Tong ${row.totalReports}`} />
-            <Chip size="small" color="success" variant="outlined" label={`Da lam ${row.doneCount}`} />
-            <Chip size="small" variant="outlined" label={`Chua lam ${row.todoCount}`} />
-            <Chip size="small" color="error" variant="outlined" label={`Cham ${row.overdueCount}`} />
+            <Chip size="small" label={`Tổng ${row.totalReports}`} />
+            <Chip size="small" color="success" variant="outlined" label={`Đã làm ${row.doneCount}`} />
+            <Chip size="small" variant="outlined" label={`Chưa làm ${row.todoCount}`} />
+            <Chip size="small" color="error" variant="outlined" label={`Chậm ${row.overdueCount}`} />
           </Stack>
         ),
       },
       {
         field: "latestPeriodKey",
-        header: "Ky gan nhat",
+        header: "Kỳ gần nhất",
         width: 150,
         render: (row) => (
           <Stack spacing={0.35}>
@@ -126,20 +127,20 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
               {row.latestPeriodKey || "-"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Han {formatDateTime(row.latestDueAtUtc)}
+              Hạn {formatDateTime(row.latestDueAtUtc)}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "notes",
-        header: "Kho khan / ly do",
+        header: "Khó khăn / lý do",
         render: (row) => (
           <Stack spacing={1}>
-            {renderTextBlock("Kho khan", row.difficulties)}
-            {renderTextBlock("Ly do cham", row.lateReason)}
+            {renderTextBlock("Khó khăn", row.difficulties)}
+            {renderTextBlock("Lý do chậm", row.lateReason)}
             {renderTextBlock(
-              "Gop y phan hoi",
+              "Góp ý phản hồi",
               row.reviewerComment || row.returnReason || row.worstOverdueReasonLabel,
             )}
           </Stack>
@@ -169,17 +170,17 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
       <Stack spacing={2} sx={{ height: "100%" }}>
         <Box>
           <Typography variant="h6" fontWeight={800}>
-            Drilldown theo don vi
+            Chi tiết theo đơn vị
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            Nhom hien tai: {BUCKET_LABELS[bucket] ?? bucket}. Scope filter tu page dang duoc ap dung.
+            Nhóm hiện tại: {BUCKET_LABELS[bucket] ?? bucket}. Bộ lọc phạm vi của trang đang được áp dụng.
           </Typography>
         </Box>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
           <TextField
-            label="Tim nhanh"
-            placeholder="Ten user, username, don vi, ky..."
+            label={uiText(UITextKey.TextTimNhanh)}
+            placeholder={uiText(UITextKey.TextTenUserUsernameDonViKy)}
             value={keyword}
             onChange={(event) => {
               setKeyword(event.target.value);
@@ -188,7 +189,7 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
             sx={{ flex: 1 }}
           />
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip label={`${data?.totalRows ?? 0} dong`} />
+            <Chip label={`${data?.totalRows ?? 0} dòng`} />
             <Chip color="primary" variant="outlined" label={BUCKET_LABELS[bucket] ?? bucket} />
           </Stack>
         </Stack>
@@ -214,7 +215,7 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
 
         {isFetching ? (
           <Typography variant="caption" color="text.secondary">
-            Dang tai du lieu don vi...
+            Đang tải dữ liệu đơn vị...
           </Typography>
         ) : null}
       </Stack>

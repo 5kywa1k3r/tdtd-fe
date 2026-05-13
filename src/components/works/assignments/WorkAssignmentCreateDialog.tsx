@@ -1,29 +1,37 @@
 import React from "react";
 import {
   Alert,
+  Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControlLabel,
-  IconButton,
-  InputAdornment,
   MenuItem,
   Stack,
   Switch,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
+  Typography,
 } from "@mui/material";
-import PreviewOutlinedIcon from "@mui/icons-material/PreviewOutlined";
 
 import { LazyUnitMultiSelect } from "../../common/LazyUnitMultiSelect";
 import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
 import { DynamicFormPicker } from "./DynamicFormPicker";
 import { PeriodicScheduleEditor } from "./PeriodicScheduleEditor";
 import SingleDayKeyField, { dayKeyToIsoDate, isoDateToDayKey } from "../../common/SingleDayKeyField";
+import { UITextKey, uiText } from '../../../constants/uiText';
+import { useGetDynamicFormQuery } from "../../../api/dynamicFormApi";
+import { buildEditorValue } from "../../../features/dynamicForms/dynamicFormSchema";
+import type {
+  DynamicFormDataSourceRuleType,
+  DynamicFormDataSourceRulesDocument,
+  DynamicFormSectionDataSourceRule,
+} from "../../../types/workAssignment";
 
 export interface ParentCandidateOption {
   id: string;
@@ -43,6 +51,7 @@ export interface AssignmentCreateValue {
   dynamicFormTemplateId: string;
   dynamicFormTemplateCode?: string;
   dynamicFormTemplateName?: string;
+  dynamicFormDataSourceRulesJson?: string | null;
 
   assignmentType: "ONCE" | "PERIODIC_REPORT";
   aggregationType: "MATRIX" | "UNIT_ROW_COL";
@@ -68,6 +77,7 @@ export function defaultAssignmentCreateValue(): AssignmentCreateValue {
     dynamicFormTemplateId: "",
     dynamicFormTemplateCode: "",
     dynamicFormTemplateName: "",
+    dynamicFormDataSourceRulesJson: null,
 
     assignmentType: "ONCE",
     aggregationType: "MATRIX",
@@ -89,7 +99,6 @@ interface Props {
   onChange: (value: AssignmentCreateValue) => void;
   onClose: () => void;
   onSubmit?: () => void;
-  onPreviewDynamicExcel?: (dynamicExcelId: string) => void;
 
   parentCandidates: ParentCandidateOption[];
   parentCandidatesLoading?: boolean;
@@ -123,13 +132,99 @@ function getTemplateLabel(value: AssignmentCreateValue) {
   return code || name || value.dynamicFormTemplateId || value.dynamicExcelId || "";
 }
 
+const SOURCE_RULE_OPTIONS: Array<{ value: DynamicFormDataSourceRuleType; label: string; help: string }> = [
+  {
+    value: "MANUAL",
+    label: "Nhập tay",
+    help: "Reporter nhập dữ liệu trực tiếp trong phần này.",
+  },
+  {
+    value: "AGGREGATE_CHILDREN",
+    label: "Tự tổng hợp từ cấp dưới",
+    help: "Hệ thống lấy dữ liệu từ các báo cáo con đã được duyệt.",
+  },
+  {
+    value: "MAP_CHILD",
+    label: "Map từ cấp dưới",
+    help: "Dữ liệu được map từ phần tương ứng của công việc con.",
+  },
+  {
+    value: "MIXED",
+    label: "Kết hợp",
+    help: "Một phần lấy từ cấp dưới, phần còn lại reporter nhập tay.",
+  },
+];
+
+function normalizeSourceRule(value: unknown): DynamicFormDataSourceRuleType {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (
+    normalized === "AGGREGATE_CHILDREN" ||
+    normalized === "MAP_CHILD" ||
+    normalized === "MIXED"
+  ) {
+    return normalized;
+  }
+
+  return "MANUAL";
+}
+
+function parseDataSourceRules(json?: string | null): DynamicFormDataSourceRulesDocument | null {
+  if (!json?.trim()) return null;
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as DynamicFormDataSourceRulesDocument;
+  } catch {
+    return null;
+  }
+}
+
+function buildSectionRules(
+  sections: Array<{ id: string }>,
+  json?: string | null,
+): DynamicFormSectionDataSourceRule[] {
+  const parsed = parseDataSourceRules(json);
+  const bySection = new Map<string, DynamicFormSectionDataSourceRule>();
+  (parsed?.sectionRules ?? []).forEach((rule) => {
+    if (!rule?.sectionId) return;
+    bySection.set(rule.sectionId, rule);
+  });
+
+  return sections.map((section) => {
+    const existing = bySection.get(section.id);
+    return {
+      sectionId: section.id,
+      sourceRule: normalizeSourceRule(existing?.sourceRule),
+      sourceAssignmentIds: Array.isArray(existing?.sourceAssignmentIds)
+        ? existing.sourceAssignmentIds.filter(Boolean)
+        : [],
+      sourceSectionId: existing?.sourceSectionId ?? null,
+      sourceBlockId: existing?.sourceBlockId ?? null,
+      sourceFieldId: existing?.sourceFieldId ?? null,
+      note: existing?.note ?? null,
+    };
+  });
+}
+
+function serializeDataSourceRules(sectionRules: DynamicFormSectionDataSourceRule[]) {
+  return JSON.stringify({
+    version: 1,
+    sectionRules,
+    fieldRules: [],
+    blockRules: [],
+  } satisfies DynamicFormDataSourceRulesDocument);
+}
+
+function sourceRuleLabel(value: DynamicFormDataSourceRuleType) {
+  return SOURCE_RULE_OPTIONS.find((item) => item.value === value)?.label ?? value;
+}
+
 const WorkAssignmentCreateDialog: React.FC<Props> = ({
   open,
   value,
   onChange,
   onClose,
   onSubmit,
-  onPreviewDynamicExcel,
   parentCandidates,
   parentCandidatesLoading = false,
   isWorkOwner = false,
@@ -146,6 +241,25 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   const isView = mode === "view";
   const readonly = disabled || isView;
   const mustChooseParent = !isWorkOwner || value.createMode === "child";
+  const selectedDynamicFormQuery = useGetDynamicFormQuery(
+    { id: value.dynamicFormTemplateId },
+    { skip: !open || !value.dynamicFormTemplateId }
+  );
+  const selectedDynamicForm = React.useMemo(
+    () =>
+      selectedDynamicFormQuery.data
+        ? buildEditorValue(selectedDynamicFormQuery.data)
+        : null,
+    [selectedDynamicFormQuery.data]
+  );
+  const sectionSourceRules = React.useMemo(
+    () => buildSectionRules(selectedDynamicForm?.sections ?? [], value.dynamicFormDataSourceRulesJson),
+    [selectedDynamicForm?.sections, value.dynamicFormDataSourceRulesJson]
+  );
+  const allSectionsAutomatic =
+    sectionSourceRules.length > 0 &&
+    sectionSourceRules.every((rule) => rule.sourceRule === "AGGREGATE_CHILDREN");
+  const hasNonManualSection = sectionSourceRules.some((rule) => rule.sourceRule !== "MANUAL");
 
   const selectedParent = React.useMemo(() => {
     return parentCandidates.find((x) => x.id === value.parentAssignmentId) ?? null;
@@ -185,12 +299,25 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
         dynamicFormTemplateId: item?.id ?? "",
         dynamicFormTemplateCode: item?.code ?? "",
         dynamicFormTemplateName: item?.name ?? "",
+        dynamicFormDataSourceRulesJson: null,
         dynamicExcelId: "",
         dynamicExcelCode: "",
         dynamicExcelName: "",
       });
     },
     [emitChange]
+  );
+
+  const handleSectionSourceRuleChange = React.useCallback(
+    (sectionId: string, sourceRule: DynamicFormDataSourceRuleType) => {
+      const nextRules = sectionSourceRules.map((rule) =>
+        rule.sectionId === sectionId ? { ...rule, sourceRule } : rule
+      );
+      emitChange({
+        dynamicFormDataSourceRulesJson: serializeDataSourceRules(nextRules),
+      });
+    },
+    [emitChange, sectionSourceRules]
   );
 
   const handleAssignmentTypeChange = React.useCallback(
@@ -236,13 +363,8 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
     [emitChange]
   );
 
-  const handlePreviewTemplate = React.useCallback(() => {
-    if (!value.dynamicExcelId) return;
-    onPreviewDynamicExcel?.(value.dynamicExcelId);
-  }, [onPreviewDynamicExcel, value.dynamicExcelId]);
-
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>{title}</DialogTitle>
 
       <DialogContent dividers>
@@ -255,18 +377,18 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
                 value={value.createMode}
                 onChange={handleChangeMode}
               >
-                <ToggleButton value="root">Giao công việc</ToggleButton>
+                <ToggleButton value="root">{uiText(UITextKey.TextGiaoCongViec)}</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
           ) : !isWorkOwner && !isView ? (
-            <Alert severity="info">Chọn nhánh công việc gốc</Alert>
+            <Alert severity="info">{uiText(UITextKey.TextChonNhanhCongViecGoc)}</Alert>
           ) : null}
 
           {mustChooseParent &&
             (isView ? (
               <TextField
                 size="small"
-                label="Nhánh công việc"
+                label={uiText(UITextKey.TextNhanhCongViec)}
                 value={selectedParent ? getParentLabel(selectedParent) : value.parentAssignmentId || ""}
                 fullWidth
                 InputProps={{ readOnly: true }}
@@ -275,14 +397,14 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               <TextField
                 select
                 size="small"
-                label="Nhánh công việc"
+                label={uiText(UITextKey.TextNhanhCongViec)}
                 value={value.parentAssignmentId ?? ""}
                 disabled={readonly || parentCandidatesLoading}
                 onChange={handleParentChange}
                 helperText={
                   parentCandidatesLoading
                     ? "Đang tải danh sách công việc hợp lệ..."
-                    : "Chỉ hiển thị các công việc hợp lệ của current user."
+                    : "Chỉ hiển thị các công việc bạn có quyền chọn."
                 }
                 fullWidth
               >
@@ -297,21 +419,10 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
           {isView ? (
             <TextField
               size="small"
-              label="Biểu mẫu"
+              label={uiText(UITextKey.TextBieuMau)}
               value={getTemplateLabel(value)}
               fullWidth
-              InputProps={{
-                readOnly: true,
-                endAdornment: value.dynamicExcelId ? (
-                  <InputAdornment position="end">
-                    <Tooltip title="Preview biểu mẫu">
-                      <IconButton edge="end" onClick={handlePreviewTemplate}>
-                        <PreviewOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </InputAdornment>
-                ) : undefined,
-              }}
+              InputProps={{ readOnly: true }}
             />
           ) : (
             <DynamicFormPicker
@@ -323,30 +434,149 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             />
           )}
 
+          {value.dynamicFormTemplateId ? (
+            <Box
+              sx={{
+                border: 1,
+                borderColor: "divider",
+                borderRadius: 1,
+                p: 1.5,
+              }}
+            >
+              <Stack spacing={1.25}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1}
+                  alignItems={{ xs: "flex-start", sm: "center" }}
+                  justifyContent="space-between"
+                >
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                      Nguồn dữ liệu theo phần
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Cấu hình này thuộc về lần giao việc, không phụ thuộc vào bản thân dynamic form.
+                    </Typography>
+                  </Box>
+                  {allSectionsAutomatic ? (
+                    <Chip size="small" color="info" label="Report tự tổng hợp" />
+                  ) : hasNonManualSection ? (
+                    <Chip size="small" variant="outlined" label="Có phần lấy từ cấp dưới" />
+                  ) : (
+                    <Chip size="small" variant="outlined" label="Nhập tay" />
+                  )}
+                </Stack>
+
+                {selectedDynamicFormQuery.isLoading || selectedDynamicFormQuery.isFetching ? (
+                  <Alert severity="info">Đang tải cấu trúc dynamic form...</Alert>
+                ) : !selectedDynamicForm ? (
+                  <Alert severity="warning">
+                    Chưa tải được cấu trúc dynamic form để cấu hình theo section.
+                  </Alert>
+                ) : (
+                  <Stack spacing={1}>
+                    {selectedDynamicForm.sections.map((section, index) => {
+                      const rule = sectionSourceRules.find((item) => item.sectionId === section.id);
+                      const sourceRule = rule?.sourceRule ?? "MANUAL";
+                      const optionHelp =
+                        SOURCE_RULE_OPTIONS.find((item) => item.value === sourceRule)?.help ?? "";
+
+                      return (
+                        <React.Fragment key={section.id}>
+                          {index > 0 && <Divider />}
+                          <Stack
+                            direction={{ xs: "column", md: "row" }}
+                            spacing={1.5}
+                            alignItems={{ xs: "stretch", md: "center" }}
+                          >
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                                {section.title || `Phần ${index + 1}`}
+                              </Typography>
+                              {section.description ? (
+                                <Typography variant="caption" color="text.secondary">
+                                  {section.description}
+                                </Typography>
+                              ) : null}
+                            </Box>
+
+                            {isView ? (
+                              <TextField
+                                size="small"
+                                label="Cách lấy dữ liệu"
+                                value={sourceRuleLabel(sourceRule)}
+                                InputProps={{ readOnly: true }}
+                                sx={{ minWidth: { md: 280 } }}
+                              />
+                            ) : (
+                              <TextField
+                                select
+                                size="small"
+                                label="Cách lấy dữ liệu"
+                                value={sourceRule}
+                                disabled={readonly}
+                                helperText={optionHelp}
+                                onChange={(e) =>
+                                  handleSectionSourceRuleChange(
+                                    section.id,
+                                    normalizeSourceRule(e.target.value)
+                                  )
+                                }
+                                sx={{ minWidth: { md: 320 } }}
+                              >
+                                {SOURCE_RULE_OPTIONS.map((option) => (
+                                  <MenuItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                            )}
+                          </Stack>
+                        </React.Fragment>
+                      );
+                    })}
+                  </Stack>
+                )}
+
+                {allSectionsAutomatic ? (
+                  <Alert severity="info">
+                    Khi toàn bộ section là tự tổng hợp, report sẽ mặc định khóa phần nhập dữ liệu và
+                    dùng dữ liệu từ báo cáo cấp dưới đã duyệt.
+                  </Alert>
+                ) : hasNonManualSection ? (
+                  <Alert severity="info">
+                    Map/tổng hợp theo từng phần đã được lưu vào assignment. Phần nhập tay vẫn cho
+                    reporter bổ sung dữ liệu đi kèm.
+                  </Alert>
+                ) : null}
+              </Stack>
+            </Box>
+          ) : null}
+
           <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <TextField
               select={!isView}
               size="small"
-              label="Định kỳ / Một lần"
+              label={uiText(UITextKey.TextDinhKyMotLan)}
               value={value.assignmentType}
               disabled={readonly}
               onChange={isView ? undefined : handleAssignmentTypeChange}
               sx={{ minWidth: 220 }}
               InputProps={isView ? { readOnly: true } : undefined}
             >
-              {!isView && <MenuItem value="ONCE">Giao một lần</MenuItem>}
-              {!isView && <MenuItem value="PERIODIC_REPORT">Định kỳ báo cáo</MenuItem>}
+              {!isView && <MenuItem value="ONCE">{uiText(UITextKey.TextGiaoMotLan)}</MenuItem>}
+              {!isView && <MenuItem value="PERIODIC_REPORT">{uiText(UITextKey.TextDinhKyBaoCao)}</MenuItem>}
             </TextField>
             {value.assignmentType === "ONCE" && (isView ? (
               <SingleDayKeyField
-                label="Hạn nộp"
+                label={uiText(UITextKey.TextHanNop)}
                 value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
                 disabled
                 fullWidth
               />
             ) : (
               <SingleDayKeyField
-                label="Hạn nộp"
+                label={uiText(UITextKey.TextHanNop)}
                 value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
                 disabled={readonly}
                 fullWidth
@@ -371,7 +601,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
                   onChange={(_, checked) => emitChange({ allowUserCreatedReports: checked })}
                 />
               }
-              label="Báo cáo chủ động"
+              label={uiText(UITextKey.TextBaoCaoChuDong)}
             />
           </Stack>
 
@@ -379,7 +609,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             <>
               <TextField
                 size="small"
-                label="Đơn vị được giao"
+                label={uiText(UITextKey.TextDonViDuocGiao)}
                 value={viewAssigneeDisplay || "-"}
                 fullWidth
                 multiline
@@ -389,7 +619,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
 
               <TextField
                 size="small"
-                label="Lãnh đạo, chỉ huy theo dõi"
+                label={uiText(UITextKey.TextLanhDaoChiHuyTheoDoi)}
                 value={viewLeaderWatcherDisplay || "-"}
                 fullWidth
                 multiline
@@ -401,7 +631,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             <>
               <LazyUnitMultiSelect
                 mode="multiple"
-                label="Đơn vị được giao"
+                label={uiText(UITextKey.TextDonViDuocGiao)}
                 value={value.assigneeUnitIds}
                 onChange={handleAssigneeUnitsChange}
               />
@@ -413,8 +643,8 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               <HybridUnitUserPicker
                 kind="leaders"
                 mode="multiple"
-                label="Lãnh đạo, chỉ huy theo dõi"
-                placeholder="Chọn lãnh đạo, chỉ huy theo dõi"
+                label={uiText(UITextKey.TextLanhDaoChiHuyTheoDoi)}
+                placeholder={uiText(UITextKey.TextChonLanhDaoChiHuyTheoDoi)}
                 value={value.leaderWatcherUserIds}
                 disabled={readonly}
                 onChange={handleLeaderWatcherChange}
@@ -424,7 +654,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
 
           <TextField
             size="small"
-            label="Mô tả"
+            label={uiText(UITextKey.TextMoTa2)}
             value={value.description}
             disabled={readonly}
             onChange={handleDescriptionChange}

@@ -8,6 +8,7 @@ import {
   MantineDateRangeFilter,
   type DateRangeFilterValue,
 } from "../common/dateRanger/MantineDateRangeFilter";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type DynamicExcelFilterValue = {
   code: string;
@@ -47,7 +48,7 @@ export default function DynamicExcelFilterBar({
     >
       <TextField
         size="small"
-        label="Mã"
+        label={uiText(UITextKey.TextMa)}
         value={value.code}
         onChange={(e) => emit({ code: e.target.value })}
         onKeyDown={onEnterSearch}
@@ -56,7 +57,7 @@ export default function DynamicExcelFilterBar({
 
       <TextField
         size="small"
-        label="Tên"
+        label={uiText(UITextKey.TextTen)}
         value={value.name}
         onChange={(e) => emit({ name: e.target.value })}
         onKeyDown={onEnterSearch}
@@ -67,7 +68,7 @@ export default function DynamicExcelFilterBar({
         <MantineDateRangeFilter
           value={value.dateRange}
           onChange={(next) => emit({ dateRange: next })}
-          placeholder="Chọn khoảng ngày"
+          placeholder={uiText(UITextKey.TextChonKhoangNgay)}
         />
       </Box>
 

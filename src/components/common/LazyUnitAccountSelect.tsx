@@ -30,6 +30,7 @@ import { normalizeVi } from '../../helpers/normalize';
 import { useGetUnitChildrenQuery, type UnitPickNode } from '../../api/adminUnitsApi';
 import { getTokenFromStorage } from '../../stores/authStorage';
 import { ROLE_PREFIX } from '../../constants/roles';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 const emptyIcon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
@@ -106,6 +107,10 @@ function measureSummary(names: string[], maxWidth: number): string {
     used += width;
   }
   return result;
+}
+
+function scheduleSelectionUpdate(run: () => void) {
+  React.startTransition(run);
 }
 
 function isPrivilegedUsername(username?: string | null) {
@@ -204,6 +209,7 @@ function UnitColumnView({
   const q = useGetUnitChildrenQuery({ parentId: col.parentId ?? null }, { skip: !open });
   const nodes: UnitPickNode[] = q.data ?? [];
   const loading = q.isFetching;
+  const deferredSearchValue = React.useDeferredValue(searchValue);
 
   React.useEffect(() => {
     const map = unitInfoMapRef.current;
@@ -221,13 +227,13 @@ function UnitColumnView({
   }, [col.parentId, nodes, unitInfoMapRef]);
 
   const filtered = React.useMemo(() => {
-    const key = normalizeVi(searchValue);
+    const key = normalizeVi(deferredSearchValue);
     if (!key) return nodes;
     return nodes.filter((n: any) => {
       const text = normalizeVi(n.shortName ?? n.shortname ?? n.fullName ?? n.fullname ?? '');
       return text.includes(key);
     });
-  }, [nodes, searchValue]);
+  }, [nodes, deferredSearchValue]);
 
   const parentInfo = col.parentId ? getUnitInfo(col.parentId) : undefined;
 
@@ -257,7 +263,7 @@ function UnitColumnView({
           size="small"
           value={searchValue}
           onChange={(e) => onSearchChange(col.level, e.target.value)}
-          placeholder="Tìm đơn vị..."
+          placeholder={uiText(UITextKey.TextTimDonVi)}
           fullWidth
         />
       </Box>
@@ -286,7 +292,7 @@ function UnitColumnView({
                   selected={isActive}
                   onClick={() => void onUnitIntent(unitId)}
                 >
-                  <Tooltip title="Chọn cả cây đơn vị này">
+                  <Tooltip title={uiText(UITextKey.TextChonCaCayDonViNay)}>
                     <Checkbox
                       edge="start"
                       disableRipple
@@ -308,7 +314,7 @@ function UnitColumnView({
                       </Typography>
                     }
                   />
-                  <Tooltip title="Xem đơn vị cấp dưới">
+                  <Tooltip title={uiText(UITextKey.TextXemDonViCapDuoi)}>
                     <IconButton
                       size="small"
                       edge="end"
@@ -338,6 +344,8 @@ function UnitColumnView({
   );
 }
 
+const MemoizedUnitColumnView = React.memo(UnitColumnView);
+
 export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
   value,
   onChange,
@@ -363,6 +371,10 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
   const [accountMetaMap, setAccountMetaMap] = React.useState<Record<string, AccountPickMeta>>({});
   const inputBoxRef = React.useRef<HTMLDivElement | null>(null);
   const unitInfoMapRef = React.useRef<Map<string, FlatUnitInfo>>(new Map());
+  const deferredAccountQuery = React.useDeferredValue(accountQuery);
+
+  const handleOpen = React.useCallback((e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget), []);
+  const handleClose = React.useCallback(() => setAnchorEl(null), []);
 
   const selectedIds = React.useMemo(() => {
     if (mode === 'single') return (value ?? []).slice(0, 1);
@@ -378,10 +390,12 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
 
   const applySelection = React.useCallback(
     (nextIds: string[]) => {
-      onChange(nextIds);
-      if (onChangeMeta) {
-        onChangeMeta(getSelectedMetas(nextIds));
-      }
+      scheduleSelectionUpdate(() => {
+        onChange(nextIds);
+        if (onChangeMeta) {
+          onChangeMeta(getSelectedMetas(nextIds));
+        }
+      });
     },
     [getSelectedMetas, onChange, onChangeMeta],
   );
@@ -437,6 +451,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
     (account: AccountPickMeta) => {
       if (mode === 'single') {
         applySelection([account.id]);
+        handleClose();
         return;
       }
 
@@ -446,7 +461,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
 
       applySelection(Array.from(next));
     },
-    [applySelection, mode, selectedIds],
+    [applySelection, handleClose, mode, selectedIds],
   );
 
   const findManagerAccount = React.useCallback(
@@ -490,7 +505,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
   const currentUnitAccounts = React.useMemo(() => {
     const unitId = activeUnitId ?? '';
     const rows = accountsByUnit[unitId] ?? [];
-    const key = normalizeVi(accountQuery);
+    const key = normalizeVi(deferredAccountQuery);
 
     return rows.filter((row) => {
       if (accountTypeFilter === 'UNIT_ACCOUNT' && !isManagerUnitAccount(row)) return false;
@@ -501,7 +516,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
       );
       return text.includes(key);
     });
-  }, [accountQuery, accountTypeFilter, accountsByUnit, activeUnitId]);
+  }, [deferredAccountQuery, accountTypeFilter, accountsByUnit, activeUnitId]);
 
   const selectedMetas = React.useMemo(() => getSelectedMetas(selectedIds), [getSelectedMetas, selectedIds]);
 
@@ -567,14 +582,14 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
             fullWidth
             label={label}
             value={summaryLabel}
-            onClick={(e) => setAnchorEl(e.currentTarget)}
+            onClick={handleOpen}
             slotProps={{
               input: {
                 readOnly: true,
                 sx: { cursor: 'pointer' },
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Tick ở dòng đơn vị để chọn cả cây và map sang tài khoản manager unit. Click vào dòng để mở danh sách user của đơn vị đó.">
+                    <Tooltip title={uiText(UITextKey.TextTickODongDonViDeChonCaCay)}>
                       <IconButton size="small" tabIndex={-1} sx={{ color: 'text.disabled', mr: 0.5 }}>
                         <InfoOutlinedIcon fontSize="small" />
                       </IconButton>
@@ -590,7 +605,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
       <Popover
         open={open}
         anchorEl={anchorEl}
-        onClose={() => setAnchorEl(null)}
+        onClose={handleClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{
@@ -605,7 +620,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
         }}
       >
         {columns.map((col) => (
-          <UnitColumnView
+          <MemoizedUnitColumnView
             key={`${col.level}:${col.parentId ?? 'ROOT'}`}
             open={open}
             col={col}
@@ -634,14 +649,14 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
               <TextField
                 select
                 size="small"
-                label="Loại"
+                label={uiText(UITextKey.TextLoai)}
                 value={accountTypeFilter}
                 onChange={(e) => onAccountTypeFilterChange?.(e.target.value as AccountTypeFilter)}
                 sx={{ minWidth: 150 }}
               >
-                <MenuItem value="ALL">Tất cả</MenuItem>
-                <MenuItem value="UNIT_ACCOUNT">Tài khoản đơn vị</MenuItem>
-                <MenuItem value="NORMAL_USER">Người dùng thường</MenuItem>
+                <MenuItem value="ALL">{uiText(UITextKey.TextTatCa)}</MenuItem>
+                <MenuItem value="UNIT_ACCOUNT">{uiText(UITextKey.TextTaiKhoanDonVi)}</MenuItem>
+                <MenuItem value="NORMAL_USER">{uiText(UITextKey.TextNguoiDungThuong)}</MenuItem>
               </TextField>
             </Stack>
 
@@ -649,7 +664,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
               size="small"
               value={accountQuery}
               onChange={(e) => setAccountQuery(e.target.value)}
-              placeholder="Tìm username / họ tên..."
+              placeholder={uiText(UITextKey.TextTimUsernameHoTen)}
               fullWidth
             />
           </Box>
@@ -738,7 +753,7 @@ export const LazyUnitAccountSelect: React.FC<LazyUnitAccountSelectProps> = ({
           <Divider />
 
           <Box sx={{ p: 1 }}>
-            <Button fullWidth variant="outlined" onClick={() => setAnchorEl(null)}>
+            <Button fullWidth variant="outlined" onClick={handleClose}>
               Đóng
             </Button>
           </Box>

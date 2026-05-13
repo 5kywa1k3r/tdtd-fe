@@ -27,6 +27,7 @@ export type LabelStatisticSummaryRow = {
   labelCode: string;
   labelName?: string | null;
   labelColor?: string | null;
+  labelDataType?: "NUMBER" | "SHORT_TEXT" | "LONG_TEXT" | "DATE" | "BOOLEAN" | string | null;
   periodKey: string;
   periodInstanceKey: string;
   periodKind: string;

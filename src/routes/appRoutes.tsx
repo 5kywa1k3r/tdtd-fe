@@ -7,6 +7,7 @@ import { RequireAuth } from "./RequireAuth";
 import { RequireRole } from "./RequireRole";
 import RouteFallback from "./RouteFallback";
 import { Role } from "../constants/roles";
+import { UITextKey, uiText } from '../constants/uiText';
 
 const LoginPage = lazy(() =>
   import("../pages/auth/LoginPage").then((module) => ({ default: module.LoginPage })),
@@ -28,6 +29,7 @@ const DynamicFormViewPage = lazy(() => import("../pages/dynamicForms/DynamicForm
 const DynamicFormEditPage = lazy(() => import("../pages/dynamicForms/DynamicFormEditPage"));
 const LabelListPage = lazy(() => import("../pages/labels/LabelListPage"));
 const AdminAccountsPage = lazy(() => import("../pages/admin/AdminAccountPages"));
+const OperationsPage = lazy(() => import("../pages/operations/OperationsPage"));
 
 function withSuspense(element: ReactNode) {
   return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
@@ -57,8 +59,8 @@ export const appRoutes: RouteObject[] = [
         element: withSuspense(
           <WorkLayout
             type="TASK"
-            title="Giam sat nhiem vu"
-            description="Theo doi, tao moi va cap nhat tien do cac nhiem vu duoc giao."
+            title={uiText(UITextKey.TextGiamSatNhiemVu)}
+            description="Theo dõi, tạo mới và cập nhật tiến độ các nhiệm vụ được giao."
           />,
         ),
         children: [
@@ -71,8 +73,8 @@ export const appRoutes: RouteObject[] = [
         element: withSuspense(
           <WorkLayout
             type="INDICATOR"
-            title="Giam sat chi tieu"
-            description="Theo doi, tao moi va cap nhat tien do cac chi tieu duoc giao."
+            title={uiText(UITextKey.TextGiamSatChiTieu)}
+            description="Theo dõi, tạo mới và cập nhật tiến độ các chỉ tiêu được giao."
           />,
         ),
         children: [
@@ -115,6 +117,14 @@ export const appRoutes: RouteObject[] = [
         element: withSuspense(
           <RequireRole allow={[Role.SYSTEM_ADMIN, Role.ADMIN, Role.MANAGER_LEVEL, Role.MANAGER_UNIT]}>
             <AdminAccountsPage />
+          </RequireRole>,
+        ),
+      },
+      {
+        path: "operations",
+        element: withSuspense(
+          <RequireRole allow={[Role.SYSTEM_ADMIN, Role.MANAGER_LEVEL, Role.MANAGER_UNIT]}>
+            <OperationsPage />
           </RequireRole>,
         ),
       },

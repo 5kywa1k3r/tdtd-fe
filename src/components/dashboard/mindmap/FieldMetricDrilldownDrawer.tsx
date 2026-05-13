@@ -50,7 +50,7 @@ function getErrorMessage(error: unknown): string {
     error?: string;
   };
 
-  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Khong tai duoc drilldown field.";
+  return source?.data?.message || source?.data?.error || source?.message || source?.error || "Không tải được chi tiết trường dữ liệu.";
 }
 
 function getMetricLabel(metric: DashboardMindMapFieldSummaryDto | null): string {
@@ -66,6 +66,27 @@ function getMetricValue(metric: DashboardMindMapFieldSummaryDto | null): string 
   if (metric.fieldType === "number") return formatMetricNumber(metric.sum);
   if (metric.fieldType === "date") return formatMetricDate(metric.latestDateUtc);
   return formatMetricNumber(metric.valueCount);
+}
+
+function getFieldTypeLabel(fieldType?: string | null): string {
+  switch (fieldType) {
+    case "number":
+      return "Số";
+    case "date":
+      return "Ngày";
+    case "boolean":
+      return "Có/không";
+    case "shortText":
+      return "Văn bản ngắn";
+    case "longText":
+      return "Văn bản dài";
+    case "singleSelect":
+      return "Chọn một";
+    case "multiSelect":
+      return "Chọn nhiều";
+    default:
+      return "Trường dữ liệu";
+  }
 }
 
 function getRowMetricValue(row: DashboardMindMapFieldMetricReportRowDto): string {
@@ -118,12 +139,12 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
     () => [
       {
         field: "assignmentName",
-        header: "Assignment",
+        header: "Công việc",
         width: 220,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assignmentCode || "-"} - {row.assignmentName || "Chua ro ten"}
+              {row.assignmentCode || "-"} - {row.assignmentName || "Chưa rõ tên"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {row.periodKey || "-"}
@@ -133,22 +154,22 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
       },
       {
         field: "assigneeFullName",
-        header: "Nguoi / don vi",
+        header: "Người dùng / đơn vị",
         width: 180,
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assigneeFullName || row.assigneeUsername || "Chua ro nguoi dung"}
+              {row.assigneeFullName || row.assigneeUsername || "Chưa rõ người dùng"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {row.unitLabel || "Chua ro don vi"}
+              {row.unitLabel || "Chưa rõ đơn vị"}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "valueCount",
-        header: "Gia tri field",
+        header: "Giá trị trường",
         width: 210,
         align: "right",
         render: (row) => (
@@ -159,15 +180,15 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
             {row.numericValueCount > 0 ? (
               <>
                 <Typography variant="caption" color="text.secondary">
-                  avg {formatMetricNumber(row.average)} | {row.numericValueCount} number
+                  Trung bình {formatMetricNumber(row.average)} | {row.numericValueCount} số
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  min {formatMetricNumber(row.min)} / max {formatMetricNumber(row.max)}
+                  Nhỏ nhất {formatMetricNumber(row.min)} / lớn nhất {formatMetricNumber(row.max)}
                 </Typography>
               </>
             ) : (
               <Typography variant="caption" color="text.secondary">
-                {row.valueCount} value
+                {row.valueCount} giá trị
               </Typography>
             )}
           </Stack>
@@ -175,28 +196,28 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
       },
       {
         field: "status",
-        header: "Trang thai",
+        header: "Trạng thái",
         width: 160,
         render: (row) => (
           <Stack spacing={0.5}>
             <Chip size="small" label={getWorkAssignmentReportStatusLabel(row.reportStatus)} />
             <Typography variant="caption" color="text.secondary">
-              Gui: {formatDateTime(row.submittedAtUtc)}
+              Gửi: {formatDateTime(row.submittedAtUtc)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Duyet: {formatDateTime(row.approvedAtUtc)}
+              Duyệt: {formatDateTime(row.approvedAtUtc)}
             </Typography>
           </Stack>
         ),
       },
       {
         field: "sourceKeys",
-        header: "Nguon field",
+        header: "Nguồn dữ liệu",
         render: (row) => (
           <Stack spacing={1}>
-            {noteBlock("Field", row.fieldLabel || row.fieldKey)}
-            {noteBlock("Bucket", row.bucketLabel || row.bucketKey)}
-            {noteBlock("Source keys", row.sourceKeys.slice(0, 12).join(", "))}
+            {noteBlock("Trường dữ liệu", row.fieldLabel || row.fieldKey)}
+            {noteBlock("Nhóm giá trị", row.bucketLabel || row.bucketKey)}
+            {noteBlock("Mã nguồn", row.sourceKeys.slice(0, 12).join(", "))}
           </Stack>
         ),
       },
@@ -224,7 +245,7 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
       <Stack spacing={2} sx={{ height: "100%" }}>
         <Box>
           <Typography variant="h6" fontWeight={800}>
-            Drilldown field thong ke
+            Chi tiết trường thống kê
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
             {getMetricLabel(metric)}
@@ -232,9 +253,9 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
         </Box>
 
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Chip label={`${data?.totalRows ?? 0} report`} />
-          <Chip color="primary" variant="outlined" label={metric?.fieldType || "FIELD"} />
-          <Chip variant="outlined" label={`Tong: ${getMetricValue(metric)}`} />
+          <Chip label={`${data?.totalRows ?? 0} báo cáo`} />
+          <Chip color="primary" variant="outlined" label={getFieldTypeLabel(metric?.fieldType)} />
+          <Chip variant="outlined" label={`Tổng: ${getMetricValue(metric)}`} />
         </Stack>
 
         <Divider />
@@ -258,7 +279,7 @@ export default function FieldMetricDrilldownDrawer(props: FieldMetricDrilldownDr
 
         {isFetching ? (
           <Typography variant="caption" color="text.secondary">
-            Dang tai report dong gop field...
+            Đang tải báo cáo đóng góp cho trường dữ liệu...
           </Typography>
         ) : null}
       </Stack>

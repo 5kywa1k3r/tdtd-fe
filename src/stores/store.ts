@@ -11,7 +11,12 @@ export const store = configureStore({
     dashboardMindMap: dashboardMindMapReducer,
     [baseApi.reducerPath]: baseApi.reducer,
   },
-  middleware: (gDM) => gDM().concat(baseApi.middleware),
+  middleware: (gDM) =>
+    gDM({
+      serializableCheck: {
+        ignoredActionPaths: ['meta.arg', 'meta.baseQueryMeta'],
+      },
+    }).concat(baseApi.middleware),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

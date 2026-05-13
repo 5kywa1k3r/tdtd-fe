@@ -2,6 +2,7 @@ import { Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/mate
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type EvaluationTemplateFilterValue = {
   q: string;
@@ -88,7 +89,7 @@ export default function EvaluationTemplateFilterBar({
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
           <TextField
             size="small"
-            label="Tìm theo mã hoặc tên bộ"
+            label={uiText(UITextKey.TextTimTheoMaHoacTenBo)}
             value={value.q}
             onChange={(e) => emit({ q: e.target.value })}
             fullWidth
@@ -97,14 +98,14 @@ export default function EvaluationTemplateFilterBar({
           <TextField
             select
             size="small"
-            label="Trạng thái"
+            label={uiText(UITextKey.TextTrangThai)}
             value={value.isActive}
             onChange={(e) => emit({ isActive: e.target.value as EvaluationTemplateFilterValue["isActive"] })}
             sx={{ minWidth: 180 }}
           >
-            <MenuItem value="1">Đang dùng</MenuItem>
-            <MenuItem value="0">Ngừng dùng</MenuItem>
-            <MenuItem value="all">Tất cả</MenuItem>
+            <MenuItem value="1">{uiText(UITextKey.TextDangDung)}</MenuItem>
+            <MenuItem value="0">{uiText(UITextKey.TextNgungDung)}</MenuItem>
+            <MenuItem value="all">{uiText(UITextKey.TextTatCa)}</MenuItem>
           </TextField>
         </Stack>
       </Stack>

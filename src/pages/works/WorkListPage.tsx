@@ -14,6 +14,7 @@ import type { WorkListRow } from '../../types/work';
 import { useSearchWorksQuery, useDeleteWorkMutation } from '../../api/workApi';
 
 import { WORK_TYPE, WORK_STATUS_OPTIONS } from '../../types/work';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 interface WorkListPageProps {
   type: 'TASK' | 'INDICATOR';
@@ -157,7 +158,7 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Xóa"
+        title={uiText(UITextKey.TextXoa)}
         message={`Xóa "${deleteTarget?.name}"?`}
         confirmText="Xóa"
         cancelText="Hủy"

@@ -22,6 +22,7 @@ import {
   useEvaluateAssignmentMutation,
   useGetEvaluationLogsQuery,
 } from "../../../api/reportApi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   open: boolean;
@@ -109,7 +110,7 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
 
   const handleSubmit = async () => {
     if (!assignmentId) {
-      onError?.("Không xác định được assignment.");
+      onError?.("Không xác định được công việc.");
       return;
     }
 
@@ -129,7 +130,7 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
       }).unwrap();
 
       await refetchLogs();
-      await onSaved?.("Đã lưu đánh giá assignment.");
+      await onSaved?.("Đã lưu đánh giá công việc.");
     } catch (err: any) {
       onError?.(err?.data?.message || err?.message || "Lưu đánh giá thất bại.");
     }
@@ -137,14 +138,14 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
 
   return (
     <Dialog open={open} onClose={evaluateState.isLoading ? undefined : onClose} fullWidth maxWidth="md">
-      <DialogTitle>Đánh giá assignment</DialogTitle>
+      <DialogTitle>{uiText(UITextKey.TextDanhGiaAssignment)}</DialogTitle>
 
       <DialogContent dividers>
         <Stack spacing={2} sx={{ pt: 0.5 }}>
           {assignmentLabel ? (
             <TextField
               size="small"
-              label="Assignment"
+              label={uiText(UITextKey.TextAssignment)}
               value={assignmentLabel}
               fullWidth
               InputProps={{ readOnly: true }}
@@ -154,7 +155,7 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
           <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <TextField
               size="small"
-              label="Bộ tiêu chí"
+              label={uiText(UITextKey.TextBoTieuChi)}
               value={
                 templateData
                   ? `${templateData.representativeCode} - ${templateData.representativeLabel}`
@@ -166,7 +167,7 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
 
             <TextField
               size="small"
-              label="Đánh giá hiện tại"
+              label={uiText(UITextKey.TextDanhGiaHienTai)}
               value={getEvalLabel(currentEvaluationCode, currentEvaluationLabel)}
               fullWidth
               InputProps={{ readOnly: true }}
@@ -180,14 +181,14 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
           )}
 
           {templateError && (
-            <Alert severity="error">Không tải được bộ tiêu chí đánh giá.</Alert>
+            <Alert severity="error">{uiText(UITextKey.TextKhongTaiDuocBoTieuChiDanhGia)}</Alert>
           )}
 
           {!templateLoading && !templateError && (
             <TextField
               select
               size="small"
-              label="Kết quả đánh giá"
+              label={uiText(UITextKey.TextKetQuaDanhGia)}
               value={evaluationCode}
               onChange={(e) => setEvaluationCode(e.target.value)}
               fullWidth
@@ -202,7 +203,7 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
 
           <TextField
             size="small"
-            label="Nhận xét"
+            label={uiText(UITextKey.TextNhanXet)}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             fullWidth
@@ -212,7 +213,7 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
 
           <TextField
             size="small"
-            label="Lý do"
+            label={uiText(UITextKey.TextLyDo)}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             fullWidth
@@ -231,9 +232,9 @@ const WorkAssignmentEvaluationDialog: React.FC<Props> = ({
               <CircularProgress size={24} />
             </Box>
           ) : logsError ? (
-            <Alert severity="error">Không tải được lịch sử đánh giá.</Alert>
+            <Alert severity="error">{uiText(UITextKey.TextKhongTaiDuocLichSuDanhGia)}</Alert>
           ) : logs.length === 0 ? (
-            <Alert severity="info">Chưa có lịch sử đánh giá nào.</Alert>
+            <Alert severity="info">{uiText(UITextKey.TextChuaCoLichSuDanhGiaNao)}</Alert>
           ) : (
             <Stack spacing={1.25}>
               {logs.map((row, index) => (

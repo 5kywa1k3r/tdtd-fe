@@ -145,14 +145,14 @@ export default function DashboardWorksTable({ mode, rows }: Props) {
         return [
           {
             field: "assignmentCode",
-            header: "Mã assignment",
+            header: "Mã công việc",
             width: 150,
             sortable: true,
             render: (row) => <CommonLabelText text={row.assignmentCode} fontWeight={600} />,
           },
           {
             field: "workName",
-            header: "Work",
+            header: "Đầu việc",
             width: "20%",
             sortable: true,
             render: (row) => <CommonLabelText text={row.workName} />,
@@ -166,7 +166,7 @@ export default function DashboardWorksTable({ mode, rows }: Props) {
           },
           {
             field: "assignmentProgressStatus",
-            header: "Trạng thái assignment",
+            header: "Trạng thái công việc",
             width: 180,
             sortable: true,
             render: (row) => <StatusChip status={toStatusCore(row.assignmentProgressStatus)} />,
@@ -188,7 +188,7 @@ export default function DashboardWorksTable({ mode, rows }: Props) {
           },
           {
             field: "reportSummary",
-            header: "Tổng hợp report",
+            header: "Tổng hợp báo cáo",
             width: 250,
             sortable: false,
             render: (row) => renderReportSummary(row),
@@ -208,14 +208,14 @@ export default function DashboardWorksTable({ mode, rows }: Props) {
         return [
           {
             field: "assignmentCode",
-            header: "Assignment",
+            header: "Công việc",
             width: 150,
             sortable: true,
             render: (row) => <CommonLabelText text={row.assignmentCode} fontWeight={600} />,
           },
           {
             field: "workName",
-            header: "Work",
+            header: "Đầu việc",
             width: "20%",
             sortable: true,
             render: (row) => <CommonLabelText text={row.workName} />,

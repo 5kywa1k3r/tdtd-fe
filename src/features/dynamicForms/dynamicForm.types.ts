@@ -37,6 +37,25 @@ export type DynamicFormTableMetricRule = {
   columnKey?: string | null;
 };
 
+export type DynamicFormStatisticColumnLabel = {
+  columnIndex?: number | null;
+  columnKey?: string | null;
+  header?: string | null;
+  statisticLabelCode: string;
+  aggregateOps?: string[];
+  showInDetail?: boolean;
+  showInTree?: boolean;
+};
+
+export type DynamicFormStatisticColumn = {
+  columnIndex?: number | null;
+  columnKey?: string | null;
+  header?: string | null;
+  aggregateOps?: string[];
+  showInDetail?: boolean;
+  showInTree?: boolean;
+};
+
 export type DynamicFormSummaryTemplateRepeatFor =
   | "selectedUnits"
   | "scopeAssignments"
@@ -60,7 +79,7 @@ export type DynamicFormSection = {
   id: string;
   title: string;
   description?: string | null;
-  labelCodes?: string[];
+  tagCodes?: string[];
   order: number;
 };
 
@@ -68,6 +87,8 @@ export type DynamicFormField = {
   id: string;
   sectionId: string;
   key: string;
+  name?: string | null;
+  displayName?: string | null;
   label: string;
   type: DynamicFormFieldType;
   required: boolean;
@@ -75,7 +96,7 @@ export type DynamicFormField = {
   minHeight: number;
   order: number;
   options?: Array<{ code: string; label: string }>;
-  labelCodes?: string[];
+  statisticLabelCodes?: string[];
   isStatistic: boolean;
   statistic?: DynamicFormStatisticConfig;
 };
@@ -84,22 +105,24 @@ export type DynamicFormEditorValue = {
   code?: string | null;
   name: string;
   description?: string | null;
-  labels: string[];
+  tagCodes: string[];
   schemaVersion: number;
   isActive: boolean;
   sections: DynamicFormSection[];
   fields: DynamicFormField[];
   excelBlockJson?: string | null;
+  blocksJson?: string | null;
 };
 
 export type DynamicFormEditorSubmit = {
   code?: string | null;
   name: string;
   description?: string | null;
-  labels: string[] | null;
+  tagCodes: string[] | null;
   schemaVersion: number;
   isActive: boolean;
   sectionsJson: string;
   fieldsJson: string;
   excelBlockJson?: string | null;
+  blocksJson?: string | null;
 };

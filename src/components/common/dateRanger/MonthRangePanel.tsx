@@ -2,6 +2,7 @@ import React from "react";
 import dayjs, { Dayjs } from "dayjs";
 import { Stack } from "@mantine/core";
 import { MonthPickerInput } from "@mantine/dates";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   from: Dayjs | null;
@@ -13,10 +14,10 @@ export const MonthRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
   return (
     <Stack gap="sm">
       <MonthPickerInput
-        label="Từ tháng"
+        label={uiText(UITextKey.TextTuThang)}
         locale="vi"
         valueFormat="MM/YYYY"
-        placeholder="Chọn tháng bắt đầu"
+        placeholder={uiText(UITextKey.TextChonThangBatDau)}
         value={from ? from.toDate() : null}
         clearable
         onChange={(d) =>
@@ -28,10 +29,10 @@ export const MonthRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
       />
 
       <MonthPickerInput
-        label="Đến tháng"
+        label={uiText(UITextKey.TextDenThang)}
         locale="vi"
         valueFormat="MM/YYYY"
-        placeholder="Chọn tháng kết thúc"
+        placeholder={uiText(UITextKey.TextChonThangKetThuc)}
         value={to ? to.toDate() : null}
         clearable
         minDate={from ? from.toDate() : undefined}

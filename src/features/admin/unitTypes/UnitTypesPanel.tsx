@@ -5,10 +5,12 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Snackbar,
   Stack,
@@ -25,8 +27,10 @@ import SearchIcon from '@mui/icons-material/Search';
 
 import {
   type UnitTypeDto,
+  type UnitTypePositionRuleDto,
   useCreateUnitTypeMutation,
   useDeleteUnitTypeMutation,
+  useListPositionsQuery,
   useListUnitTypesQuery,
   useUpdateUnitTypeMutation,
 } from '../../../api/adminCatalogApi';
@@ -36,6 +40,8 @@ import CommonLabelText from '../../../components/common/CommonLabelText';
 import BooleanChip from '../../../components/common/BooleanChip';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { normalizeVi } from '../../../helpers/normalize';
+import { releaseFocusBeforeModal } from '../../../utils/focus';
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type UnitTypeFilter = 'active' | 'deleted' | 'all';
 type EditorState =
@@ -120,20 +126,30 @@ export function UnitTypesPanel() {
         align: 'center',
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title="Sửa">
+            <Tooltip title={uiText(UITextKey.TextSua)}>
               <span>
-                <IconButton size="small" disabled={row.isDeleted} onClick={() => setEditor({ mode: 'edit', item: row })}>
+                <IconButton
+                  size="small"
+                  disabled={row.isDeleted}
+                  onClick={(event) => {
+                    releaseFocusBeforeModal(event);
+                    setEditor({ mode: 'edit', item: row });
+                  }}
+                >
                   <EditIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Xóa mềm">
+            <Tooltip title={uiText(UITextKey.TextXoaMem2)}>
               <span>
                 <IconButton
                   size="small"
                   color="error"
                   disabled={row.isDeleted}
-                  onClick={() => setDeleteTarget(row)}
+                  onClick={(event) => {
+                    releaseFocusBeforeModal(event);
+                    setDeleteTarget(row);
+                  }}
                 >
                   <DeleteOutlineIcon fontSize="small" />
                 </IconButton>
@@ -155,7 +171,7 @@ export function UnitTypesPanel() {
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'center' }}>
             <TextField
               size="small"
-              placeholder="Tìm mã hoặc tên loại đơn vị"
+              placeholder={uiText(UITextKey.TextTimMaHoacTenLoaiDonVi)}
               value={q}
               onChange={(event) => setQ(event.target.value)}
               InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, opacity: 0.55 }} /> }}
@@ -164,14 +180,14 @@ export function UnitTypesPanel() {
             <TextField
               select
               size="small"
-              label="Trạng thái"
+              label={uiText(UITextKey.TextTrangThai)}
               value={filter}
               onChange={(event) => setFilter(event.target.value as UnitTypeFilter)}
               sx={{ minWidth: 160 }}
             >
-              <MenuItem value="active">Đang dùng</MenuItem>
-              <MenuItem value="deleted">Đã xóa</MenuItem>
-              <MenuItem value="all">Tất cả</MenuItem>
+              <MenuItem value="active">{uiText(UITextKey.TextDangDung)}</MenuItem>
+              <MenuItem value="deleted">{uiText(UITextKey.TextDaXoa)}</MenuItem>
+              <MenuItem value="all">{uiText(UITextKey.TextTatCa)}</MenuItem>
             </TextField>
             <Button
               size="small"
@@ -187,7 +203,10 @@ export function UnitTypesPanel() {
               size="small"
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setEditor({ mode: 'create' })}
+              onClick={(event) => {
+                releaseFocusBeforeModal(event);
+                setEditor({ mode: 'create' });
+              }}
               sx={actionButtonSx}
             >
               Thêm loại
@@ -209,7 +228,10 @@ export function UnitTypesPanel() {
               initialSortDirection="asc"
               initialPageSize={10}
               onRowDoubleClick={(row) => {
-                if (!row.isDeleted) setEditor({ mode: 'edit', item: row });
+                if (!row.isDeleted) {
+                  releaseFocusBeforeModal();
+                  setEditor({ mode: 'edit', item: row });
+                }
               }}
             />
           </Box>
@@ -222,10 +244,13 @@ export function UnitTypesPanel() {
           onSubmit={async (payload) => {
             try {
               if (editor?.mode === 'edit') {
-                await updateUnitType({ id: editor.item.id, data: { name: payload.name } }).unwrap();
+                await updateUnitType({
+                  id: editor.item.id,
+                  data: { name: payload.name, positionRules: payload.positionRules },
+                }).unwrap();
                 notify('success', 'Đã cập nhật loại đơn vị.');
               } else {
-                await createUnitType(payload).unwrap();
+                await createUnitType({ code: payload.code, name: payload.name }).unwrap();
                 notify('success', 'Đã tạo loại đơn vị.');
               }
               setEditor(null);
@@ -237,7 +262,7 @@ export function UnitTypesPanel() {
 
         <ConfirmDialog
           open={!!deleteTarget}
-          title="Xóa loại đơn vị"
+          title={uiText(UITextKey.TextXoaLoaiDonVi)}
           variant="warning"
           message={
             <Typography variant="body2">
@@ -284,11 +309,17 @@ function UnitTypeEditorDialog({
   editor: EditorState;
   saving: boolean;
   onClose: () => void;
-  onSubmit: (payload: { code: string; name: string }) => Promise<void>;
+  onSubmit: (payload: {
+    code: string;
+    name: string;
+    positionRules?: UnitTypePositionRuleDto[];
+  }) => Promise<void>;
 }) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [positionRules, setPositionRules] = useState<UnitTypePositionRuleDto[]>([]);
   const [error, setError] = useState('');
+  const { data: positions = [] } = useListPositionsQuery({ isDeleted: false }, { skip: !editor });
 
   const open = !!editor;
   const isEdit = editor?.mode === 'edit';
@@ -297,8 +328,47 @@ function UnitTypeEditorDialog({
     if (!editor) return;
     setCode(editor.mode === 'edit' ? editor.item.code : '');
     setName(editor.mode === 'edit' ? editor.item.name : '');
+    setPositionRules(editor.mode === 'edit' ? editor.item.positionRules ?? [] : []);
     setError('');
   }, [editor]);
+
+  const setRuleEnabled = (positionCode: string, checked: boolean) => {
+    const normalized = positionCode.trim().toUpperCase();
+    setPositionRules((current) => {
+      const existing = current.find((item) => item.positionCode === normalized);
+      if (existing) {
+        return current.map((item) =>
+          item.positionCode === normalized ? { ...item, isEnabled: checked } : item,
+        );
+      }
+
+      return [
+        ...current,
+        {
+          positionCode: normalized,
+          isEnabled: checked,
+          maxUsersPerUnit: null,
+          sortOrder: current.length,
+        },
+      ];
+    });
+  };
+
+  const setRuleMax = (positionCode: string, value: string) => {
+    const normalized = positionCode.trim().toUpperCase();
+    const parsed = value.trim() === '' ? null : Number(value);
+    setPositionRules((current) =>
+      current.map((item) =>
+        item.positionCode === normalized
+          ? {
+              ...item,
+              maxUsersPerUnit:
+                parsed == null || Number.isNaN(parsed) ? null : Math.max(0, Math.floor(parsed)),
+            }
+          : item,
+      ),
+    );
+  };
 
   const handleSubmit = async () => {
     const nextCode = code.trim().toUpperCase();
@@ -311,7 +381,13 @@ function UnitTypeEditorDialog({
       setError('Bắt buộc nhập tên loại đơn vị.');
       return;
     }
-    await onSubmit({ code: nextCode, name: nextName });
+    await onSubmit({
+      code: nextCode,
+      name: nextName,
+      positionRules: positionRules
+        .filter((rule) => rule.isEnabled)
+        .map((rule, index) => ({ ...rule, sortOrder: index })),
+    });
   };
 
   return (
@@ -322,20 +398,61 @@ function UnitTypeEditorDialog({
           {error && <Alert severity="error">{error}</Alert>}
           <TextField
             size="small"
-            label="Mã loại"
+            label={uiText(UITextKey.TextMaLoai)}
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             disabled={isEdit}
             required
-            helperText={isEdit ? 'Mã loại không đổi sau khi tạo để giữ ổn định dữ liệu unit/chức vụ.' : undefined}
+            helperText={isEdit ? 'Mã loại không đổi sau khi tạo để giữ ổn định dữ liệu đơn vị/chức vụ.' : undefined}
           />
           <TextField
             size="small"
-            label="Tên loại đơn vị"
+            label={uiText(UITextKey.TextTenLoaiDonVi)}
             value={name}
             onChange={(event) => setName(event.target.value)}
             required
           />
+          {isEdit && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Quy định chức vụ
+              </Typography>
+              <Stack spacing={1}>
+                {positions.map((position) => {
+                  const rule = positionRules.find((item) => item.positionCode === position.code);
+                  const enabled = rule?.isEnabled === true;
+                  return (
+                    <Stack
+                      key={position.id}
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={1}
+                      alignItems={{ sm: 'center' }}
+                    >
+                      <FormControlLabel
+                        sx={{ flex: 1, minWidth: 0 }}
+                        control={
+                          <Checkbox
+                            checked={enabled}
+                            onChange={(event) => setRuleEnabled(position.code, event.target.checked)}
+                          />
+                        }
+                        label={`${position.code} - ${position.name}`}
+                      />
+                      <TextField
+                        size="small"
+                        label={uiText(UITextKey.TextMaxUserUnit)}
+                        type="number"
+                        value={rule?.maxUsersPerUnit ?? ''}
+                        disabled={!enabled}
+                        onChange={(event) => setRuleMax(position.code, event.target.value)}
+                        sx={{ width: 140 }}
+                      />
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Box>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>

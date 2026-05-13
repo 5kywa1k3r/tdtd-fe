@@ -77,6 +77,26 @@ function dedupeCelldata(celldata: any[]) {
   return Array.from(last.values());
 }
 
+function toPositiveCount(value: any, fallback: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const count = Math.floor(n);
+  return count > 0 ? count : fallback;
+}
+
+function createFallbackSheet(rows: number, cols: number): AnyObj {
+  return {
+    id: "sheet-1",
+    index: "sheet-1",
+    name: "Sheet1",
+    row: rows,
+    column: cols,
+    config: { merge: {} },
+    data: Array.from({ length: rows }, () => Array.from({ length: cols }, () => null)),
+    celldata: [],
+  };
+}
+
 /**
  * ✅ Nếu celldata rỗng: build lại từ data cho các ô có object (bg/v/m/ct/f/...)
  * FortuneSheet/Luckysheet nhiều lúc render style dựa celldata ổn định hơn data.
@@ -121,25 +141,28 @@ function buildCelldataFromDataIfEmpty(sheet: AnyObj) {
  * - FortuneSheet thường render style ổn định qua sheet.celldata => phải preserve/rebuild.
  */
 export function normalizeToSingleSheet(raw: any, rows: number, cols: number) {
+  const safeRows = toPositiveCount(rows, 1);
+  const safeCols = toPositiveCount(cols, 1);
   const sheets = Array.isArray(raw) ? raw : [];
-  const first = sheets[0];
-  if (!first) return [];
+  const first = sheets[0] && typeof sheets[0] === "object" ? sheets[0] : null;
+  const fallback = createFallbackSheet(safeRows, safeCols);
 
-  const sheet0 = first as AnyObj;
+  const sheet0 = (first ?? fallback) as AnyObj;
 
   const sheet: AnyObj = { ...sheet0 };
 
-  sheet.id = sheet0.id ?? "sheet-1";
+  sheet.id = String(sheet0.id ?? sheet0.index ?? "sheet-1");
+  sheet.index = sheet0.index ?? sheet.id;
   sheet.name = sheet0.name ?? "Sheet1";
-  sheet.row = rows; // COUNT
-  sheet.column = cols; // COUNT
+  sheet.row = safeRows; // COUNT
+  sheet.column = safeCols; // COUNT
 
   // data grid
-  const grid = ensureMatrixSize(cloneGrid2D(sheet0.data), rows, cols);
+  const grid = ensureMatrixSize(cloneGrid2D(sheet0.data), safeRows, safeCols);
   sheet.data = grid;
 
   // preserve celldata (lọc bounds) + dedupe
-  sheet.celldata = dedupeCelldata(sanitizeCelldata(sheet0.celldata, rows, cols));
+  sheet.celldata = dedupeCelldata(sanitizeCelldata(sheet0.celldata, safeRows, safeCols));
 
   // ✅ nếu celldata rỗng, rebuild từ data để bg/style render được trong view
   buildCelldataFromDataIfEmpty(sheet);
@@ -147,7 +170,7 @@ export function normalizeToSingleSheet(raw: any, rows: number, cols: number) {
   // config + merge sanitize (giữ các config khác)
   sheet.config = sheet0.config && typeof sheet0.config === "object" ? { ...sheet0.config } : {};
   const merge0 = sheet0.config?.merge ?? {};
-  sheet.config.merge = sanitizeMerge(merge0, rows, cols);
+  sheet.config.merge = sanitizeMerge(merge0, safeRows, safeCols);
 
   return [sheet];
 }

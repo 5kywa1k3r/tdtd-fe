@@ -20,12 +20,13 @@ export default function DynamicFormCreatePage() {
         code: nextCodeQ.data?.nextCode ?? "",
         name: "",
         description: "",
-        labels: [],
+        tagCodes: [],
         schemaVersion: 1,
         isActive: true,
         sectionsJson: "[]",
         fieldsJson: "[]",
         excelBlockJson: null,
+        blocksJson: null,
       }),
     [nextCodeQ.data?.nextCode],
   );
@@ -41,11 +42,12 @@ export default function DynamicFormCreatePage() {
           code: payload.code,
           name: payload.name,
           description: payload.description,
-          labels: payload.labels,
+          tagCodes: payload.tagCodes,
           schemaVersion: payload.schemaVersion,
           sectionsJson: payload.sectionsJson,
           fieldsJson: payload.fieldsJson,
           excelBlockJson: payload.excelBlockJson,
+          blocksJson: payload.blocksJson,
           isActive: payload.isActive,
         }).unwrap();
         navigate("/dynamic-forms");

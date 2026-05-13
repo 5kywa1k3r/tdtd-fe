@@ -1,5 +1,8 @@
 # React + TypeScript + Vite
 
+> Navigation: `../ARCHITECTURE_MAP.md` -> `../DOCUMENTATION_MAP.md` -> this file.
+> Type: App doc.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

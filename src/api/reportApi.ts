@@ -5,6 +5,7 @@ import type {
   MyReportTemplateSearchRequest,
   PagedResult,
   SaveWorkAssignmentReportDraftRequest,
+  ApplyDynamicFormAggregateDraftRequest,
   SubmitWorkAssignmentReportRequest,
   ReturnWorkAssignmentReportRequest,
   WorkAssignmentReportListRow,
@@ -25,6 +26,7 @@ import type {
   ApproveReportRequest,
   ReturnReportRequest,
   RecallApprovedReportRequest,
+  ReportActiveRequest,
   ReviewReportFlatRowDto,
   ReviewReportFlatSearchRequest,
   ReviewSummaryRowDto,
@@ -49,10 +51,10 @@ export const reportApi = baseApi.injectEndpoints({
 
     getMyReportTemplateDetail: build.query<
       MyReportTemplateDetailResponse,
-      { workId: string; dynamicExcelId: string }
+      { workId: string; dynamicFormTemplateId: string }
     >({
-      query: ({ workId, dynamicExcelId }) => ({
-        url: `works/${workId}/my-report-templates/${dynamicExcelId}`,
+      query: ({ workId, dynamicFormTemplateId }) => ({
+        url: `works/${workId}/my-report-templates/${dynamicFormTemplateId}`,
         method: "GET",
       }),
     }),
@@ -95,6 +97,20 @@ export const reportApi = baseApi.injectEndpoints({
       query: ({ id, data }) => ({
         url: `work-assignment-reports/${id}/draft`,
         method: "PUT",
+        data,
+      }),
+    }),
+
+    applyDynamicFormAggregateDraft: build.mutation<
+      WorkAssignmentReportResponse,
+      {
+        id: string;
+        data: ApplyDynamicFormAggregateDraftRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/apply-dynamic-form-aggregate`,
+        method: "POST",
         data,
       }),
     }),
@@ -222,6 +238,28 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
+    deactivateReviewReport: build.mutation<
+      void,
+      { reportId: string; data: ReportActiveRequest }
+    >({
+      query: ({ reportId, data }) => ({
+        url: `work-assignment-review/reports/${reportId}/deactivate`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    reactivateReviewReport: build.mutation<
+      void,
+      { reportId: string; data: ReportActiveRequest }
+    >({
+      query: ({ reportId, data }) => ({
+        url: `work-assignment-review/reports/${reportId}/reactivate`,
+        method: "POST",
+        data,
+      }),
+    }),
+
     getAggregateTable: build.mutation<
       AggregateTableResponse,
       AggregateTableRequest
@@ -290,6 +328,7 @@ export const {
 
   useGetWorkAssignmentReportQuery,
   useSaveWorkAssignmentReportDraftMutation,
+  useApplyDynamicFormAggregateDraftMutation,
   useSubmitWorkAssignmentReportMutation,
   useWithdrawSubmittedReportMutation,
   useDeleteUserCreatedReportMutation,
@@ -304,6 +343,8 @@ export const {
   useApproveReviewReportMutation,
   useReturnReviewReportMutation,
   useRecallApprovedReviewReportMutation,
+  useDeactivateReviewReportMutation,
+  useReactivateReviewReportMutation,
   useGetAggregateTableMutation,
   useGetDynamicFormAggregateTableMutation,
 

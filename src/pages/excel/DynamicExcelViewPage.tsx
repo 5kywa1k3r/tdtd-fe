@@ -4,6 +4,8 @@ import { Box, CircularProgress, Typography } from "@mui/material";
 
 import ExcelDesigner from "../../components/excel/fortune/ExcelDesigner";
 import { useGetDynamicExcelQuery } from "../../api/dynamicExcelApi";
+import { UITextKey, uiText } from '../../constants/uiText';
+import RecordTableTemplateEditor from "../../components/excel/recordTable/RecordTableTemplateEditor";
 
 export default function DynamicExcelViewPage() {
   const navigate = useNavigate();
@@ -37,7 +39,7 @@ export default function DynamicExcelViewPage() {
   if (!id) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography fontWeight={800}>Thiếu id</Typography>
+        <Typography fontWeight={800}>{uiText(UITextKey.TextThieuId)}</Typography>
       </Box>
     );
   }
@@ -46,7 +48,7 @@ export default function DynamicExcelViewPage() {
     return (
       <Box sx={{ p: 2, display: "flex", alignItems: "center", gap: 1 }}>
         <CircularProgress size={18} />
-        <Typography>Đang tải bảng biểu...</Typography>
+        <Typography>{uiText(UITextKey.TextDangTaiBangBieu)}</Typography>
       </Box>
     );
   }
@@ -54,11 +56,23 @@ export default function DynamicExcelViewPage() {
   if (q.isError || !detail) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography fontWeight={800}>Không tải được bảng biểu</Typography>
+        <Typography fontWeight={800}>{uiText(UITextKey.TextKhongTaiDuocBangBieu)}</Typography>
         <Typography variant="body2" color="text.secondary">
           id: {id}
         </Typography>
       </Box>
+    );
+  }
+
+  if (detail.tableKind === "RECORD_TABLE") {
+    return (
+      <RecordTableTemplateEditor
+        mode="view"
+        meta={{ code: detail.code, name: detail.name }}
+        initialSpecJson={detail.recordTableSpecJson}
+        onBack={() => navigate("/dynamic-excel")}
+        onSaved={() => {}}
+      />
     );
   }
 

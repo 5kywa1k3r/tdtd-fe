@@ -18,7 +18,7 @@ export interface AggregateTableRequest {
   periodKeyFrom?: string | null;
   periodKeyTo?: string | null;
 
-  // APPROVED_ONLY | APPROVED_AND_SUBMITTED
+  // APPROVED_ONLY
   sourceStatusMode?: string | null;
   selectedUnitIds?: string[] | null;
 
@@ -34,8 +34,33 @@ export interface AggregateTableRowDto {
   fullName?: string | null;
   unitSymbol?: string | null;
   unitShortName?: string | null;
+  sourceRowIndex?: number | null;
+  sourceRowNumber?: number | null;
+  sourceRowKey?: string | null;
+  sourceRowLabel?: string | null;
 
   values: Array<number | null>;
+}
+
+export interface AggregateRecordTableColumnDto {
+  key: string;
+  label: string;
+  dataType: "text" | "number" | "date" | "boolean" | string;
+  isCalculated?: boolean | null;
+}
+
+export interface AggregateRecordTableRowDto {
+  reportId?: string | null;
+  workAssignmentId?: string | null;
+  userId?: string | null;
+  userName?: string | null;
+  fullName?: string | null;
+  unitSymbol?: string | null;
+  unitShortName?: string | null;
+  periodKey?: string | null;
+  sourceRowIndex?: number | null;
+  sourceRowKey?: string | null;
+  values: Record<string, unknown>;
 }
 
 export interface AggregateSourceRowDto {
@@ -83,6 +108,11 @@ export interface AggregateTableResponse {
 
   metaColumns: string[];
   rows: AggregateTableRowDto[];
+  tableKind?: "NUMERIC_GRID" | "RECORD_TABLE" | string | null;
+  recordOrientation?: string | null;
+  recordColumns?: AggregateRecordTableColumnDto[] | null;
+  recordRows?: AggregateRecordTableRowDto[] | null;
+  warnings?: string[] | null;
   sources: AggregateSourceRowDto[];
 }
 

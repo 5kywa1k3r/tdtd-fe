@@ -15,6 +15,7 @@ import {
   filtersToDateRange,
 } from "../../../utils/dashboardUi";
 import ReportAssignmentSelect from "./ReportAssignmentSelect";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 const MODE_OPTIONS: { value: DashboardOverviewMode; label: string }[] = [
   { value: "WORK_TASK", label: "Nhiệm vụ" },
@@ -67,7 +68,7 @@ export default function DashboardSummaryFilters({
           <TextField
             select
             size="small"
-            label="Nội dung tổng hợp"
+            label={uiText(UITextKey.TextNoiDungTongHop)}
             value={value.mode}
             onChange={(e) =>
               onChange({
@@ -95,7 +96,7 @@ export default function DashboardSummaryFilters({
                   toDate: dayjsToDateInput(next.to),
                 })
               }
-              placeholder="Chọn khoảng ngày"
+              placeholder={uiText(UITextKey.TextChonKhoangNgay)}
               inputHeight={40}
               dropdownWidth={360}
             />
@@ -103,7 +104,7 @@ export default function DashboardSummaryFilters({
 
           <Box sx={{ minWidth: 320, flex: 1 }}>
             <LazyUnitMultiSelect
-              label="Đơn vị"
+              label={uiText(UITextKey.TextDonVi)}
               value={value.unitIds}
               onChange={(unitIds) => onChange({ ...value, unitIds })}
               mode="multiple"
@@ -136,7 +137,7 @@ export default function DashboardSummaryFilters({
                 onClick={onOpenMindMap}
                 disabled={loading}
               >
-                Mo mind map
+                Mở sơ đồ
               </Button>
             ) : null}
 

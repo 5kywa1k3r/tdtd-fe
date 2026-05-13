@@ -3,7 +3,7 @@ export type PeriodScopeMode =
   | "PERIOD_RANGE"
   | "CUMULATIVE_TO_PERIOD"
   | "ALL_PERIODS";
-export type SourceStatusMode = "APPROVED_ONLY" | "APPROVED_AND_SUBMITTED";
+export type SourceStatusMode = "APPROVED_ONLY";
 export type AggregateScopeMode = "DIRECT_CHILDREN" | "SUBTREE";
 export type AggregateMode =
   | "SUM_BY_CELL"

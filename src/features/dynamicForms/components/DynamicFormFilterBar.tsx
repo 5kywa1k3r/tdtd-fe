@@ -16,6 +16,7 @@ import {
   MantineDateRangeFilter,
   type DateRangeFilterValue,
 } from "../../../components/common/dateRanger/MantineDateRangeFilter";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type DynamicFormFilterValue = {
   code: string;
@@ -50,7 +51,7 @@ export default function DynamicFormFilterBar({
     <Stack direction="row" spacing={1} mb={2} flexWrap="wrap" useFlexGap alignItems="center">
       <TextField
         size="small"
-        label="Ma"
+        label={uiText(UITextKey.TextMa2)}
         value={value.code}
         onChange={(e) => emit({ code: e.target.value })}
         onKeyDown={onEnterSearch}
@@ -59,7 +60,7 @@ export default function DynamicFormFilterBar({
 
       <TextField
         size="small"
-        label="Ten"
+        label={uiText(UITextKey.TextTen2)}
         value={value.name}
         onChange={(e) => emit({ name: e.target.value })}
         onKeyDown={onEnterSearch}
@@ -74,9 +75,9 @@ export default function DynamicFormFilterBar({
         }
         sx={{ minWidth: 150 }}
       >
-        <MenuItem value="ALL">Tat ca</MenuItem>
-        <MenuItem value="DRAFT">Draft</MenuItem>
-        <MenuItem value="PUBLISHED">Published</MenuItem>
+        <MenuItem value="ALL">{uiText(UITextKey.TextTatCa3)}</MenuItem>
+        <MenuItem value="DRAFT">{uiText(UITextKey.TextDraft)}</MenuItem>
+        <MenuItem value="PUBLISHED">{uiText(UITextKey.TextPublished)}</MenuItem>
       </Select>
 
       <Select
@@ -87,16 +88,16 @@ export default function DynamicFormFilterBar({
         }
         sx={{ minWidth: 150 }}
       >
-        <MenuItem value="ALL">Moi trang thai</MenuItem>
-        <MenuItem value="ACTIVE">Active</MenuItem>
-        <MenuItem value="INACTIVE">Inactive</MenuItem>
+        <MenuItem value="ALL">{uiText(UITextKey.TextMoiTrangThai)}</MenuItem>
+        <MenuItem value="ACTIVE">{uiText(UITextKey.TextActive)}</MenuItem>
+        <MenuItem value="INACTIVE">{uiText(UITextKey.TextInactive)}</MenuItem>
       </Select>
 
       <Box sx={{ minWidth: 300, flex: "1 1 340px" }}>
         <MantineDateRangeFilter
           value={value.dateRange}
           onChange={(next) => emit({ dateRange: next })}
-          placeholder="Khoang ngay tao"
+          placeholder={uiText(UITextKey.TextKhoangNgayTao)}
         />
       </Box>
 
@@ -106,7 +107,7 @@ export default function DynamicFormFilterBar({
         onClick={onSearch}
         sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
       >
-        Tim
+        {uiText(UITextKey.TextTimKiem)}
       </Button>
 
       <Button
@@ -115,7 +116,7 @@ export default function DynamicFormFilterBar({
         onClick={onReset}
         sx={{ height: 40, flexShrink: 0, px: 2, whiteSpace: "nowrap" }}
       >
-        Reset
+        Xóa lọc
       </Button>
 
       <Button
@@ -124,7 +125,7 @@ export default function DynamicFormFilterBar({
         onClick={onCreate}
         sx={{ height: 40, flexShrink: 0, whiteSpace: "nowrap" }}
       >
-        Tao
+        Tạo mới
       </Button>
     </Stack>
   );

@@ -14,6 +14,7 @@ import {
   getProgressStatusChipColor,
   getProgressStatusLabel,
 } from "../../../utils/dashboardUi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type SummaryAnchorPosition = {
   left: number;
@@ -143,10 +144,10 @@ function AssignmentMindNodeComponent(props: NodeProps<AssignmentMindNodeData>) {
               label={getProgressStatusLabel(node.progressStatus)}
             />
             {node.hasOverduePeriod ? (
-              <Chip size="small" color="error" variant="outlined" label="Co report cham muon" />
+              <Chip size="small" color="error" variant="outlined" label={uiText(UITextKey.TextCoReportChamMuon)} />
             ) : null}
             {node.manualEvaluation?.hasManualEvaluations ? (
-              <Chip size="small" color="warning" variant="outlined" label="Co danh gia tay" />
+              <Chip size="small" color="warning" variant="outlined" label={uiText(UITextKey.TextCoDanhGiaTay)} />
             ) : null}
           </Stack>
 
@@ -156,14 +157,14 @@ function AssignmentMindNodeComponent(props: NodeProps<AssignmentMindNodeData>) {
               <Typography variant="caption" color="text.secondary">
                 {node.assignees.length > 0
                   ? getAssigneeLabel(node.assignees[0])
-                  : "Chua co nguoi phu trach"}
+                  : "Chưa có người phụ trách"}
                 {node.assignees.length > 1 ? ` +${node.assignees.length - 1}` : ""}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={0.6} alignItems="center">
               <ScheduleOutlinedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
               <Typography variant="caption" color="text.secondary">
-                Han {formatDateOnly(node.latestDueAtUtc)}
+                Hạn {formatDateOnly(node.latestDueAtUtc)}
               </Typography>
             </Stack>
           </Stack>
@@ -172,30 +173,30 @@ function AssignmentMindNodeComponent(props: NodeProps<AssignmentMindNodeData>) {
             <Chip
               size="small"
               variant="outlined"
-              label={`${node.activeChildCount} nhanh con`}
+              label={`${node.activeChildCount} nhánh con`}
               color={node.activeChildCount > 0 ? "primary" : "default"}
             />
             <Chip
               size="small"
               variant="outlined"
-              label={node.hasAnyDuePeriod ? "Co ky bao cao" : "Chua co ky bao cao"}
+              label={node.hasAnyDuePeriod ? "Có kỳ báo cáo" : "Chưa có kỳ báo cáo"}
               color={node.hasAnyDuePeriod ? "success" : "default"}
             />
             {loadingChildren ? (
-              <Chip size="small" label="Dang tai nhanh..." />
+              <Chip size="small" label={uiText(UITextKey.TextDangTaiNhanh)} />
             ) : canLoadMoreChildren ? (
               <Chip
                 size="small"
                 color="warning"
                 variant="outlined"
-                label={`Tai them ${hiddenChildCount} nhanh`}
+                label={`Tải thêm ${hiddenChildCount} nhánh`}
                 onClick={(event) => {
                   event.stopPropagation();
                   onLoadMoreChildren(node);
                 }}
               />
             ) : hiddenChildCount > 0 ? (
-              <Chip size="small" color="warning" variant="outlined" label={`Con ${hiddenChildCount} nhanh an`} />
+              <Chip size="small" color="warning" variant="outlined" label={`Còn ${hiddenChildCount} nhánh ẩn`} />
             ) : null}
           </Stack>
         </Stack>

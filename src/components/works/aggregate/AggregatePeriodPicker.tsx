@@ -1,6 +1,7 @@
 import React from "react";
 import { MenuItem, Stack, TextField } from "@mui/material";
 import type { PeriodScopeMode } from "../../../types/aggregateTypes";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 export type AggregatePeriodPickerProps = {
   periodScopeMode: PeriodScopeMode;
@@ -27,21 +28,21 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
     <Stack spacing={1.5}>
       <TextField
         select
-        label="Phạm vi kỳ"
+        label={uiText(UITextKey.TextPhamViKy)}
         size="small"
         value={periodScopeMode}
         onChange={(e) => onPeriodScopeModeChange(e.target.value as PeriodScopeMode)}
         sx={{ minWidth: 190 }}
       >
-        <MenuItem value="SINGLE_PERIOD">Một ngày/kỳ</MenuItem>
-        <MenuItem value="PERIOD_RANGE">Từ ngày đến ngày</MenuItem>
-        <MenuItem value="CUMULATIVE_TO_PERIOD">Lũy kế đến ngày/kỳ</MenuItem>
-        <MenuItem value="ALL_PERIODS">Toàn bộ kỳ</MenuItem>
+        <MenuItem value="SINGLE_PERIOD">{uiText(UITextKey.TextMotNgayKy)}</MenuItem>
+        <MenuItem value="PERIOD_RANGE">{uiText(UITextKey.TextTuNgayDenNgay2)}</MenuItem>
+        <MenuItem value="CUMULATIVE_TO_PERIOD">{uiText(UITextKey.TextLuyKeDenNgayKy)}</MenuItem>
+        <MenuItem value="ALL_PERIODS">{uiText(UITextKey.TextToanBoKy)}</MenuItem>
       </TextField>
 
       {periodScopeMode === "SINGLE_PERIOD" && (
         <TextField
-          label="Ngày/kỳ"
+          label={uiText(UITextKey.TextNgayKy)}
           size="small"
           type="date"
           value={periodDate}
@@ -53,7 +54,7 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
       {periodScopeMode === "PERIOD_RANGE" && (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
           <TextField
-            label="Từ ngày"
+            label={uiText(UITextKey.TextTuNgay2)}
             size="small"
             type="date"
             value={periodDateFrom}
@@ -62,7 +63,7 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
             fullWidth
           />
           <TextField
-            label="Đến ngày"
+            label={uiText(UITextKey.TextDenNgay2)}
             size="small"
             type="date"
             value={periodDateTo}
@@ -75,7 +76,7 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
 
       {periodScopeMode === "CUMULATIVE_TO_PERIOD" && (
         <TextField
-          label="Lũy kế đến ngày/kỳ"
+          label={uiText(UITextKey.TextLuyKeDenNgayKy)}
           size="small"
           type="date"
           value={periodDateTo}

@@ -64,7 +64,7 @@ export default function DynamicFormListPage() {
         appliedFilterValue.active === "ALL" ? null : appliedFilterValue.active === "ACTIVE",
       q: undefined,
       createdBy: undefined,
-      labels: null,
+      tagCodes: null,
       page,
       pageSize,
       sortField: sortField ?? "createdAtUtc",
@@ -151,14 +151,14 @@ export default function DynamicFormListPage() {
 
       <ConfirmDialog
         open={Boolean(confirmKind)}
-        title={confirmKind === "publish" ? "Publish form" : "Delete form"}
+        title={confirmKind === "publish" ? "Công bố biểu mẫu" : "Xóa biểu mẫu"}
         message={
           <Typography variant="body2">
-            {confirmKind === "publish" ? "Publish" : "Delete"} <b>{target?.code}</b>?
+            {confirmKind === "publish" ? "Công bố" : "Xóa"} <b>{target?.code}</b>?
           </Typography>
         }
-        confirmText={confirmKind === "publish" ? "Publish" : "Delete"}
-        cancelText="Cancel"
+        confirmText={confirmKind === "publish" ? "Công bố" : "Xóa"}
+        cancelText="Hủy"
         variant={confirmKind === "delete" ? "danger" : "warning"}
         onConfirm={confirm}
         onClose={() => {

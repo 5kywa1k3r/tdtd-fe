@@ -172,6 +172,87 @@ function buildValueLabels(rect: ReportRect, spec?: DynamicExcelSpecLike | null) 
   return labels;
 }
 
+function getSheetCellDisplay(templateWorkbook: Sheet[] | undefined, r: number, c: number) {
+  const value = (templateWorkbook?.[0] as any)?.data?.[r]?.[c];
+  if (value == null) return "";
+  if (typeof value === "object") {
+    const display = value.m ?? value.v ?? value.ct?.s?.[0]?.v;
+    return display == null ? "" : String(display).trim();
+  }
+  return String(value).trim();
+}
+
+function buildDataColumnLabels(
+  rect: ReportRect,
+  templateWorkbook?: Sheet[],
+  valueCountOverride?: number
+) {
+  const width = valueCountOverride ?? Math.max(0, rect.c1 - rect.c0 + 1);
+  return Array.from({ length: width }, (_, idx) => {
+    const absoluteColumn = rect.c0 + idx;
+    const headerParts: string[] = [];
+    for (let r = rect.r0 - 1; r >= 0; r -= 1) {
+      const label = getSheetCellDisplay(templateWorkbook, r, absoluteColumn);
+      if (label) headerParts.unshift(label);
+    }
+
+    return headerParts.length > 0 ? headerParts.join(" / ") : `Cột ${idx + 1}`;
+  });
+}
+
+function resolveTemplateRowLabel(
+  row: AggregateTableRowDto,
+  rect: ReportRect,
+  templateWorkbook?: Sheet[]
+) {
+  if (row.sourceRowLabel?.trim()) return row.sourceRowLabel.trim();
+
+  const rowIndex =
+    typeof row.sourceRowIndex === "number"
+      ? row.sourceRowIndex
+      : typeof row.sourceRowNumber === "number"
+        ? row.sourceRowNumber - 1
+        : 0;
+  const absoluteRow = rect.r0 + Math.max(0, rowIndex);
+
+  for (let c = rect.c0 - 1; c >= 0; c -= 1) {
+    const label = getSheetCellDisplay(templateWorkbook, absoluteRow, c);
+    if (label) return label;
+  }
+
+  return `Dòng ${Math.max(0, rowIndex) + 1}`;
+}
+
+function expandRowsByTemplateRows(
+  rows: AggregateTableRowDto[],
+  rect: ReportRect
+): AggregateTableRowDto[] {
+  const dataRowCount = Math.max(0, rect.r1 - rect.r0 + 1);
+  const dataColumnCount = Math.max(0, rect.c1 - rect.c0 + 1);
+  if (dataRowCount <= 1 || dataColumnCount <= 0) return rows;
+
+  const alreadyExpanded = rows.every(
+    (row) =>
+      row.sourceRowIndex != null ||
+      row.sourceRowNumber != null ||
+      (row.values?.length ?? 0) <= dataColumnCount
+  );
+  if (alreadyExpanded) return rows;
+
+  return rows.flatMap((row) =>
+    Array.from({ length: dataRowCount }, (_, rowIndex) => ({
+      ...row,
+      sourceRowIndex: rowIndex,
+      sourceRowNumber: rowIndex + 1,
+      sourceRowKey: `row_${rowIndex + 1}`,
+      values: Array.from({ length: dataColumnCount }, (_unused, columnIndex) => {
+        const valueIndex = rowIndex * dataColumnCount + columnIndex;
+        return row.values?.[valueIndex] ?? null;
+      }),
+    }))
+  );
+}
+
 export function buildWorkbookForCellSum(
   templateWorkbook: Sheet[],
   rect: ReportRect,
@@ -244,42 +325,38 @@ export function buildWorkbookHorizontalByUser(
 export function buildWorkbookVerticalByUser(
   rows: AggregateTableRowDto[],
   rect: ReportRect,
-  spec?: DynamicExcelSpecLike | null
+  spec?: DynamicExcelSpecLike | null,
+  templateWorkbook?: Sheet[]
 ): { workbook: Sheet[]; previewRect: ReportRect } {
-  const valueLabels = buildValueLabels(rect, spec);
-  const leftLabels = [
-    "Mã người dùng",
-    "Tài khoản",
-    "Họ tên",
-    "Ký hiệu đơn vị",
-    "Tên đơn vị",
-    ...valueLabels,
-  ];
+  void spec;
+  const displayRows = expandRowsByTemplateRows(rows, rect);
+  const valueCount = displayRows[0]?.values?.length ?? Math.max(0, rect.c1 - rect.c0 + 1);
+  const valueLabels = buildDataColumnLabels(rect, templateWorkbook, valueCount);
+  const metaHeaders = ["Người báo cáo", "Đơn vị", "Dòng mẫu"];
+  const headers = [...metaHeaders, ...valueLabels];
 
-  const rowCount = Math.max(1, leftLabels.length);
-  const colCount = Math.max(2, rows.length + 1);
+  const rowCount = Math.max(2, displayRows.length + 1);
+  const colCount = Math.max(1, headers.length);
   const sheet: any = makeSheet("Aggregate", rowCount, colCount);
 
-  leftLabels.forEach((label, idx) => setCellValue(sheet, idx, 0, label));
+  headers.forEach((header, idx) => setCellValue(sheet, 0, idx, header));
 
-  rows.forEach((row, idx) => {
-    const cc = idx + 1;
-    setCellValue(sheet, 0, cc, row.userId ?? "");
-    setCellValue(sheet, 1, cc, row.userName ?? "");
-    setCellValue(sheet, 2, cc, row.fullName ?? "");
-    setCellValue(sheet, 3, cc, row.unitSymbol ?? "");
-    setCellValue(sheet, 4, cc, row.unitShortName ?? "");
+  displayRows.forEach((row, idx) => {
+    const rr = idx + 1;
+    setCellValue(sheet, rr, 0, getAggregateUserLabel(row));
+    setCellValue(sheet, rr, 1, getAggregateUnitLabel(row));
+    setCellValue(sheet, rr, 2, resolveTemplateRowLabel(row, rect, templateWorkbook));
 
     (row.values ?? []).forEach((value, valueIdx) => {
-      setCellValue(sheet, 5 + valueIdx, cc, value);
+      setCellValue(sheet, rr, metaHeaders.length + valueIdx, value);
     });
   });
 
   return {
     workbook: [sheet as Sheet],
     previewRect: {
-      r0: 5,
-      c0: 1,
+      r0: 1,
+      c0: metaHeaders.length,
       r1: rowCount - 1,
       c1: colCount - 1,
     },

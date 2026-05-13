@@ -22,6 +22,7 @@ const AggregateResultTable: React.FC<AggregateResultTableProps> = ({
 }) => {
   const columns = React.useMemo<AppTableColumn<AggregateTableRowDto>[]>(() => {
     const metaColumns: AppTableColumn<AggregateTableRowDto>[] = [];
+    const isTemplateRowAppend = aggregateMode === "VERTICAL_BY_USER";
 
     if (aggregateMode !== "SUM_BY_CELL") {
       metaColumns.push(
@@ -48,6 +49,17 @@ const AggregateResultTable: React.FC<AggregateResultTableProps> = ({
           ),
         }
       );
+
+      if (isTemplateRowAppend) {
+        metaColumns.push({
+          field: "sourceRowNumber",
+          header: "Dòng mẫu",
+          width: 100,
+          align: "center",
+          sortable: false,
+          render: (row) => row.sourceRowLabel || row.sourceRowNumber || "-",
+        });
+      }
     }
 
     const valueCount = result.rows?.[0]?.values?.length ?? valuesLengthFromRect(templateRect);
@@ -81,6 +93,8 @@ const AggregateResultTable: React.FC<AggregateResultTableProps> = ({
             row.fullName || "",
             row.unitSymbol || "",
             row.unitShortName || "",
+            row.sourceRowKey || "",
+            row.sourceRowNumber ?? "",
           ].join("|")
         }
         selectable={false}

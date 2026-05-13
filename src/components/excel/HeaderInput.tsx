@@ -16,6 +16,7 @@ import {
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
 import type { HeaderKind, HeaderSpec } from "./fortune/types";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 const clamp200 = (v: any) => Math.max(1, Math.min(200, Math.floor(Number(v || 1))));
 
@@ -81,7 +82,7 @@ export function HeaderInput(props: {
           >
             {/* Mã bảng (readOnly + copy) */}
             <TextField
-              label="Mã bảng"
+              label={uiText(UITextKey.TextMaBang)}
               size="small"
               value={meta.code ?? ""}
               sx={{ flex: 1, minWidth: 180 }}
@@ -90,7 +91,7 @@ export function HeaderInput(props: {
                 readOnly: codeReadOnly,
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Copy mã">
+                    <Tooltip title={uiText(UITextKey.TextCopyMa)}>
                       <span>
                         <IconButton
                           size="small"
@@ -110,7 +111,7 @@ export function HeaderInput(props: {
 
             {/* Tên bảng (create/edit cho sửa; view thì metaDisabled=true sẽ khóa) */}
             <TextField
-              label="Tên bảng"
+              label={uiText(UITextKey.TextTenBang)}
               size="small"
               value={meta.name ?? ""}
               onChange={(e) => setMeta({ name: e.target.value })}
@@ -127,16 +128,16 @@ export function HeaderInput(props: {
             sx={{ width: "100%" }}
           >
             <FormControl size="small" sx={{ flex: 1.1, minWidth: 200 }}>
-              <InputLabel>Loại</InputLabel>
+              <InputLabel>{uiText(UITextKey.TextLoai)}</InputLabel>
               <Select
-                label="Loại"
+                label={uiText(UITextKey.TextLoai)}
                 value={value.kind}
                 onChange={(e) => setKind(e.target.value as HeaderKind)}
                 disabled={specDisabled} // ✅ ĐÚNG: specDisabled
               >
-                <MenuItem value="TOP">Bảng ngang</MenuItem>
-                <MenuItem value="LEFT">Bảng dọc</MenuItem>
-                <MenuItem value="MATRIX">Bảng ma trận</MenuItem>
+                <MenuItem value="TOP">{uiText(UITextKey.TextBangNgang)}</MenuItem>
+                <MenuItem value="LEFT">{uiText(UITextKey.TextBangDoc)}</MenuItem>
+                <MenuItem value="MATRIX">{uiText(UITextKey.TextBangMaTran)}</MenuItem>
               </Select>
             </FormControl>
 
@@ -146,7 +147,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 220 }}
-                  label="Header: số hàng (1..200)"
+                  label={uiText(UITextKey.TextHeaderSoHang1200)}
                   type="number"
                   value={value.topRows}
                   onChange={(e) => onChange({ ...value, topRows: clamp200(e.target.value) })}
@@ -156,7 +157,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 220 }}
-                  label="Header: số cột (1..200)"
+                  label={uiText(UITextKey.TextHeaderSoCot1200)}
                   type="number"
                   value={value.topCols}
                   onChange={(e) => onChange({ ...value, topCols: clamp200(e.target.value) })}
@@ -166,7 +167,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 260 }}
-                  label="Data: tổng số dòng (1..200)"
+                  label={uiText(UITextKey.TextDataTongSoDong1200)}
                   type="number"
                   value={value.dataRows}
                   onChange={(e) => onChange({ ...value, dataRows: clamp200(e.target.value) })}
@@ -181,7 +182,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 220 }}
-                  label="Header: số dòng (1..200)"
+                  label={uiText(UITextKey.TextHeaderSoDong1200)}
                   type="number"
                   value={value.leftRows}
                   onChange={(e) => onChange({ ...value, leftRows: clamp200(e.target.value) })}
@@ -191,7 +192,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 220 }}
-                  label="Header: số cột (1..200)"
+                  label={uiText(UITextKey.TextHeaderSoCot1200)}
                   type="number"
                   value={value.leftCols}
                   onChange={(e) => onChange({ ...value, leftCols: clamp200(e.target.value) })}
@@ -201,7 +202,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 260 }}
-                  label="Data: tổng số cột (1..200)"
+                  label={uiText(UITextKey.TextDataTongSoCot1200)}
                   type="number"
                   value={value.dataCols}
                   onChange={(e) => onChange({ ...value, dataCols: clamp200(e.target.value) })}
@@ -216,7 +217,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 180 }}
-                  label="Top: rows (1..200)"
+                  label={uiText(UITextKey.TextTopRows1200)}
                   type="number"
                   value={value.topRows}
                   onChange={(e) => onChange({ ...value, topRows: clamp200(e.target.value) })}
@@ -226,7 +227,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 180 }}
-                  label="Top: cols (1..200)"
+                  label={uiText(UITextKey.TextTopCols1200)}
                   type="number"
                   value={value.topCols}
                   onChange={(e) => onChange({ ...value, topCols: clamp200(e.target.value) })}
@@ -236,7 +237,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 180 }}
-                  label="Left: rows (1..200)"
+                  label={uiText(UITextKey.TextLeftRows1200)}
                   type="number"
                   value={value.leftRows}
                   onChange={(e) => onChange({ ...value, leftRows: clamp200(e.target.value) })}
@@ -246,7 +247,7 @@ export function HeaderInput(props: {
                   fullWidth
                   size="small"
                   sx={{ flex: 1, minWidth: 180 }}
-                  label="Left: cols (1..200)"
+                  label={uiText(UITextKey.TextLeftCols1200)}
                   type="number"
                   value={value.leftCols}
                   onChange={(e) => onChange({ ...value, leftCols: clamp200(e.target.value) })}
@@ -257,7 +258,7 @@ export function HeaderInput(props: {
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            Lưu sẽ validate template theo rule. MATRIX: vùng data bắt đầu tại (row = topRows + 1, col = leftCols + 1) theo chỉ số Excel.
+            Khi lưu, hệ thống sẽ kiểm tra vùng tiêu đề và vùng nhập dữ liệu. Với bảng ma trận, vùng nhập dữ liệu bắt đầu sau số dòng tiêu đề và số cột bên trái.
           </Typography>
         </Stack>
       </CardContent>

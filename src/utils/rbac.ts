@@ -22,7 +22,10 @@ const STATIC_ROLE_PERMS: Record<string, readonly string[]> = {
   // Nếu ADMIN chỉ được "create SYSTEM_ADMIN" thì permission cụ thể hơn sẽ đặt ở layer user-editor (allowedRolesToAssign).
   [Role.ADMIN]: [
     Permission.USER_CREATE,
-    // intentionally NOT include update/delete/reset
+    Permission.UNIT_CREATE,
+    Permission.UNIT_UPDATE,
+    Permission.UNIT_SOFT_DELETE,
+    // intentionally NOT include user update/delete/reset
   ],
 
   // 🟡 MANAGER_LEVEL: subtree scope enforce by BE

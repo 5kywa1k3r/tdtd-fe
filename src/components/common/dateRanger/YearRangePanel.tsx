@@ -2,6 +2,7 @@ import React from "react";
 import dayjs, { Dayjs } from "dayjs";
 import { Stack } from "@mantine/core";
 import { YearPickerInput } from "@mantine/dates";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   from: Dayjs | null;
@@ -13,8 +14,8 @@ export const YearRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
   return (
     <Stack gap="sm">
       <YearPickerInput
-        label="Từ năm"
-        placeholder="Chọn năm bắt đầu"
+        label={uiText(UITextKey.TextTuNam)}
+        placeholder={uiText(UITextKey.TextChonNamBatDau)}
         value={from ? from.toDate() : null}
         clearable
         onChange={(d) =>
@@ -26,8 +27,8 @@ export const YearRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
       />
 
       <YearPickerInput
-        label="Đến năm"
-        placeholder="Chọn năm kết thúc"
+        label={uiText(UITextKey.TextDenNam)}
+        placeholder={uiText(UITextKey.TextChonNamKetThuc)}
         value={to ? to.toDate() : null}
         clearable
         minDate={from ? from.toDate() : undefined}

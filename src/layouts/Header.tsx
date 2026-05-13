@@ -18,7 +18,6 @@ import {
   Paper,
   Tooltip
 } from '@mui/material';
-import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
@@ -31,6 +30,8 @@ import { logout } from '../stores/authSlice';
 
 import { getMeSnapshot, type MeSnapshot } from '../stores/authStorage';
 import { Role, isManagerUnitRole } from '../constants/roles';
+import NotificationBell from '../components/notifications/NotificationBell';
+import { UITextKey, uiText } from '../constants/uiText';
 
 const hasAnyRole = (roles: string[] | undefined, allow: string[]) => {
   if (!roles?.length) return false;
@@ -168,9 +169,7 @@ export const Header = () => {
             PHẦN MỀM THEO DÕI TIẾN ĐỘ NHIỆM VỤ, CHỈ TIÊU
           </Typography>
 
-          <IconButton color="inherit" sx={{ mr: 0.5 }}>
-            <NotificationsNoneIcon />
-          </IconButton>
+          <NotificationBell />
 
           {/* cụm user gọn */}
           <Stack
@@ -215,7 +214,7 @@ export const Header = () => {
               },
             }}
           >
-            <MenuItem onClick={handleOpenMeDialog}>Thông tin người dùng</MenuItem>
+            <MenuItem onClick={handleOpenMeDialog}>{uiText(UITextKey.TextThongTinNguoiDung)}</MenuItem>
 
             {canSeeAdmin && (
               <MenuItem
@@ -246,7 +245,7 @@ export const Header = () => {
 
             <Divider />
 
-            <MenuItem onClick={handleLogout}>Đăng xuất</MenuItem>
+            <MenuItem onClick={handleLogout}>{uiText(UITextKey.TextDangXuat)}</MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
@@ -342,17 +341,17 @@ export const Header = () => {
       <Stack spacing={1.25}>
         <MeRow
           icon={<BadgeOutlinedIcon fontSize="small" />}
-          label="Username"
+          label={uiText(UITextKey.TextUsername)}
           value={username}
         />
         <MeRow
           icon={<PersonOutlineIcon fontSize="small" />}
-          label="Họ tên"
+          label={uiText(UITextKey.TextHoTen)}
           value={fullName}
         />
         <MeRow
           icon={<BusinessOutlinedIcon fontSize="small" />}
-          label="Đơn vị"
+          label={uiText(UITextKey.TextDonVi)}
           value={unitName}
         />
       </Stack>

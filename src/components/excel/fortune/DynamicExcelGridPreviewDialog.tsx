@@ -17,6 +17,7 @@ import type { Sheet } from "@fortune-sheet/core";
 import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import { getTableRect } from "./regions";
 import { ensureWorkbookShape } from "./reportWorkbook";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   open: boolean;
@@ -139,7 +140,7 @@ export default function DynamicExcelGridPreviewDialog({
             <CircularProgress size={28} />
           </Stack>
         ) : isError || !parsed ? (
-          <Alert severity="error">Không tải được biểu mẫu để xem trước.</Alert>
+          <Alert severity="error">{uiText(UITextKey.TextKhongTaiDuocBieuMauDeXemTruoc)}</Alert>
         ) : !shouldRenderWorkbook ? (
           <Stack sx={{ height: 640 }} alignItems="center" justifyContent="center">
             <CircularProgress size={28} />

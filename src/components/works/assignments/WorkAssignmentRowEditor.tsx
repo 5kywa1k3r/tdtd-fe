@@ -22,6 +22,7 @@ import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
 import { DynamicFormPicker } from "./DynamicFormPicker";
 import { PeriodicScheduleEditor } from "./PeriodicScheduleEditor";
 import type { AssignmentDraft } from "../../../types/workAssignment";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   draft: AssignmentDraft;
@@ -34,7 +35,6 @@ type Props = {
   onChange: (next: AssignmentDraft) => void;
   onSave: () => void;
   onCancelCreate?: () => void;
-  onPreviewDynamicExcel: (dynamicExcelId: string) => void;
   workStartDate?: string | null;
   workEndDate?: string | null;
 };
@@ -119,7 +119,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               />
 
               {draft.hasData && (
-                <Chip size="small" color="info" variant="outlined" label="Đã có dữ liệu" />
+                <Chip size="small" color="info" variant="outlined" label={uiText(UITextKey.TextDaCoDuLieu)} />
               )}
 
               {draft.templateLocked && (
@@ -127,7 +127,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                   size="small"
                   color="info"
                   variant="outlined"
-                  label="Khóa biểu mẫu"
+                  label={uiText(UITextKey.TextKhoaBieuMau)}
                 />
               )}
 
@@ -136,7 +136,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                   size="small"
                   color="warning"
                   variant="outlined"
-                  label="Chưa lưu thay đổi"
+                  label={uiText(UITextKey.TextChuaLuuThayDoi)}
                 />
               )}
             </Stack>
@@ -186,7 +186,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               <TextField
                 select
                 size="small"
-                label="Loại giao"
+                label={uiText(UITextKey.TextLoaiGiao)}
                 value={draft.assignmentType}
                 disabled={rowDisabled}
                 onChange={(e) => {
@@ -204,14 +204,14 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 }}
                 sx={{ minWidth: 220 }}
               >
-                <MenuItem value="ONCE">Giao một lần</MenuItem>
-                <MenuItem value="PERIODIC_REPORT">Định kỳ báo cáo</MenuItem>
+                <MenuItem value="ONCE">{uiText(UITextKey.TextGiaoMotLan)}</MenuItem>
+                <MenuItem value="PERIODIC_REPORT">{uiText(UITextKey.TextDinhKyBaoCao)}</MenuItem>
               </TextField>
 
               <TextField
                 select
                 size="small"
-                label="Kiểu tính toán / tổng hợp"
+                label={uiText(UITextKey.TextKieuTinhToanTongHop)}
                 value={draft.aggregationType}
                 disabled={rowDisabled}
                 onChange={(e) =>
@@ -223,8 +223,8 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 }
                 sx={{ minWidth: 220 }}
               >
-                <MenuItem value="MATRIX">MATRIX</MenuItem>
-                <MenuItem value="UNIT_ROW_COL">UNIT_ROW_COL</MenuItem>
+                <MenuItem value="MATRIX">{uiText(UITextKey.TextMATRIX)}</MenuItem>
+                <MenuItem value="UNIT_ROW_COL">{uiText(UITextKey.TextUNITROWCOL)}</MenuItem>
               </TextField>
 
               <FormControlLabel
@@ -249,8 +249,8 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
             <HybridUnitUserPicker
               kind="assignees"
               mode="multiple"
-              label="Cán bộ đầu mối"
-              placeholder="Chọn cán bộ đầu mối"
+              label={uiText(UITextKey.TextCanBoDauMoi)}
+              placeholder={uiText(UITextKey.TextChonCanBoDauMoi)}
               value={draft.assigneeUserIds}
               valueRefs={draft.assigneeRefs as any}
               disabled={rowDisabled}
@@ -266,8 +266,8 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
             <HybridUnitUserPicker
               kind="leaders"
               mode="multiple"
-              label="Lãnh đạo, chỉ huy theo dõi"
-              placeholder="Chọn lãnh đạo, chỉ huy theo dõi"
+              label={uiText(UITextKey.TextLanhDaoChiHuyTheoDoi)}
+              placeholder={uiText(UITextKey.TextChonLanhDaoChiHuyTheoDoi)}
               value={draft.leaderWatcherUserIds}
               valueRefs={draft.leaderWatcherRefs as any}
               disabled={rowDisabled}
@@ -285,7 +285,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               fullWidth
               multiline
               minRows={2}
-              label="Mô tả"
+              label={uiText(UITextKey.TextMoTa2)}
               value={draft.description ?? ""}
               disabled={rowDisabled}
               onChange={(e) =>
@@ -302,7 +302,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 size="small"
                 type="datetime-local"
                 fullWidth
-                label="Hạn nộp"
+                label={uiText(UITextKey.TextHanNop)}
                 value={draft.dueAtUtc ? draft.dueAtUtc.slice(0, 16) : ""}
                 disabled={rowDisabled}
                 onChange={(e) =>

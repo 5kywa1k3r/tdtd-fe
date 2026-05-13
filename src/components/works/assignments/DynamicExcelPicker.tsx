@@ -22,6 +22,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 
 import { useSearchDynamicExcelMutation } from "../../../api/dynamicExcelApi";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type DynamicExcelOption = {
   id: string;
@@ -95,16 +96,16 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(
         <TextField
           fullWidth
           size="small"
-          label="Chọn biểu mẫu đã thiết kế"
+          label={uiText(UITextKey.TextChonBieuMauDaThietKe)}
           disabled={disabled}
           value={displayValue}
-          placeholder="Chọn biểu mẫu"
+          placeholder={uiText(UITextKey.TextChonBieuMau)}
           onClick={handleOpen}
           slotProps={{ htmlInput: { readOnly: true } }}
         />
 
         {value && (
-          <Tooltip title="Xem trước biểu mẫu">
+          <Tooltip title={uiText(UITextKey.TextXemTruocBieuMau)}>
             <span>
               <IconButton color="primary" onClick={() => onPreview?.(value)} disabled={disabled}>
                 <PreviewIcon />
@@ -114,7 +115,7 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(
         )}
 
         {value && (
-          <Tooltip title="Xóa chọn">
+          <Tooltip title={uiText(UITextKey.TextXoaChon)}>
             <span>
               <IconButton onClick={handleClear} disabled={disabled}>
                 <ClearIcon />
@@ -125,14 +126,14 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(
       </Stack>
 
       <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-        <DialogTitle>Chọn biểu mẫu động</DialogTitle>
+        <DialogTitle>{uiText(UITextKey.TextChonBieuMauDong)}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <Stack direction="row" spacing={1}>
               <TextField
                 size="small"
                 fullWidth
-                label="Tìm theo mã / tên"
+                label={uiText(UITextKey.TextTimTheoMaTen)}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => {

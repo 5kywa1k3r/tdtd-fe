@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -36,9 +36,11 @@ import {
 import { api } from '../../../api/base/axios';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { UnitEditorDrawer } from './UnitEditorDrawer';
+import { releaseFocusBeforeModal } from '../../../utils/focus';
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type EditorState =
-  | { mode: 'create'; parentUnitId: string }
+  | { mode: 'create'; parentUnitId: string | null }
   | { mode: 'edit'; unitId: string }
   | null;
 
@@ -48,6 +50,19 @@ const actionButtonSx = {
   height: 36,
   px: 1.75,
   whiteSpace: 'nowrap',
+};
+
+const toolbarButtonSx = {
+  ...actionButtonSx,
+  width: '100%',
+  minWidth: 0,
+  px: 1.25,
+  '& .MuiButton-startIcon': { mr: 0.75 },
+};
+
+const toolbarPrimaryButtonSx = {
+  ...toolbarButtonSx,
+  gridColumn: '1 / -1',
 };
 
 async function downloadTemplate(format: 'xlsx' | 'csv', fileName: string) {
@@ -108,7 +123,7 @@ function renderTree(nodes: UnitNode[]) {
             {node.code}
           </Typography>
           {node.primaryUnitTypeCode && <Chip size="small" label={node.primaryUnitTypeCode} sx={{ height: 20 }} />}
-          {node.isVirtual && <Chip size="small" label="VU" color="warning" variant="outlined" sx={{ height: 20 }} />}
+          {node.isVirtual && <Chip size="small" label={uiText(UITextKey.TextVU)} color="warning" variant="outlined" sx={{ height: 20 }} />}
         </Box>
       }
     >
@@ -119,11 +134,28 @@ function renderTree(nodes: UnitNode[]) {
 
 export function UnitsPanel() {
   const { data: me, isLoading: meLoading } = useGetMeQuery();
-  const isSystemAdmin = useMemo(() => me?.roles?.includes('SYSTEM_ADMIN'), [me?.roles]);
-  const prefix = me?.unitCode;
+  const roles = me?.roles ?? [];
+  const isSystemAdmin = useMemo(
+    () => roles.includes('SYSTEM_ADMIN') || me?.accountKind === 'SYSTEM_ADMIN',
+    [me?.accountKind, roles],
+  );
+  const canManageUnits = useMemo(
+    () => roles.includes('ADMIN') || isSystemAdmin,
+    [isSystemAdmin, roles],
+  );
+  const isLevelWideManager = useMemo(
+    () => (roles.includes('MANAGER_LEVEL') || me?.accountKind === 'LEVEL_MANAGER') && !me?.unitId,
+    [me?.accountKind, me?.unitId, roles],
+  );
+  const prefix = canManageUnits || isLevelWideManager ? '' : (me?.unitCode ?? '');
 
-  const { data: flatUnitsRaw, isLoading, isError } = useSearchSubtreeByCodePrefixQuery(prefix!, {
-    skip: meLoading || !prefix,
+  const {
+    data: flatUnitsRaw,
+    isLoading,
+    isError,
+    refetch: refetchUnits,
+  } = useSearchSubtreeByCodePrefixQuery(prefix!, {
+    skip: meLoading || (!canManageUnits && !isLevelWideManager && !prefix),
   });
 
   const flatUnits = useMemo(
@@ -138,10 +170,13 @@ export function UnitsPanel() {
   }, [flatUnits]);
 
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [pendingSelectedUnitId, setPendingSelectedUnitId] = useState<string | null>(null);
   const selectedUnit = selectedUnitId ? unitById.get(selectedUnitId) : undefined;
 
   const [search, setSearch] = useState('');
-  const tree = useMemo(() => filterTree(buildTree(flatUnits), search), [flatUnits, search]);
+  const deferredSearch = useDeferredValue(search);
+  const fullTree = useMemo(() => buildTree(flatUnits), [flatUnits]);
+  const tree = useMemo(() => filterTree(fullTree, deferredSearch), [fullTree, deferredSearch]);
   const allTreeIds = useMemo(() => flatUnits.map((unit) => unit.id), [flatUnits]);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
@@ -151,21 +186,32 @@ export function UnitsPanel() {
   const [importUnits, importState] = useImportUnitsMutation();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importPreview, setImportPreview] = useState<{ file: File; result: ImportResult } | null>(null);
+  const canUseHiddenRootAsCreateParent = !isLoading && !isError && flatUnits.length === 0;
+  const createParentUnitId =
+    selectedUnitId ?? (canUseHiddenRootAsCreateParent && !canManageUnits ? (me?.unitId ?? null) : null);
 
   useEffect(() => {
+    if (pendingSelectedUnitId) {
+      if (unitById.has(pendingSelectedUnitId)) {
+        setSelectedUnitId(pendingSelectedUnitId);
+        setPendingSelectedUnitId(null);
+      }
+      return;
+    }
+
     if (selectedUnitId && unitById.has(selectedUnitId)) return;
     if (me?.unitId && unitById.has(me.unitId)) {
       setSelectedUnitId(me.unitId);
       return;
     }
     setSelectedUnitId(flatUnits[0]?.id ?? null);
-  }, [flatUnits, me?.unitId, selectedUnitId, unitById]);
+  }, [flatUnits, me?.unitId, pendingSelectedUnitId, selectedUnitId, unitById]);
 
-  if (!meLoading && (!me?.unitId || !me?.unitCode)) {
+  if (!meLoading && !canManageUnits && !isLevelWideManager && (!me?.unitId || !me?.unitCode)) {
     return (
       <Card>
         <CardContent>
-          <Typography color="error">Thiếu unitId/unitCode trong /me. Không thể tải cây đơn vị.</Typography>
+          <Typography color="error">{uiText(UITextKey.TextThieuUnitIdUnitCodeTrongMeKhongTheTaiCay)}</Typography>
         </CardContent>
       </Card>
     );
@@ -175,6 +221,30 @@ export function UnitsPanel() {
     editor?.mode === 'create' && editor.parentUnitId
       ? unitById.get(editor.parentUnitId)
       : undefined;
+  const effectiveParentDisplay =
+    parentDisplay ??
+    (editor?.mode === 'create' && canManageUnits && !editor.parentUnitId
+      ? {
+          fullName: 'Cấp gốc hệ thống',
+          code: 'ROOT',
+          shortName: 'Hệ thống',
+          symbol: undefined,
+          primaryUnitTypeCode: null,
+          unitTypeCodes: [],
+          isVirtual: false,
+        }
+      : undefined) ??
+    (editor?.mode === 'create' && me && editor.parentUnitId === me.unitId
+      ? {
+          fullName: 'Cấp gốc hệ thống',
+          code: me.unitCode,
+          shortName: 'Hệ thống',
+          symbol: undefined,
+          primaryUnitTypeCode: me.unitTypeCodes?.[0] ?? null,
+          unitTypeCodes: me.unitTypeCodes ?? [],
+          isVirtual: false,
+        }
+      : undefined);
 
   return (
     <Card>
@@ -199,7 +269,7 @@ export function UnitsPanel() {
               <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                 <TextField
                   size="small"
-                  label="Tìm đơn vị"
+                  label={uiText(UITextKey.TextTimDonVi2)}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   sx={{ flex: '1 1 280px', minWidth: 220 }}
@@ -227,11 +297,11 @@ export function UnitsPanel() {
               <Divider />
 
               {isLoading ? (
-                <Typography variant="body2" color="text.secondary">Đang tải cây đơn vị...</Typography>
+                <Typography variant="body2" color="text.secondary">{uiText(UITextKey.TextDangTaiCayDonVi)}</Typography>
               ) : isError ? (
-                <Typography variant="body2" color="error">Không tải được cây đơn vị.</Typography>
+                <Typography variant="body2" color="error">{uiText(UITextKey.TextKhongTaiDuocCayDonVi)}</Typography>
               ) : tree.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">Không có đơn vị phù hợp.</Typography>
+                <Typography variant="body2" color="text.secondary">{uiText(UITextKey.TextKhongCoDonViPhuHop)}</Typography>
               ) : (
                 <Box sx={{ maxHeight: 620, overflow: 'auto', pr: 1 }}>
                   <SimpleTreeView
@@ -251,7 +321,14 @@ export function UnitsPanel() {
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Stack spacing={2}>
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(124px, 1fr))',
+                  gap: 1,
+                  alignItems: 'center',
+                }}
+              >
                 <input
                   ref={importInputRef}
                   type="file"
@@ -263,18 +340,36 @@ export function UnitsPanel() {
                     if (!file) return;
                     try {
                       const result = await importUnits({ file, dryRun: true }).unwrap();
+                      releaseFocusBeforeModal();
                       setImportPreview({ file, result });
                     } catch {
                       setImportPreview(null);
                     }
                   }}
                 />
+                {canManageUnits && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={(event) => {
+                      releaseFocusBeforeModal(event);
+                      if (canManageUnits || createParentUnitId) {
+                        setEditor({ mode: 'create', parentUnitId: createParentUnitId });
+                      }
+                    }}
+                    disabled={!canManageUnits && !createParentUnitId}
+                    sx={toolbarPrimaryButtonSx}
+                  >
+                    Thêm đơn vị
+                  </Button>
+                )}
                 <Button
                   variant="outlined"
                   size="small"
                   startIcon={<FileDownloadIcon />}
                   onClick={() => downloadTemplate('xlsx', 'unit-import-template.xlsx')}
-                  sx={actionButtonSx}
+                  sx={toolbarButtonSx}
                 >
                   Mẫu XLSX
                 </Button>
@@ -283,55 +378,50 @@ export function UnitsPanel() {
                   size="small"
                   startIcon={<FileDownloadIcon />}
                   onClick={() => downloadTemplate('csv', 'unit-import-template.csv')}
-                  sx={actionButtonSx}
+                  sx={toolbarButtonSx}
                 >
                   Mẫu CSV
                 </Button>
-                {isSystemAdmin && (
+                {canManageUnits && (
                   <Button
                     variant="outlined"
                     size="small"
                     startIcon={<UploadFileIcon />}
-                    onClick={() => importInputRef.current?.click()}
-                    sx={actionButtonSx}
+                    onClick={(event) => {
+                      releaseFocusBeforeModal(event);
+                      importInputRef.current?.click();
+                    }}
+                    sx={toolbarButtonSx}
                   >
-                    Import
+                    Nhập dữ liệu
                   </Button>
                 )}
-                {isSystemAdmin && (
-                  <>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      startIcon={<AddIcon />}
-                      onClick={() => selectedUnitId && setEditor({ mode: 'create', parentUnitId: selectedUnitId })}
-                      disabled={!selectedUnitId}
-                      sx={actionButtonSx}
-                    >
-                      Thêm đơn vị
-                    </Button>
-                  </>
-                )}
-              </Stack>
+              </Box>
 
               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                  <Typography variant="caption" color="text.secondary">Đang chọn</Typography>
-                  {isSystemAdmin && selectedUnit && (
+                  <Typography variant="caption" color="text.secondary">{uiText(UITextKey.TextDangChon)}</Typography>
+                  {canManageUnits && selectedUnit && (
                     <Stack direction="row" spacing={0.5}>
-                      <Tooltip title="Sửa đơn vị">
+                      <Tooltip title={uiText(UITextKey.TextSuaDonVi)}>
                         <IconButton
                           size="small"
-                          onClick={() => selectedUnitId && setEditor({ mode: 'edit', unitId: selectedUnitId })}
+                          onClick={(event) => {
+                            releaseFocusBeforeModal(event);
+                            if (selectedUnitId) setEditor({ mode: 'edit', unitId: selectedUnitId });
+                          }}
                         >
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Ngừng dùng đơn vị">
+                      <Tooltip title={uiText(UITextKey.TextNgungDungDonVi)}>
                         <IconButton
                           size="small"
                           color="warning"
-                          onClick={() => selectedUnitId && setConfirmDeleteOpen(true)}
+                          onClick={(event) => {
+                            releaseFocusBeforeModal(event);
+                            if (selectedUnitId) setConfirmDeleteOpen(true);
+                          }}
                         >
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>
@@ -346,7 +436,7 @@ export function UnitsPanel() {
                       <Chip label={`Mã: ${selectedUnit.code}`} />
                       <Chip label={`Cấp: ${selectedUnit.level}`} />
                       <Chip label={`Loại: ${selectedUnit.primaryUnitTypeCode || '-'}`} color="primary" variant="outlined" />
-                      {selectedUnit.isVirtual && <Chip label="Unit ao" color="warning" variant="outlined" />}
+                      {selectedUnit.isVirtual && <Chip label={uiText(UITextKey.TextUnitAo)} color="warning" variant="outlined" />}
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                       Tên rút gọn: <b>{selectedUnit.shortName || '-'}</b> · Ký hiệu: <b>{selectedUnit.symbol || '-'}</b>
@@ -356,12 +446,12 @@ export function UnitsPanel() {
                     </Typography>
                   </Stack>
                 ) : (
-                  <Typography variant="body2" sx={{ mt: 1 }} color="text.secondary">Chưa chọn đơn vị.</Typography>
+                  <Typography variant="body2" sx={{ mt: 1 }} color="text.secondary">{uiText(UITextKey.TextChuaChonDonVi)}</Typography>
                 )}
               </Box>
 
-              {!isSystemAdmin && (
-                <Alert severity="info">SYSTEM_ADMIN mới được thêm, sửa, ngừng dùng hoặc import đơn vị.</Alert>
+              {!canManageUnits && (
+                <Alert severity="info">{uiText(UITextKey.TextSYSTEMADMINMoiDuocThemSuaNgungDungHoac)}</Alert>
               )}
             </Stack>
           </Box>
@@ -377,15 +467,15 @@ export function UnitsPanel() {
               : null
           }
           parentDisplay={
-            parentDisplay
+            effectiveParentDisplay
               ? {
-                  fullName: parentDisplay.fullName,
-                  code: parentDisplay.code,
-                  shortName: parentDisplay.shortName ?? undefined,
-                  symbol: parentDisplay.symbol ?? undefined,
-                  primaryUnitTypeCode: parentDisplay.primaryUnitTypeCode ?? null,
-                  unitTypeCodes: parentDisplay.unitTypeCodes ?? [],
-                  isVirtual: !!parentDisplay.isVirtual,
+                  fullName: effectiveParentDisplay.fullName,
+                  code: effectiveParentDisplay.code,
+                  shortName: effectiveParentDisplay.shortName ?? undefined,
+                  symbol: effectiveParentDisplay.symbol ?? undefined,
+                  primaryUnitTypeCode: effectiveParentDisplay.primaryUnitTypeCode ?? null,
+                  unitTypeCodes: effectiveParentDisplay.unitTypeCodes ?? [],
+                  isVirtual: !!effectiveParentDisplay.isVirtual,
                 }
               : undefined
           }
@@ -404,12 +494,19 @@ export function UnitsPanel() {
               : undefined
           }
           onClose={() => setEditor(null)}
-          onCreated={(unit) => setSelectedUnitId(unit.id)}
-          onUpdated={(unit) => setSelectedUnitId(unit.id)}
+          onCreated={(unit) => {
+            setPendingSelectedUnitId(unit.id);
+            setSelectedUnitId(unit.id);
+            void refetchUnits();
+          }}
+          onUpdated={(unit) => {
+            setSelectedUnitId(unit.id);
+            void refetchUnits();
+          }}
         />
 
         <Dialog open={!!importPreview} onClose={() => setImportPreview(null)} fullWidth maxWidth="md">
-          <DialogTitle>Kết quả kiểm tra import đơn vị</DialogTitle>
+          <DialogTitle>{uiText(UITextKey.TextKetQuaKiemTraImportDonVi)}</DialogTitle>
           <DialogContent>
             {importPreview && (
               <Stack spacing={1.5} sx={{ mt: 1 }}>
@@ -421,11 +518,23 @@ export function UnitsPanel() {
                     Dòng {err.rowNumber}, cột {err.field}: {err.message}
                   </Typography>
                 ))}
+                {(importPreview.result.rows?.length ?? 0) > 0 && (
+                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.25 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
+                      Code dự kiến do BE sinh
+                    </Typography>
+                    {importPreview.result.rows?.slice(0, 50).map((row) => (
+                      <Typography key={`${row.rowNumber}-${row.externalKey ?? ''}`} variant="body2">
+                        Dòng {row.rowNumber}: {row.fullName || row.externalKey || '-'} · cha {row.parentCode || 'ROOT'} · code {row.generatedCode || '-'}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
               </Stack>
             )}
           </DialogContent>
           <DialogActions>
-            <Button size="small" variant="outlined" onClick={() => setImportPreview(null)} sx={actionButtonSx}>Đóng</Button>
+            <Button size="small" variant="outlined" onClick={() => setImportPreview(null)} sx={actionButtonSx}>{uiText(UITextKey.TextDong)}</Button>
             <Button
               size="small"
               variant="contained"
@@ -437,23 +546,23 @@ export function UnitsPanel() {
                 setImportPreview(null);
               }}
             >
-              Xác nhận import
+              Xác nhận nhập
             </Button>
           </DialogActions>
         </Dialog>
 
         <ConfirmDialog
           open={confirmDeleteOpen}
-          title="Ngừng dùng đơn vị"
+          title={uiText(UITextKey.TextNgungDungDonVi)}
           variant="warning"
           message={
             <Typography variant="body2">
-              Thao tác này chỉ đặt <b>isDeleted=true</b> cho đơn vị/subtree để không dùng cho dữ liệu mới.
-              Dữ liệu cũ vẫn giữ tham chiếu; backend sẽ chặn nếu subtree còn user thường đang hoạt động.
+              Thao tác này chỉ đánh dấu ngừng dùng cho đơn vị và các đơn vị con, nên sẽ không dùng cho dữ liệu mới.
+              Dữ liệu cũ vẫn được giữ lại; hệ thống sẽ chặn nếu còn người dùng thường đang hoạt động.
             </Typography>
           }
           confirmText="Ngừng dùng"
-          cancelText="Hủy"
+          cancelText={uiText(UITextKey.TextHuy3)}
           confirmLoading={dState.isLoading}
           onClose={() => setConfirmDeleteOpen(false)}
           onConfirm={async () => {

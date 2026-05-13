@@ -2,6 +2,7 @@ import React from "react";
 import dayjs, { Dayjs } from "dayjs";
 import { Group, Select, Stack } from "@mantine/core";
 import { quarterStart } from "./rangeUtils";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   from: Dayjs | null;
@@ -30,7 +31,7 @@ export const QuarterRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
     <Stack gap="md">
       <Group grow>
         <Select
-          label="Từ năm"
+          label={uiText(UITextKey.TextTuNam)}
           data={yearOptions}
           value={from ? String(from.year()) : null}
           onChange={(year) => {
@@ -43,7 +44,7 @@ export const QuarterRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
         />
 
         <Select
-          label="Từ quý"
+          label={uiText(UITextKey.TextTuQuy)}
           data={quarterOptions}
           value={from ? String(from.quarter()) : null}
           onChange={(quarter) => {
@@ -58,7 +59,7 @@ export const QuarterRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
 
       <Group grow>
         <Select
-          label="Đến năm"
+          label={uiText(UITextKey.TextDenNam)}
           data={yearOptions}
           value={to ? String(to.year()) : null}
           onChange={(year) => {
@@ -71,7 +72,7 @@ export const QuarterRangePanel: React.FC<Props> = ({ from, to, onChange }) => {
         />
 
         <Select
-          label="Đến quý"
+          label={uiText(UITextKey.TextDenQuy)}
           data={quarterOptions}
           value={to ? String(to.quarter()) : null}
           onChange={(quarter) => {

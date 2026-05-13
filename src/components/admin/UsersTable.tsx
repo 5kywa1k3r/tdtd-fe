@@ -9,6 +9,8 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { AppTable, type AppTableColumn } from "../common/AppTable";
 import CommonLabelText from "../common/CommonLabelText";
 import BooleanChip from "../common/BooleanChip";
+import { releaseFocusBeforeModal } from "../../utils/focus";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type AdminUserRow = {
   id: string;
@@ -44,7 +46,7 @@ interface UsersTableProps {
   onRowDoubleClick?: (row: AdminUserRow) => void;
 }
 
-export const UsersTable: React.FC<UsersTableProps> = ({
+const UsersTableComponent: React.FC<UsersTableProps> = ({
   rows,
   canUpdate,
   canDelete,
@@ -159,7 +161,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
           return (
             <Box sx={{ display: "flex", justifyContent: "center" }}>
               <Stack direction="row" spacing={0.5}>
-                <Tooltip title="Sửa">
+                <Tooltip title={uiText(UITextKey.TextSua)}>
                   <span>
                     <IconButton
                       size="small"
@@ -167,6 +169,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!editOk) return;
+                        releaseFocusBeforeModal(e);
                         onEdit?.(row);
                       }}
                       sx={{ "&:hover": { transform: "scale(1.05)" } }}
@@ -176,7 +179,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                   </span>
                 </Tooltip>
 
-                <Tooltip title="Đặt lại mật khẩu">
+                <Tooltip title={uiText(UITextKey.TextDatLaiMatKhau)}>
                   <span>
                     <IconButton
                       size="small"
@@ -184,6 +187,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!resetOk) return;
+                        releaseFocusBeforeModal(e);
                         onResetPassword?.(row);
                       }}
                       sx={{ "&:hover": { transform: "scale(1.05)" } }}
@@ -193,7 +197,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                   </span>
                 </Tooltip>
 
-                <Tooltip title="Ngừng dùng">
+                <Tooltip title={uiText(UITextKey.TextNgungDung)}>
                   <span>
                     <IconButton
                       size="small"
@@ -201,6 +205,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!delOk) return;
+                        releaseFocusBeforeModal(e);
                         onDelete?.(row);
                       }}
                       sx={{ "&:hover": { transform: "scale(1.05)" } }}
@@ -240,3 +245,6 @@ export const UsersTable: React.FC<UsersTableProps> = ({
     />
   );
 };
+
+export const UsersTable = React.memo(UsersTableComponent);
+UsersTable.displayName = "UsersTable";

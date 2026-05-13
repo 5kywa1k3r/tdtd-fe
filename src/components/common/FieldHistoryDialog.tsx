@@ -10,6 +10,7 @@ import {
   Divider,
 } from '@mui/material';
 import { type UnitFieldRevision } from '../../types/dynamicReport';
+import { UITextKey, uiText } from '../../constants/uiText';
 
 interface Props {
   open: boolean;
@@ -51,7 +52,7 @@ export const FieldHistoryDialog: React.FC<Props> = ({ open, title = 'Lịch sử
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button size="small" variant="contained" onClick={onClose} sx={{ height: 36, px: 1.75 }}>Đóng</Button>
+        <Button size="small" variant="contained" onClick={onClose} sx={{ height: 36, px: 1.75 }}>{uiText(UITextKey.TextDong)}</Button>
       </DialogActions>
     </Dialog>
   );

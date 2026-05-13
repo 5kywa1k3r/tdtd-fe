@@ -6,6 +6,7 @@ import type {
   DashboardReportAssignmentOptionDto,
   DashboardReportAssignmentOptionsRequest,
 } from "../../../types/dashboard";
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   value: string;
@@ -45,8 +46,8 @@ export default function ReportAssignmentSelect({
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Assignment báo cáo"
-          placeholder="Chọn assignment để lọc báo cáo"
+          label={uiText(UITextKey.TextAssignmentBaoCao)}
+          placeholder={uiText(UITextKey.TextChonAssignmentDeLocBaoCao)}
           InputProps={{
             ...params.InputProps,
             endAdornment: (
@@ -58,7 +59,7 @@ export default function ReportAssignmentSelect({
           }}
         />
       )}
-      noOptionsText="Không có assignment phù hợp"
+      noOptionsText="Không có công việc phù hợp"
       sx={{ minWidth: 360, flex: 1 }}
     />
   );

@@ -23,7 +23,10 @@ export type MeSnapshot = {
   unitCode?: string;
   unitSymbol?: string;
   unitName?: string;
+  unitTypeCodes?: string[];
   positionCode?: string;
+  accountKind?: string;
+  isDeleted?: boolean;
   cachedAt: number;
 };
 

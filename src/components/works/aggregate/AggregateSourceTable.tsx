@@ -31,14 +31,14 @@ const AggregateSourceTable: React.FC<AggregateSourceTableProps> = ({ rows }) => 
     () => [
       {
         field: "reportId",
-        header: "Report",
+        header: "Báo cáo",
         width: 160,
         sortable: false,
         render: (row) => row.reportId,
       },
       {
         field: "workAssignmentId",
-        header: "Assignment",
+        header: "Công việc",
         width: 160,
         sortable: false,
         render: (row) => row.workAssignmentId,
@@ -74,14 +74,14 @@ const AggregateSourceTable: React.FC<AggregateSourceTableProps> = ({ rows }) => 
       },
       {
         field: "periodInstanceKey",
-        header: "Instance",
+        header: "Lần báo cáo",
         width: 150,
         sortable: false,
         render: (row) => row.periodInstanceKey || "-",
       },
       {
         field: "reportDate",
-        header: "Ngày BC",
+        header: "Ngày báo cáo",
         width: 120,
         sortable: false,
         render: (row) => formatSourceDate(row.reportDate),

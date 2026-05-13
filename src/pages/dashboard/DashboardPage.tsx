@@ -28,6 +28,7 @@ import DashboardSummaryCards from "../../components/dashboard/summary/DashboardS
 import DashboardSummaryFilters from "../../components/dashboard/summary/DashboardSummaryFilters";
 import DashboardWorksTable from "../../components/dashboard/summary/DashboardWorksTable";
 import WorkMindMapLaunchDialog from "../../components/dashboard/mindmap/WorkMindMapLaunchDialog";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 const WorkMindMapPage = React.lazy(() => import("./mindmap/WorkMindMapPage"));
 
@@ -277,7 +278,7 @@ export default function DashboardPage() {
           <Grid size={{ xs: 12, lg: 8 }}>
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, height: "100%" }}>
               <DashboardUnitBarChart
-                title="3 đơn vị có giá trị cao nhất"
+                title={uiText(UITextKey.Text3DonViCoGiaTriCaoNhat)}
                 rows={unitChartRows}
                 selectedLabel={selectedPie?.label ?? null}
                 height={300}

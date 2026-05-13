@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import { useResetPasswordMutation } from '../../../api/adminUsersApi';
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Target = { userId: string; username: string; isMe?: boolean } | null;
 
@@ -45,7 +46,7 @@ export function ResetPasswordDialog({
         return;
       }
       if (!target) {
-        setError('Thiếu user.');
+        setError('Thiếu người dùng.');
         return;
       }
 
@@ -57,13 +58,13 @@ export function ResetPasswordDialog({
 
       onClose();
     } catch (e: any) {
-      setError(e?.data?.title ?? e?.message ?? 'Reset mật khẩu thất bại.');
+      setError(e?.data?.title ?? e?.message ?? 'Đặt lại mật khẩu thất bại.');
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Reset mật khẩu</DialogTitle>
+      <DialogTitle>{uiText(UITextKey.TextResetMatKhau)}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
@@ -74,11 +75,11 @@ export function ResetPasswordDialog({
 
           <TextField
             autoFocus
-            label="Mật khẩu mới"
+            label={uiText(UITextKey.TextMatKhauMoi)}
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            helperText="Tối thiểu 6 ký tự"
+            helperText={uiText(UITextKey.TextToiThieu6KyTu)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') submit();
             }}
@@ -90,7 +91,7 @@ export function ResetPasswordDialog({
           Hủy
         </Button>
         <Button size="small" variant="contained" onClick={submit} disabled={st.isLoading} sx={{ height: 36, px: 1.75 }}>
-          Reset
+          Đặt lại
         </Button>
       </DialogActions>
     </Dialog>

@@ -5,7 +5,7 @@ import "@fortune-sheet/react/dist/index.css";
 import type { Sheet } from "@fortune-sheet/core";
 
 import { extractNumericValues1D } from "./fortuneAdapter";
-import { cloneDeepJson, type ReportRect } from "./reportWorkbook";
+import { cloneDeepJson, ensureWorkbookShape, type ReportRect } from "./reportWorkbook";
 
 export type WorkbookDataGridMode = "edit" | "view";
 
@@ -29,7 +29,7 @@ export interface WorkbookDataGridProps {
   excludedDataColumns?: number[];
 
   onBack?: () => void;
-  onChangeRaw?: (workbookData: Sheet[]) => void;
+  onChangeRaw?: (workbookData: Sheet[], payload?: WorkbookDataGridSavePayload) => void;
   onSave?: (payload: WorkbookDataGridSavePayload) => void;
 }
 
@@ -56,7 +56,7 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
   const isView = mode === "view" || readOnly;
 
   const [workbookData, setWorkbookData] = React.useState<Sheet[]>(
-    () => cloneDeepJson(initialWorkbookData ?? []) as Sheet[]
+    () => normalizeWorkbookForGrid(initialWorkbookData, dataRect)
   );
 
   const workbookRef = React.useRef<Sheet[]>(workbookData);
@@ -64,12 +64,12 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    const cloned = (cloneDeepJson(initialWorkbookData ?? []) as Sheet[]) || [];
+    const cloned = normalizeWorkbookForGrid(initialWorkbookData, dataRect);
     setWorkbookData(cloned);
     workbookRef.current = cloned;
     setWorkbookKey((x) => x + 1);
     setError(null);
-  }, [initialWorkbookData]);
+  }, [initialWorkbookData, dataRect]);
 
   const settings = React.useMemo(() => {
     return {
@@ -77,13 +77,17 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
       onChange: (data: any) => {
         if (isView) return;
         if (Array.isArray(data)) {
-          workbookRef.current = data as Sheet[];
-          setWorkbookData(data as Sheet[]);
-          onChangeRaw?.(data as Sheet[]);
+          const nextWorkbookData = data as Sheet[];
+          workbookRef.current = nextWorkbookData;
+          setWorkbookData(nextWorkbookData);
+          onChangeRaw?.(
+            nextWorkbookData,
+            buildWorkbookSavePayload(nextWorkbookData, dataRect, excludedDataColumns) ?? undefined,
+          );
         }
       },
     };
-  }, [workbookData, isView, onChangeRaw]);
+  }, [workbookData, dataRect, excludedDataColumns, isView, onChangeRaw]);
 
   const handleSave = React.useCallback(() => {
     try {
@@ -94,21 +98,12 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
           ? workbookRef.current
           : workbookData;
 
-      const sheet = latestRaw?.[0];
-      if (!sheet) {
+      const payload = buildWorkbookSavePayload(latestRaw, dataRect, excludedDataColumns);
+      if (!payload) {
         throw new Error("Không lấy được dữ liệu sheet để lưu.");
       }
 
-      const values1D = applyExcludedDataColumns(
-        extractNumericValues1D(sheet, dataRect),
-        dataRect,
-        excludedDataColumns,
-      );
-
-      onSave?.({
-        rawWorkbookData: latestRaw,
-        values1D,
-      });
+      onSave?.(payload);
     } catch (e: any) {
       setError(e?.message || "Không thể chuẩn bị dữ liệu để lưu.");
     }
@@ -166,6 +161,25 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
   );
 }
 
+function buildWorkbookSavePayload(
+  workbookData: Sheet[],
+  dataRect: ReportRect,
+  excludedDataColumns: number[],
+): WorkbookDataGridSavePayload | null {
+  const normalized = normalizeWorkbookForGrid(workbookData, dataRect);
+  const sheet = normalized?.[0];
+  if (!sheet) return null;
+
+  return {
+    rawWorkbookData: normalized,
+    values1D: applyExcludedDataColumns(
+      extractNumericValues1D(sheet, dataRect),
+      dataRect,
+      excludedDataColumns,
+    ),
+  };
+}
+
 function applyExcludedDataColumns(
   values1D: Array<number | null>,
   dataRect: ReportRect,
@@ -195,4 +209,49 @@ function applyExcludedDataColumns(
   }
 
   return next;
+}
+
+function normalizeWorkbookForGrid(workbookData: Sheet[] | undefined | null, dataRect: ReportRect) {
+  const rows = Math.max(
+    1,
+    getWorkbookRowCount(workbookData),
+    Number(dataRect?.r1 ?? -1) + 1,
+  );
+  const cols = Math.max(
+    1,
+    getWorkbookColumnCount(workbookData),
+    Number(dataRect?.c1 ?? -1) + 1,
+  );
+
+  return cloneDeepJson(ensureWorkbookShape(workbookData ?? [], rows, cols)) as Sheet[];
+}
+
+function getWorkbookRowCount(workbookData: Sheet[] | undefined | null) {
+  const sheet: any = Array.isArray(workbookData) ? workbookData[0] : null;
+  const fromRow = typeof sheet?.row === "number" ? sheet.row : 0;
+  const fromData = Array.isArray(sheet?.data) ? sheet.data.length : 0;
+  const fromCelldata = Array.isArray(sheet?.celldata)
+    ? Math.max(
+        0,
+        ...sheet.celldata.map((item: any) => (typeof item?.r === "number" ? item.r + 1 : 0)),
+      )
+    : 0;
+
+  return Math.max(fromRow, fromData, fromCelldata, 0);
+}
+
+function getWorkbookColumnCount(workbookData: Sheet[] | undefined | null) {
+  const sheet: any = Array.isArray(workbookData) ? workbookData[0] : null;
+  const fromColumn = typeof sheet?.column === "number" ? sheet.column : 0;
+  const fromData = Array.isArray(sheet?.data)
+    ? Math.max(0, ...sheet.data.map((row: any) => (Array.isArray(row) ? row.length : 0)))
+    : 0;
+  const fromCelldata = Array.isArray(sheet?.celldata)
+    ? Math.max(
+        0,
+        ...sheet.celldata.map((item: any) => (typeof item?.c === "number" ? item.c + 1 : 0)),
+      )
+    : 0;
+
+  return Math.max(fromColumn, fromData, fromCelldata, 0);
 }

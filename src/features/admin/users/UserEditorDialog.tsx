@@ -19,7 +19,6 @@ import {
   useUpdateUserMutation,
   useGetUserByIdQuery
 } from '../../../api/adminUsersApi';
-import { useSearchSubtreeByCodePrefixQuery } from '../../../api/adminUnitsApi';
 import { LazyUnitMultiSelect } from '../../../components/common/LazyUnitMultiSelect';
 
 import {
@@ -29,6 +28,7 @@ import {
   getManagerUnitId,
 } from '../../../constants/roles';
 import { PositionSelect } from '../../../components/common/PositionSelect';
+import { UITextKey, uiText } from '../../../constants/uiText';
 
 const DEFAULT_PASSWORD = '123456@Aa';
 
@@ -56,8 +56,8 @@ export function UserEditorDialog({
 
   const roles = me?.roles ?? [];
   const isAdmin = roles.includes(Role.ADMIN);
-  const isSys = roles.includes(Role.SYSTEM_ADMIN);
-  const isMgrLevel = roles.includes(Role.MANAGER_LEVEL);
+  const isSys = roles.includes(Role.SYSTEM_ADMIN) || me?.accountKind === 'SYSTEM_ADMIN';
+  const isMgrLevel = roles.includes(Role.MANAGER_LEVEL) || me?.accountKind === 'LEVEL_MANAGER';
 
   const mgrUnitRole = roles.find(isManagerUnitRole);
   const mgrUnitId = mgrUnitRole ? getManagerUnitId(mgrUnitRole) : null;
@@ -101,7 +101,7 @@ export function UserEditorDialog({
     setPositionCode('');
     if (isAdmin) {
       // ADMIN creates SYSTEM_ADMIN against the system unit; do not expose the ROOT label in UI.
-      setUnitId(me?.unitId ?? '');
+      setUnitId('');
       setPickedRoles([Role.SYSTEM_ADMIN]);
     } else if (mgrUnitId) {
       setUnitId(mgrUnitId);
@@ -130,9 +130,15 @@ export function UserEditorDialog({
 
   // ===== UNIT LOGIC =====
   const canPickUnit = isCreate && (isSys || isMgrLevel);
+  const editingSystemAdmin =
+    isEdit &&
+    (detail?.accountKind === 'SYSTEM_ADMIN' ||
+      (detail?.roles ?? []).includes(Role.SYSTEM_ADMIN));
+  const creatingSystemAdmin = isCreate && isAdmin;
+  const systemAdminTarget = creatingSystemAdmin || editingSystemAdmin;
 
   // ADMIN + MANAGER_UNIT: fixed unit, managers use the unit encoded in their role.
-  const fixedUnitId = isAdmin ? (me?.unitId ?? null) : (mgrUnitId ?? null);
+  const fixedUnitId = isAdmin ? null : (mgrUnitId ?? null);
 
   const effectiveUnitId =
     isEdit
@@ -140,35 +146,17 @@ export function UserEditorDialog({
       : fixedUnitId ??
         (unitId ? unitId : (canPickUnit ? (me?.unitId ?? null) : (me?.unitId ?? null)));
 
-  const unitLookupPrefix = unitCode || detail?.unitCode || me?.unitCode || '';
-  const { data: unitLookup = [] } = useSearchSubtreeByCodePrefixQuery(unitLookupPrefix, {
-    skip: !open || !unitLookupPrefix,
-  });
-
-  const effectiveUnitMeta = useMemo(() => {
-    const byId = unitLookup.find((unit) => unit.id === effectiveUnitId);
-    if (byId) return byId;
-    return unitLookup.find((unit) => unit.code === unitLookupPrefix);
-  }, [effectiveUnitId, unitLookup, unitLookupPrefix]);
-
-  useEffect(() => {
-    if (!open || !effectiveUnitMeta) return;
-    if (!unitCode && effectiveUnitMeta.code) setUnitCode(effectiveUnitMeta.code);
-    if (!unitTypeCode && effectiveUnitMeta.primaryUnitTypeCode) {
-      setUnitTypeCode(effectiveUnitMeta.primaryUnitTypeCode);
-    }
-  }, [effectiveUnitMeta, open, unitCode, unitTypeCode]);
-
   const ownUnitTypeCode =
     effectiveUnitId === me?.unitId ? (me?.unitTypeCodes?.[0] ?? null) : null;
-  const effectiveUnitTypeCode =
-    unitTypeCode || effectiveUnitMeta?.primaryUnitTypeCode || ownUnitTypeCode || null;
+  const effectiveUnitTypeCode = unitTypeCode || ownUnitTypeCode || null;
+  const selectedUnitValue = useMemo(() => (unitId ? [unitId] : []), [unitId]);
 
   // ===== ROLE LOGIC =====
-  const showRolePicker = isCreate && isSys && !isAdmin;
+  const showRolePicker = false;
 
   const buildFinalRoles = () => {
     if (isAdmin) return [Role.SYSTEM_ADMIN];
+    if (isSys) return [];
 
     if (isSys) {
       let final = [...pickedRoles];
@@ -200,31 +188,32 @@ export function UserEditorDialog({
         return;
       }
 
-      if (!effectiveUnitId) {
+      const finalRoles = buildFinalRoles();
+      const createSystemAdmin = finalRoles.includes(Role.SYSTEM_ADMIN);
+
+      if (!createSystemAdmin && !effectiveUnitId) {
         setError('Không xác định được đơn vị.');
         return;
       }
 
-      if (!positionCode) {
-        setError('Vui long chon chuc vu.');
+      if (!createSystemAdmin && !positionCode) {
+        setError('Vui lòng chọn chức vụ.');
         return;
       }
-
-      const finalRoles = buildFinalRoles();
 
       const created = await createUser({
         username: u,
         password,
-        positionCode,
+        positionCode: createSystemAdmin ? null : positionCode,
         fullName: fn,
-        unitId: effectiveUnitId,
+        unitId: createSystemAdmin ? null : effectiveUnitId,
         roles: finalRoles.length ? finalRoles : undefined,
       }).unwrap();
 
       onCreated?.({ id: created?.id });
       onClose();
     } catch (e: any) {
-      setError(e?.data?.title ?? e?.message ?? 'Tạo user thất bại.');
+      setError(e?.data?.title ?? e?.message ?? 'Tạo người dùng thất bại.');
       onFailed?.(e, 'create');
     }
   };
@@ -233,7 +222,7 @@ export function UserEditorDialog({
       setError(null);
 
       if (!editUserId) {
-        setError('Thiếu userId để cập nhật.');
+        setError('Thiếu mã người dùng để cập nhật.');
         return;
       }
 
@@ -241,18 +230,18 @@ export function UserEditorDialog({
       const fn = fullName.trim();
 
       if (!u || !fn) {
-        setError('Vui lòng nhập Username và Họ tên.');
+        setError('Vui lòng nhập tên đăng nhập và họ tên.');
         return;
       }
 
-      if (!positionCode) {
-        setError('Vui long chon chuc vu.');
+      if (!systemAdminTarget && !positionCode) {
+        setError('Vui lòng chọn chức vụ.');
         return;
       }
 
       const updated = await updateUser({
         userId: editUserId,
-        body: { username: u, fullName: fn, positionCode },
+        body: { username: u, fullName: fn, positionCode: systemAdminTarget ? null : positionCode },
       }).unwrap();
 
       onUpdated?.({ id: updated?.id ?? editUserId });
@@ -264,7 +253,7 @@ export function UserEditorDialog({
   };
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{isEdit ? 'Sửa user' : 'Tạo user'}</DialogTitle>
+      <DialogTitle>{isEdit ? 'Sửa người dùng' : 'Tạo người dùng'}</DialogTitle>
 
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
@@ -272,12 +261,12 @@ export function UserEditorDialog({
 
           {isEdit && detailLoading && (
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              Đang tải thông tin user...
+              Đang tải thông tin người dùng...
             </Typography>
           )}
 
           <TextField
-            label="Username"
+            label={uiText(UITextKey.TextUsername)}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             disabled={false} //  cho sửa username cả edit
@@ -285,7 +274,7 @@ export function UserEditorDialog({
 
           {isCreate && (
             <TextField
-              label="Password"
+              label={uiText(UITextKey.TextPassword)}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               helperText={`Mặc định: ${DEFAULT_PASSWORD}`}
@@ -293,35 +282,41 @@ export function UserEditorDialog({
           )}
 
           <TextField
-            label="Họ tên"
+            label={uiText(UITextKey.TextHoTen)}
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
           />
 
           {/* POSITION */}
-          <PositionSelect
-            value={positionCode}
-            onChange={(v) => setPositionCode(v)}
-            unitCode={unitCode || null}
-            unitTypeCode={effectiveUnitTypeCode}
-            label="Chức vụ"
-            allowEmpty={false}
-          />
+          {!systemAdminTarget ? (
+            <PositionSelect
+              value={positionCode}
+              onChange={(v) => setPositionCode(v)}
+              unitCode={unitCode || null}
+              unitTypeCode={effectiveUnitTypeCode}
+              label={uiText(UITextKey.TextChucVu)}
+              allowEmpty={false}
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              SYSTEM_ADMIN không gắn chức vụ.
+            </Typography>
+          )}
 
           {/* UNIT */}
           {isCreate && (
             <>
               {isAdmin ? (
                 <Typography variant="body2">
-                  Đơn vị hệ thống (cố định)
+                  SYSTEM_ADMIN không gắn đơn vị.
                 </Typography>
               ) : mgrUnitId ? (
                 <Typography variant="body2">
-                  Tạo user cho đơn vị: {mgrUnitId}
+                  Tạo người dùng cho đơn vị: {mgrUnitId}
                 </Typography>
               ) : canPickUnit ? (
                 <LazyUnitMultiSelect
-                  value={unitId ? [unitId] : []}
+                  value={selectedUnitValue}
                   onChange={(v) => {
                     const id = v?.[0] ?? '';
                     setUnitId(id);
@@ -334,7 +329,7 @@ export function UserEditorDialog({
                   }}
                   mode="single"
                   virtualUnitBehavior="reject"
-                  label="Đơn vị"
+                  label={uiText(UITextKey.TextDonVi)}
                 />
               ) : (
                 <Typography variant="body2">
@@ -384,7 +379,7 @@ export function UserEditorDialog({
       </DialogContent>
 
       <DialogActions>
-        <Button size="small" variant="outlined" onClick={onClose} sx={{ height: 36, px: 1.75 }}>Hủy</Button>
+        <Button size="small" variant="outlined" onClick={onClose} sx={{ height: 36, px: 1.75 }}>{uiText(UITextKey.TextHuy3)}</Button>
         <Button
           size="small"
           variant="contained"

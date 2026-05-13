@@ -9,6 +9,7 @@ export type AppUser = {
   unitSymbol?: string;
   unitName: string;
   positionCode?: string;
+  accountKind?: string;
   roles: string[];
   isDeleted: boolean;
 };

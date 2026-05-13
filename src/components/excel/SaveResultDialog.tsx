@@ -1,5 +1,6 @@
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Alert, Stack, Typography } from "@mui/material";
 import type { ValidationIssue } from "./fortune/types";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export function SaveResultDialog(props: {
   open: boolean;
@@ -11,13 +12,13 @@ export function SaveResultDialog(props: {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Kết quả lưu</DialogTitle>
+      <DialogTitle>{uiText(UITextKey.TextKetQuaLuu)}</DialogTitle>
       <DialogContent dividers>
         {ok ? (
-          <Alert severity="success">Hợp lệ. Đã sẵn sàng lưu cấu hình header.</Alert>
+          <Alert severity="success">{uiText(UITextKey.TextHopLeDaSanSangLuuCauHinhHeader)}</Alert>
         ) : (
           <Stack spacing={1}>
-            <Alert severity="error">Không hợp lệ. Sửa các lỗi sau:</Alert>
+            <Alert severity="error">{uiText(UITextKey.TextKhongHopLeSuaCacLoiSau)}</Alert>
             {issues.slice(0, 100).map((it, idx) => (
               <Alert key={idx} severity="warning">
                 <Typography fontWeight={800}>{it.code}</Typography>
@@ -31,7 +32,7 @@ export function SaveResultDialog(props: {
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Đóng</Button>
+        <Button onClick={onClose}>{uiText(UITextKey.TextDong)}</Button>
       </DialogActions>
     </Dialog>
   );

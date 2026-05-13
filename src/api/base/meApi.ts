@@ -9,6 +9,7 @@ export type MeDto = {
   unitCode: string;
   unitTypeCodes?: string[];
   positionCode?: string;
+  accountKind?: string;
   roles: string[];
   isDeleted: boolean;
 };

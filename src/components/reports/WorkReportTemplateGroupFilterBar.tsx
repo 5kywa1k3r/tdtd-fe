@@ -2,6 +2,7 @@ import { Button, InputAdornment, Paper, Stack, TextField, Typography } from "@mu
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import { UITextKey, uiText } from '../../constants/uiText';
 
 export type WorkReportTemplateGroupFilterValue = {
   q: string;
@@ -82,7 +83,7 @@ export default function WorkReportTemplateGroupFilterBar({
 
         <TextField
           size="small"
-          placeholder="Tìm mã / tên biểu mẫu"
+          placeholder={uiText(UITextKey.TextTimMaTenBieuMau)}
           value={value.q}
           onChange={(e) => onChange({ q: e.target.value })}
           onKeyDown={(e) => {
