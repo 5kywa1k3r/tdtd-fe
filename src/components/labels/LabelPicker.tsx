@@ -14,12 +14,16 @@ import {
   type LabelRow,
   useSearchLabelsMutation,
 } from "../../api/labelApi";
+import { formatLabelDataType, LabelSwatch } from "./labelUi";
+
+export type LabelPickerUsage = "generic" | "tag" | "row" | "statistic";
 
 type LabelPickerProps = {
   value?: string[];
   onChange: (codes: string[], rows: LabelRow[]) => void;
   allowedCodes?: string[];
   groupCode?: string | null;
+  usage?: LabelPickerUsage;
   label?: string;
   placeholder?: string;
   helperText?: string;
@@ -60,20 +64,13 @@ function fallbackLabel(code: string): LabelRow {
   };
 }
 
-function formatLabelDataType(dataType?: string | null) {
-  switch (dataType) {
-    case "SHORT_TEXT":
-      return "Văn bản ngắn";
-    case "LONG_TEXT":
-      return "Văn bản dài";
-    case "DATE":
-      return "Ngày";
-    case "BOOLEAN":
-      return "Có/không";
-    case "NUMBER":
-    default:
-      return "Số";
-  }
+function labelMetaText(row: LabelRow, showDataType: boolean) {
+  const parts = [
+    row.code,
+    row.groupCode?.trim() || null,
+    showDataType ? formatLabelDataType(row.dataType) : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 export default function LabelPicker({
@@ -81,6 +78,7 @@ export default function LabelPicker({
   onChange,
   allowedCodes,
   groupCode,
+  usage = "generic",
   label = "Nhãn",
   placeholder = "Chọn nhãn",
   helperText,
@@ -93,6 +91,7 @@ export default function LabelPicker({
 }: LabelPickerProps) {
   const [inputValue, setInputValue] = useState("");
   const [search, searchState] = useSearchLabelsMutation();
+  const showDataType = usage === "generic" || usage === "statistic";
 
   const selectedCodes = useMemo(() => uniqueCodes(value), [value]);
   const allowedSet = useMemo(() => {
@@ -182,23 +181,13 @@ export default function LabelPicker({
       }
       renderOption={(props, row) => (
         <Box component="li" {...props} key={row.code} sx={{ gap: 1 }}>
-          <Box
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: "50%",
-              bgcolor: row.color ?? "grey.400",
-              border: "1px solid",
-              borderColor: "divider",
-              flexShrink: 0,
-            }}
-          />
+          <LabelSwatch color={row.color} size={12} />
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="body2" noWrap>
               {row.name}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
-              {row.code} · {formatLabelDataType(row.dataType)}
+              {labelMetaText(row, showDataType)}
             </Typography>
           </Box>
         </Box>

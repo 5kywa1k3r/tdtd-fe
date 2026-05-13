@@ -35,6 +35,15 @@ import {
   useUpdateLabelMutation,
 } from "../../api/labelApi";
 import { UITextKey, uiText } from '../../constants/uiText';
+import { getApiErrorMessage } from "../../utils/apiError";
+import {
+  formatLabelDataType,
+  isValidLabelColor,
+  LABEL_DATA_TYPE_OPTIONS,
+  LabelColorPalette,
+  LabelColorPreview,
+  LabelPreviewChip,
+} from "./labelUi";
 
 type LabelFormState = {
   id?: string;
@@ -76,34 +85,6 @@ function scopeLabel(row: Pick<LabelRow, "scopeType" | "scopeId">) {
   if (row.scopeType === "GLOBAL") return "Toàn hệ thống";
   if (row.scopeType === "LEVEL") return `Level ${row.scopeId ?? ""}`;
   return `Đơn vị ${row.scopeId ?? ""}`;
-}
-
-const LABEL_DATA_TYPE_OPTIONS: Array<{ value: LabelRow["dataType"]; label: string }> = [
-  { value: "NUMBER", label: "Số" },
-  { value: "SHORT_TEXT", label: "Văn bản ngắn" },
-  { value: "LONG_TEXT", label: "Văn bản dài" },
-  { value: "DATE", label: "Ngày" },
-  { value: "BOOLEAN", label: "Có/không" },
-];
-
-function dataTypeLabel(value?: string | null) {
-  return LABEL_DATA_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? "Số";
-}
-
-function readErrorMessage(error: unknown, fallback: string) {
-  if (!error || typeof error !== "object") return fallback;
-
-  const data = "data" in error ? (error as { data?: unknown }).data : null;
-  if (data && typeof data === "object") {
-    const title = "title" in data ? (data as { title?: unknown }).title : null;
-    if (typeof title === "string" && title.trim()) return title;
-
-    const message = "message" in data ? (data as { message?: unknown }).message : null;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-
-  const message = "message" in error ? (error as { message?: unknown }).message : null;
-  return typeof message === "string" && message.trim() ? message : fallback;
 }
 
 export default function LabelManagerDialog({
@@ -164,6 +145,7 @@ export default function LabelManagerDialog({
   const canSave =
     form.code.trim().length > 0 &&
     form.name.trim().length > 0 &&
+    isValidLabelColor(form.color) &&
     (!isSystemAdmin || form.scopeType === "GLOBAL" || form.scopeId.trim().length > 0);
 
   const applySearch = () => {
@@ -236,7 +218,7 @@ export default function LabelManagerDialog({
       onChanged?.();
       search(req);
     } catch (err) {
-      setError(readErrorMessage(err, "Lưu nhãn thất bại."));
+      setError(getApiErrorMessage(err));
     }
   };
 
@@ -250,7 +232,7 @@ export default function LabelManagerDialog({
       onChanged?.();
       search(req);
     } catch (err) {
-      setError(readErrorMessage(err, "Xóa nhãn thất bại."));
+      setError(getApiErrorMessage(err));
     }
   };
 
@@ -334,13 +316,11 @@ export default function LabelManagerDialog({
                       />
                       <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Stack direction="row" spacing={0.75} alignItems="center" minWidth={0}>
-                          <Typography variant="body2" fontWeight={700} noWrap>
-                            {row.name}
-                          </Typography>
+                          <LabelPreviewChip name={row.name} code={row.code} color={row.color} />
                           {!row.isActive && <Chip size="small" label={uiText(UITextKey.TextInactive)} variant="outlined" />}
                         </Stack>
                         <Typography variant="caption" color="text.secondary" noWrap>
-                          {row.code} | {dataTypeLabel(row.dataType)} | {row.groupCode || "-"} | {scopeLabel(row)}
+                          {row.code} | {formatLabelDataType(row.dataType)} | {row.groupCode || "-"} | {scopeLabel(row)}
                         </Typography>
                       </Box>
                       <Tooltip title={uiText(UITextKey.TextSuaNhan)}>
@@ -428,15 +408,38 @@ export default function LabelManagerDialog({
                   disabled={busy}
                   onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
                   sx={{ width: 130 }}
+                  error={!isValidLabelColor(form.color)}
+                  helperText={!isValidLabelColor(form.color) ? uiText(UITextKey.TextMauNhanKhongHopLe) : " "}
+                />
+              </Stack>
+              <Stack spacing={1}>
+                <Typography variant="caption" color="text.secondary">
+                  {uiText(UITextKey.TextMauGoiY)}
+                </Typography>
+                <LabelColorPalette
+                  value={form.color}
+                  disabled={busy}
+                  onChange={(color) => setForm((prev) => ({ ...prev, color }))}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {uiText(UITextKey.TextXemTruocMauNhan)}
+                </Typography>
+                <LabelColorPreview
+                  code={form.code}
+                  name={form.name}
+                  color={form.color}
+                  groupCode={form.groupCode}
+                  dataType={form.dataType}
+                  showDataType
                 />
               </Stack>
               <TextField
                 select
                 size="small"
-                label="Kiểu dữ liệu"
+                label={uiText(UITextKey.TextKieuDuLieuMacDinhThongKe)}
                 value={form.dataType}
                 disabled={busy}
-                helperText="Cùng một nhãn chỉ nên dùng cho cùng kiểu dữ liệu để thống kê/gộp không bị mơ hồ."
+                helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
                 }

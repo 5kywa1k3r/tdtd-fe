@@ -426,6 +426,7 @@ export default function DynamicFormEditor({
               <LabelPicker
                 value={value.tagCodes}
                 disabled={readOnly}
+                usage="tag"
                 label={uiText(UITextKey.TextFormLabels)}
                 placeholder={uiText(UITextKey.TextChonNhanForm)}
                 onChange={(codes) => setPatch({ tagCodes: codes })}
@@ -566,6 +567,7 @@ export default function DynamicFormEditor({
                   <LabelPicker
                     value={excelBlockTagCodes}
                     disabled={readOnly}
+                    usage="tag"
                     label={uiText(UITextKey.TextBlockLabels)}
                     placeholder={uiText(UITextKey.TextChonNhanBlock)}
                     onChange={(codes) =>
@@ -581,6 +583,7 @@ export default function DynamicFormEditor({
                   <LabelPicker
                     value={excelBlockAllowedRowLabelCodes}
                     disabled={readOnly}
+                    usage="row"
                     label={uiText(UITextKey.TextAllowedRowLabels)}
                     placeholder={uiText(UITextKey.TextChonNhanDong)}
                     helperText={uiText(UITextKey.TextDanhSachNhanChoNguoiNhapBaoCaoChon)}
@@ -658,6 +661,7 @@ export default function DynamicFormEditor({
                               : undefined
                           }
                           disabled={readOnly}
+                          usage="row"
                           label={`Dòng ${rowIndex + 1}`}
                           placeholder={uiText(UITextKey.TextChonNhan)}
                           limitTags={2}
@@ -783,6 +787,7 @@ export default function DynamicFormEditor({
                     <LabelPicker
                       value={selectedSection.tagCodes ?? []}
                       disabled={readOnly}
+                      usage="tag"
                       label={uiText(UITextKey.TextSectionLabels)}
                       placeholder={uiText(UITextKey.TextChonNhanSection)}
                       onChange={(codes) =>
@@ -1092,9 +1097,10 @@ function FieldSettingsPanel({
         <LabelPicker
           value={field.statisticLabelCodes ?? []}
           disabled={statisticReadOnly || !field.isStatistic}
-          label="Nhãn dữ liệu/thống kê"
+          usage="statistic"
+          label={uiText(UITextKey.TextFieldLabels)}
           placeholder={uiText(UITextKey.TextChonNhanField)}
-          helperText="Label code dùng cho thống kê, trích xuất, mapping và phải bật thống kê trước khi gắn."
+          helperText={uiText(UITextKey.TextChiFieldDaBatStatisticMoiDuocGanLabel)}
           onChange={(codes) =>
             onChange({
               statisticLabelCodes: codes,

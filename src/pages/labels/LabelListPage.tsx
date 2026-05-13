@@ -39,6 +39,15 @@ import {
   useUpdateLabelMutation,
 } from "../../api/labelApi";
 import { UITextKey, uiText } from '../../constants/uiText';
+import { getApiErrorMessage } from "../../utils/apiError";
+import {
+  formatLabelDataType,
+  isValidLabelColor,
+  LABEL_DATA_TYPE_OPTIONS,
+  LabelColorPalette,
+  LabelColorPreview,
+  LabelPreviewChip,
+} from "../../components/labels/labelUi";
 
 type LabelFormState = {
   id?: string;
@@ -76,18 +85,6 @@ function scopeLabel(row: Pick<LabelRow, "scopeType" | "scopeId">) {
   if (row.scopeType === "GLOBAL") return "Toàn hệ thống";
   if (row.scopeType === "LEVEL") return `Level ${row.scopeId ?? ""}`;
   return `Đơn vị ${row.scopeId ?? ""}`;
-}
-
-const LABEL_DATA_TYPE_OPTIONS: Array<{ value: LabelRow["dataType"]; label: string }> = [
-  { value: "NUMBER", label: "Số" },
-  { value: "SHORT_TEXT", label: "Văn bản ngắn" },
-  { value: "LONG_TEXT", label: "Văn bản dài" },
-  { value: "DATE", label: "Ngày" },
-  { value: "BOOLEAN", label: "Có/không" },
-];
-
-function dataTypeLabel(value?: string | null) {
-  return LABEL_DATA_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? "Số";
 }
 
 function canManageLabels(roles?: string[]) {
@@ -160,21 +157,8 @@ export default function LabelListPage() {
         sortable: true,
         render: (row) => (
           <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
-            <Box
-              sx={{
-                width: 14,
-                height: 14,
-                borderRadius: "50%",
-                bgcolor: row.color ?? "grey.400",
-                border: "1px solid",
-                borderColor: "divider",
-                flexShrink: 0,
-              }}
-            />
             <Box sx={{ minWidth: 0 }}>
-              <Typography variant="body2" fontWeight={700} noWrap>
-                {row.name}
-              </Typography>
+              <LabelPreviewChip name={row.name} code={row.code} color={row.color} />
               <Typography variant="caption" color="text.secondary" noWrap>
                 {row.code}
               </Typography>
@@ -190,8 +174,8 @@ export default function LabelListPage() {
       },
       {
         field: "dataType",
-        header: "Kiểu dữ liệu",
-        render: (row) => dataTypeLabel(row.dataType),
+        header: uiText(UITextKey.TextKieuDuLieuMacDinhThongKe),
+        render: (row) => formatLabelDataType(row.dataType),
       },
       {
         field: "scopeType",
@@ -322,7 +306,7 @@ export default function LabelListPage() {
       search(req);
     } catch (error) {
       console.error(error);
-      setSnackbar("Lưu nhãn thất bại.");
+      setSnackbar(getApiErrorMessage(error));
     }
   };
 
@@ -335,7 +319,7 @@ export default function LabelListPage() {
       search(req);
     } catch (error) {
       console.error(error);
-      setSnackbar("Xóa nhãn thất bại.");
+      setSnackbar(getApiErrorMessage(error));
     }
   };
 
@@ -355,10 +339,10 @@ export default function LabelListPage() {
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1}>
           <Box>
             <Typography variant="h6" fontWeight={800}>
-              Quản lý nhãn
+              {uiText(UITextKey.TextQuanLyNhanDynamicForm)}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Nhãn dùng để chuẩn hóa biểu mẫu động, bảng Excel và thống kê cơ cấu/lũy kế.
+              {uiText(UITextKey.TextMoTaQuanLyMaLabel)}
             </Typography>
           </Box>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ display: "none" }}>
@@ -472,15 +456,38 @@ export default function LabelListPage() {
                 disabled={busy}
                 onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
                 sx={{ width: 140 }}
+                error={!isValidLabelColor(form.color)}
+                helperText={!isValidLabelColor(form.color) ? uiText(UITextKey.TextMauNhanKhongHopLe) : " "}
+              />
+            </Stack>
+            <Stack spacing={1}>
+              <Typography variant="caption" color="text.secondary">
+                {uiText(UITextKey.TextMauGoiY)}
+              </Typography>
+              <LabelColorPalette
+                value={form.color}
+                disabled={busy}
+                onChange={(color) => setForm((prev) => ({ ...prev, color }))}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {uiText(UITextKey.TextXemTruocMauNhan)}
+              </Typography>
+              <LabelColorPreview
+                code={form.code}
+                name={form.name}
+                color={form.color}
+                groupCode={form.groupCode}
+                dataType={form.dataType}
+                showDataType
               />
             </Stack>
             <TextField
               select
               size="small"
-              label="Kiểu dữ liệu"
+              label={uiText(UITextKey.TextKieuDuLieuMacDinhThongKe)}
               value={form.dataType}
               disabled={busy}
-              helperText="Cùng một nhãn chỉ nên dùng cho cùng kiểu dữ liệu để thống kê/gộp không bị mơ hồ."
+              helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
               }
@@ -552,7 +559,7 @@ export default function LabelListPage() {
           <Button
             variant="contained"
             onClick={saveForm}
-            disabled={busy || !form.code.trim() || !form.name.trim()}
+            disabled={busy || !form.code.trim() || !form.name.trim() || !isValidLabelColor(form.color)}
           >
             Lưu
           </Button>
