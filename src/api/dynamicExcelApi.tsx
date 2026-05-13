@@ -161,6 +161,7 @@ export const dynamicExcelApi = baseApi.injectEndpoints({
 export const {
   useSearchDynamicExcelMutation,
   useGetDynamicExcelQuery,
+  useLazyGetDynamicExcelQuery,
   useNextDynamicExcelCodeQuery,
   useCreateDynamicExcelMutation,
   useUpdateDynamicExcelMutation,

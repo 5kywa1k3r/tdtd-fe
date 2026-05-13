@@ -25,7 +25,6 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
-import QueryStatsOutlinedIcon from "@mui/icons-material/QueryStatsOutlined";
 import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import UpdateOutlinedIcon from "@mui/icons-material/UpdateOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
@@ -105,6 +104,11 @@ function normalizeDetailTab(value?: string | null): DetailTab | null {
   return null;
 }
 
+function normalizeOptionalText(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -112,11 +116,16 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const me = getMeSnapshot();
 
   const queryTab = normalizeDetailTab(searchParams.get("tab"));
+  const queryAggregationAssignmentId = normalizeOptionalText(searchParams.get("assignmentId"));
   const [tab, setTab] = useState<DetailTab | null>(queryTab);
   const [commonMode, setCommonMode] = useState<CommonMode>("view");
   const [selectedReportTemplateGroup, setSelectedReportTemplateGroup] =
     useState<MyReportTemplateRow | null>(null);
-  const [aggregationSeed, setAggregationSeed] = useState<AggregationSeed | null>(null);
+  const [aggregationSeed, setAggregationSeed] = useState<AggregationSeed | null>(
+    queryTab === "AGGREGATION" && queryAggregationAssignmentId
+      ? { parentAssignmentId: queryAggregationAssignmentId }
+      : null
+  );
 
   const workId = id ?? "";
 
@@ -161,6 +170,9 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("tab", next);
+    if (next !== "AGGREGATION") {
+      nextParams.delete("assignmentId");
+    }
     if (next !== "ASSIGN") {
       nextParams.delete("section");
     }
@@ -176,6 +188,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("tab");
     nextParams.delete("section");
+    nextParams.delete("assignmentId");
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -191,7 +204,13 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
     });
     setSelectedReportTemplateGroup(null);
     setCommonMode("view");
-    handleOpenFunction("AGGREGATION");
+    setTab("AGGREGATION");
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", "AGGREGATION");
+    nextParams.set("assignmentId", row.id);
+    nextParams.delete("section");
+    setSearchParams(nextParams, { replace: true });
   };
 
   const isWorkOwner = Boolean(
@@ -214,7 +233,11 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
 
   useEffect(() => {
     setSelectedReportTemplateGroup(null);
-    setAggregationSeed(null);
+    setAggregationSeed(
+      queryTab === "AGGREGATION" && queryAggregationAssignmentId
+        ? { parentAssignmentId: queryAggregationAssignmentId }
+        : null
+    );
     setCommonMode("view");
     setTab(queryTab);
   }, [workId]);
@@ -227,11 +250,17 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
     }
     if (queryTab !== "AGGREGATION") {
       setAggregationSeed(null);
+    } else if (queryAggregationAssignmentId) {
+      setAggregationSeed((prev) =>
+        prev?.parentAssignmentId === queryAggregationAssignmentId
+          ? prev
+          : { parentAssignmentId: queryAggregationAssignmentId }
+      );
     }
     if (queryTab !== "COMMON") {
       setCommonMode("view");
     }
-  }, [queryTab, tab]);
+  }, [queryAggregationAssignmentId, queryTab, tab]);
 
   const functionCards = useMemo(
     () => {
@@ -260,14 +289,6 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           badge: "Công việc",
           icon: <AssignmentTurnedInOutlinedIcon />,
           accent: "#2563eb",
-        },
-        {
-          key: "AGGREGATION" as DetailTab,
-          title: "Tổng hợp",
-          description: "Tổng hợp dữ liệu theo công việc, biểu mẫu và báo cáo đã duyệt.",
-          badge: "Tổng hợp",
-          icon: <QueryStatsOutlinedIcon />,
-          accent: "#7c3aed",
         },
         {
           key: "REVIEW" as DetailTab,
@@ -302,6 +323,11 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
       ? {
           title: "Báo cáo",
           description: "Làm báo cáo được giao và mở đúng kỳ báo cáo cần xử lý.",
+        }
+      : tab === "AGGREGATION"
+      ? {
+          title: "Tổng hợp",
+          description: "Tổng hợp theo công việc đã chọn từ danh sách giao việc.",
         }
       : null);
 

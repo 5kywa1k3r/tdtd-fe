@@ -17,6 +17,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import PreviewIcon from "@mui/icons-material/Preview";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
@@ -40,6 +41,8 @@ type DynamicExcelPickerProps = {
   onChange: (item: DynamicExcelOption | null) => void;
   disabled?: boolean;
   onPreview?: (id: string) => void;
+  triggerMode?: "field" | "button";
+  triggerLabel?: string;
 };
 
 export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(function DynamicExcelPicker({
@@ -49,6 +52,8 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(
   onChange,
   disabled,
   onPreview,
+  triggerMode = "field",
+  triggerLabel,
 }) {
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
@@ -93,16 +98,28 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(
   return (
     <>
       <Stack direction="row" spacing={1} alignItems="stretch">
-        <TextField
-          fullWidth
-          size="small"
-          label={uiText(UITextKey.TextChonBieuMauDaThietKe)}
-          disabled={disabled}
-          value={displayValue}
-          placeholder={uiText(UITextKey.TextChonBieuMau)}
-          onClick={handleOpen}
-          slotProps={{ htmlInput: { readOnly: true } }}
-        />
+        {triggerMode === "button" ? (
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleOpen}
+            disabled={disabled}
+          >
+            {triggerLabel ?? uiText(UITextKey.TextChonBieuMauDong)}
+          </Button>
+        ) : (
+          <TextField
+            fullWidth
+            size="small"
+            label={uiText(UITextKey.TextChonBieuMauDaThietKe)}
+            disabled={disabled}
+            value={displayValue}
+            placeholder={uiText(UITextKey.TextChonBieuMau)}
+            onClick={handleOpen}
+            slotProps={{ htmlInput: { readOnly: true } }}
+          />
+        )}
 
         {value && (
           <Tooltip title={uiText(UITextKey.TextXemTruocBieuMau)}>

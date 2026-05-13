@@ -34,17 +34,7 @@ function rectCols(R: RegionRect) {
 }
 
 function createEmptyWorkbook(rows: number, cols: number) {
-  return [
-    {
-      id: "sheet-1",
-      name: "Sheet1",
-      row: rows,
-      column: cols,
-      config: { merge: {} },
-      data: Array.from({ length: rows }, () => Array.from({ length: cols }, () => null)),
-      celldata: [],
-    },
-  ];
+  return normalizeToSingleSheet([], rows, cols);
 }
 
 const DEFAULT_SPEC: HeaderSpec = { kind: "TOP", topRows: 3, topCols: 6, dataRows: 10 };
@@ -200,6 +190,16 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   }, [workbookData]);
 
   const [workbookKey, setWorkbookKey] = useState(0);
+  const [shouldRenderWorkbook, setShouldRenderWorkbook] = useState(false);
+
+  useEffect(() => {
+    setShouldRenderWorkbook(false);
+    const id = window.requestAnimationFrame(() => {
+      setShouldRenderWorkbook(true);
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, [workbookKey]);
 
   // ===== mark toggle (1 nút) =====
   const [markHeader, setMarkHeader] = useState(false);
@@ -236,6 +236,10 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   const settings = useMemo(() => {
     return {
       data: workbookData,
+      row: workbookData?.[0]?.row,
+      column: workbookData?.[0]?.column,
+      allowEdit: canEdit,
+      showSheetTabs: false,
       onChange: (data: any) => {
         if (!canEdit) return;
         if (Array.isArray(data)) workbookRef.current = data;
@@ -468,7 +472,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
               "& .fortune-sheettab-container-c": { display: "none !important" },
             }}
           >
-            <Workbook key={workbookKey} {...settings} />
+            {shouldRenderWorkbook ? <Workbook key={workbookKey} {...settings} /> : null}
           </Box>
 
           <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>

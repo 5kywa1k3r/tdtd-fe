@@ -115,6 +115,20 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
+    previewDynamicFormAggregateDraft: build.mutation<
+      WorkAssignmentReportResponse,
+      {
+        id: string;
+        data: ApplyDynamicFormAggregateDraftRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/preview-dynamic-form-aggregate`,
+        method: "POST",
+        data,
+      }),
+    }),
+
     submitWorkAssignmentReport: build.mutation<
       WorkAssignmentReportResponse,
       {
@@ -329,6 +343,7 @@ export const {
   useGetWorkAssignmentReportQuery,
   useSaveWorkAssignmentReportDraftMutation,
   useApplyDynamicFormAggregateDraftMutation,
+  usePreviewDynamicFormAggregateDraftMutation,
   useSubmitWorkAssignmentReportMutation,
   useWithdrawSubmittedReportMutation,
   useDeleteUserCreatedReportMutation,

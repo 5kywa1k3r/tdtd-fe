@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 
 import {
+  type LabelDataType,
   type LabelRow,
   useSearchLabelsMutation,
 } from "../../api/labelApi";
@@ -22,6 +23,7 @@ type LabelPickerProps = {
   value?: string[];
   onChange: (codes: string[], rows: LabelRow[]) => void;
   allowedCodes?: string[];
+  allowedDataTypes?: LabelDataType[];
   groupCode?: string | null;
   usage?: LabelPickerUsage;
   label?: string;
@@ -77,6 +79,7 @@ export default function LabelPicker({
   value,
   onChange,
   allowedCodes,
+  allowedDataTypes,
   groupCode,
   usage = "generic",
   label = "Nhãn",
@@ -98,6 +101,10 @@ export default function LabelPicker({
     const codes = uniqueCodes(allowedCodes);
     return codes.length > 0 ? new Set(codes) : null;
   }, [allowedCodes]);
+  const allowedDataTypeSet = useMemo(() => {
+    const types = Array.from(new Set((allowedDataTypes ?? []).map((item) => item.trim().toUpperCase())));
+    return types.length > 0 ? new Set(types) : null;
+  }, [allowedDataTypes]);
 
   useEffect(() => {
     if (disabled) return;
@@ -120,8 +127,12 @@ export default function LabelPicker({
 
   const options = useMemo(() => {
     const rows = searchState.data?.rows ?? [];
-    return allowedSet ? rows.filter((row) => allowedSet.has(row.code)) : rows;
-  }, [allowedSet, searchState.data?.rows]);
+    return rows.filter((row) => {
+      if (allowedSet && !allowedSet.has(row.code)) return false;
+      if (allowedDataTypeSet && !allowedDataTypeSet.has(row.dataType)) return false;
+      return true;
+    });
+  }, [allowedDataTypeSet, allowedSet, searchState.data?.rows]);
 
   const selectedRows = useMemo(() => {
     return selectedCodes.map(

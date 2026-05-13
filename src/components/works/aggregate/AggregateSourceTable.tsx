@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Button, Chip, Stack, Typography } from "@mui/material";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import type { AggregateSourceRowDto } from "../../../types/reportAggregate";
 import {
@@ -11,6 +11,7 @@ import {
 
 export type AggregateSourceTableProps = {
   rows: AggregateSourceRowDto[];
+  onPreviewReport?: (reportId: string) => void;
 };
 
 function formatSourceDate(value?: string | null) {
@@ -26,9 +27,24 @@ function formatSourceDate(value?: string | null) {
   }).format(date);
 }
 
-const AggregateSourceTable: React.FC<AggregateSourceTableProps> = ({ rows }) => {
+const AggregateSourceTable: React.FC<AggregateSourceTableProps> = ({ rows, onPreviewReport }) => {
   const columns = React.useMemo<AppTableColumn<AggregateSourceRowDto>[]>(
     () => [
+      {
+        field: "preview",
+        header: "",
+        width: 110,
+        sortable: false,
+        align: "center",
+        render: (row) =>
+          row.reportId && onPreviewReport ? (
+            <Button size="small" variant="text" onClick={() => onPreviewReport(row.reportId)}>
+              Xem
+            </Button>
+          ) : (
+            "-"
+          ),
+      },
       {
         field: "reportId",
         header: "Báo cáo",
@@ -103,7 +119,7 @@ const AggregateSourceTable: React.FC<AggregateSourceTableProps> = ({ rows }) => 
         ),
       },
     ],
-    []
+    [onPreviewReport]
   );
 
   return (

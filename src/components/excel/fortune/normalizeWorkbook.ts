@@ -89,6 +89,8 @@ function createFallbackSheet(rows: number, cols: number): AnyObj {
     id: "sheet-1",
     index: "sheet-1",
     name: "Sheet1",
+    order: 0,
+    status: 1,
     row: rows,
     column: cols,
     config: { merge: {} },
@@ -154,6 +156,8 @@ export function normalizeToSingleSheet(raw: any, rows: number, cols: number) {
   sheet.id = String(sheet0.id ?? sheet0.index ?? "sheet-1");
   sheet.index = sheet0.index ?? sheet.id;
   sheet.name = sheet0.name ?? "Sheet1";
+  sheet.order = typeof sheet0.order === "number" ? sheet0.order : 0;
+  sheet.status = typeof sheet0.status === "number" ? sheet0.status : 1;
   sheet.row = safeRows; // COUNT
   sheet.column = safeCols; // COUNT
 

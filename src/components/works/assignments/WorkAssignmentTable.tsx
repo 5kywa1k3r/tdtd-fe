@@ -57,6 +57,9 @@ export interface AssignmentTableRow {
   evaluationTemplateId?: string | null;
   evaluationCode?: string | null;
   evaluationLabel?: string | null;
+  parentAssignmentId?: string | null;
+  rootAssignmentId?: string | null;
+  level?: number | null;
 }
 
 interface WorkAssignmentTableProps {
@@ -106,6 +109,12 @@ function getDueSortValue(row: AssignmentTableRow) {
 function manualEvalLabel(row: AssignmentTableRow) {
   if ((row.evaluatedAssignmentCount ?? 0) <= 0) return "Chưa đánh giá";
   return row.worstEvaluationLabel || row.worstEvaluationCode || "Đã đánh giá";
+}
+
+function isRootAssignment(row: AssignmentTableRow) {
+  if (row.level === 0) return true;
+  if (!row.parentAssignmentId?.trim()) return true;
+  return Boolean(row.rootAssignmentId && row.rootAssignmentId === row.id);
 }
 
 const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
@@ -181,16 +190,25 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               </span>
             </Tooltip>
 
-            <Tooltip title={uiText(UITextKey.TextTongHop)}>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenAggregate?.(row);
-                }}
-              >
-                <TableViewOutlinedIcon fontSize="small" />
-              </IconButton>
+            <Tooltip
+              title={
+                isRootAssignment(row)
+                  ? "Assignment root không ghi tổng hợp lên báo cáo cấp trên"
+                  : uiText(UITextKey.TextTongHop)
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={isRootAssignment(row)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenAggregate?.(row);
+                  }}
+                >
+                  <TableViewOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
 
             <Tooltip

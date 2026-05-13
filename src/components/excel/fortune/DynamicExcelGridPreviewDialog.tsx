@@ -84,6 +84,10 @@ export default function DynamicExcelGridPreviewDialog({
   const settings = React.useMemo(() => {
     return {
       data: (parsed?.workbook ?? []) as Sheet[],
+      row: parsed?.workbook?.[0]?.row,
+      column: parsed?.workbook?.[0]?.column,
+      allowEdit: false,
+      showSheetTabs: false,
       onChange: () => {},
     };
   }, [parsed]);

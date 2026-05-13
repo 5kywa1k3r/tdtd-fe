@@ -58,6 +58,7 @@ import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import { WorkAssignmentReportStatus } from "../../../types/reportStatus";
 import type {
   WorkAssignmentReportLogRow,
+  WorkAssignmentReportResponse,
   WorkReportCumulativeContributionMode,
   WorkReportDataOrigin,
 } from "../../../types/report";
@@ -91,6 +92,7 @@ export interface WorkReportEditorPageProps {
   reportId: string;
   workReportPeriodId?: string;
   forceReadOnly?: boolean;
+  previewData?: WorkAssignmentReportResponse | null;
   onBack?: () => void;
   onSaved?: () => void;
   onSubmitted?: () => void;
@@ -1671,7 +1673,7 @@ export default function WorkReportEditorPage(
 
   const { data, isLoading, isError, refetch } = useGetWorkAssignmentReportQuery(
     reportId,
-    { skip: !reportId }
+    { skip: !reportId || Boolean(props.previewData) }
   );
 
   const [saveDraft, saveDraftState] = useSaveWorkAssignmentReportDraftMutation();
@@ -1690,9 +1692,10 @@ export default function WorkReportEditorPage(
     }
   );
 
+  const effectiveData = props.previewData ?? data;
   const detail = React.useMemo(
-    () => (data ? parseReportDetail(data) : null),
-    [data]
+    () => (effectiveData ? parseReportDetail(effectiveData) : null),
+    [effectiveData]
   );
 
   const dynamicFormTemplateId = detail?.dynamicFormTemplateId?.trim() ?? "";
@@ -1786,7 +1789,7 @@ export default function WorkReportEditorPage(
   );
 
   const canEdit = detail ? !props.forceReadOnly && isEditableReportStatus(detail.status) : false;
-  const canWithdraw = detail?.status === WorkAssignmentReportStatus.Submitted;
+  const canWithdraw = detail ? !props.forceReadOnly && detail.status === WorkAssignmentReportStatus.Submitted : false;
   const isHistoricalData = isHistoricalReportDetail(detail);
   const overdue = isOverdue(detail?.dueAtUtc);
   const requiresLateReason = overdue && !isHistoricalData;
@@ -1841,7 +1844,7 @@ export default function WorkReportEditorPage(
 
   React.useEffect(() => {
     latestWorkbookPayloadRef.current = {};
-  }, [detail?.id]);
+  }, [detail?.id, detail?.tableValuesJson, detail?.updatedAtUtc]);
 
   React.useEffect(() => {
     setSelectedBlockKey((prev) =>

@@ -64,6 +64,7 @@ import {
   MAX_DYNAMIC_FORM_FIELDS,
   MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS,
   MAX_DYNAMIC_FORM_TABLE_BLOCKS,
+  appendDynamicFormBlockJson,
   moveDynamicFormBlockJson,
   normalizeLabelCodes,
   normalizeFields,
@@ -78,6 +79,7 @@ import {
 import LabelPicker from "../../../components/labels/LabelPicker";
 import LabelManagerDialog from "../../../components/labels/LabelManagerDialog";
 import { DynamicExcelPicker } from "../../../components/works/assignments/DynamicExcelPicker";
+import type { LabelDataType } from "../../../api/labelApi";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Mode = "create" | "edit" | "view";
@@ -95,6 +97,10 @@ type Props = {
     dynamicExcelId: string,
     sectionId?: string | null,
   ) => Promise<DynamicFormEditorValue | null>;
+  onBuildDynamicExcelBlock?: (
+    dynamicExcelId: string,
+    sectionId?: string | null,
+  ) => Promise<string | null>;
 };
 
 const palette: Array<{ type: DynamicFormFieldType; icon: React.ReactNode }> = [
@@ -117,6 +123,7 @@ export default function DynamicFormEditor({
   onSave,
   onPublish,
   onImportDynamicExcelBlock,
+  onBuildDynamicExcelBlock,
 }: Props) {
   const readOnly = mode === "view" || locked;
   const statisticReadOnly = mode === "view" || (locked && !allowStatisticConfigEdit);
@@ -156,6 +163,10 @@ export default function DynamicFormEditor({
   const selectedExcelBlockJson = excelBlockJsonList[effectiveSelectedBlockIndex] ?? null;
   const selectedExcelBlockSectionId =
     getExcelBlockSectionId(selectedExcelBlockJson) ?? selectedSection?.id ?? sections[0]?.id ?? "";
+  const canAttachDynamicExcelBlock =
+    !readOnly && Boolean(onImportDynamicExcelBlock || onBuildDynamicExcelBlock);
+  const attachDynamicExcelBlockDisabled =
+    busy || importingBlock || excelBlockJsonList.length >= MAX_DYNAMIC_FORM_TABLE_BLOCKS;
 
   const setPatch = (patch: Partial<DynamicFormEditorValue>) =>
     setValue((current) => ({ ...current, ...patch }));
@@ -182,19 +193,22 @@ export default function DynamicFormEditor({
     setSelectedBlockIndex(effectiveSelectedBlockIndex + direction);
   };
 
-  const removeExcelBlock = () => {
-    if (!selectedExcelBlockJson) return;
+  const removeExcelBlockAt = (blockIndex: number) => {
+    const blockJson = excelBlockJsonList[blockIndex];
+    if (!blockJson) return;
     const ok = window.confirm("Xóa bảng này khỏi bản nháp biểu mẫu?");
     if (!ok) return;
 
     const nextPatch = removeDynamicFormBlockJson(
       value.blocksJson,
       value.excelBlockJson,
-      effectiveSelectedBlockIndex,
+      blockIndex,
     );
     setPatch(nextPatch);
-    setSelectedBlockIndex(Math.max(0, effectiveSelectedBlockIndex - 1));
+    setSelectedBlockIndex(Math.max(0, blockIndex - 1));
   };
+
+  const removeExcelBlock = () => removeExcelBlockAt(effectiveSelectedBlockIndex);
 
   const updateSection = (id: string, patch: Partial<DynamicFormSection>) => {
     setValue((current) => ({
@@ -241,7 +255,7 @@ export default function DynamicFormEditor({
   };
 
   const importDynamicExcelBlock = async (dynamicExcelId: string) => {
-    if (!onImportDynamicExcelBlock || readOnly || importingBlock) return;
+    if ((!onImportDynamicExcelBlock && !onBuildDynamicExcelBlock) || readOnly || importingBlock) return;
     if (excelBlockJsonList.length >= MAX_DYNAMIC_FORM_TABLE_BLOCKS) {
       setError(`Biểu mẫu động chỉ được có tối đa ${MAX_DYNAMIC_FORM_TABLE_BLOCKS} bảng Excel động.`);
       return;
@@ -250,16 +264,38 @@ export default function DynamicFormEditor({
     setImportingBlock(true);
     setError(null);
     try {
-      const next = await onImportDynamicExcelBlock(dynamicExcelId, selectedSection?.id ?? null);
-      if (next) {
-        const nextSections = normalizeSections(next.sections);
-        setValue({
-          ...next,
-          sections: nextSections,
-          fields: normalizeFields(next.fields, nextSections),
-        });
-        const nextBlocks = getDynamicFormBlockJsonList(next.blocksJson, next.excelBlockJson);
-        setSelectedBlockIndex(Math.max(0, nextBlocks.length - 1));
+      if (onImportDynamicExcelBlock) {
+        const next = await onImportDynamicExcelBlock(dynamicExcelId, selectedSection?.id ?? null);
+        if (next) {
+          const nextSections = normalizeSections(next.sections);
+          setValue({
+            ...next,
+            sections: nextSections,
+            fields: normalizeFields(next.fields, nextSections),
+          });
+          const nextBlocks = getDynamicFormBlockJsonList(next.blocksJson, next.excelBlockJson);
+          setSelectedBlockIndex(Math.max(0, nextBlocks.length - 1));
+          setSelectedFieldId(null);
+        }
+      } else if (onBuildDynamicExcelBlock) {
+        const nextBlockJson = await onBuildDynamicExcelBlock(dynamicExcelId, selectedSection?.id ?? null);
+        if (nextBlockJson) {
+          const nextPatch = appendDynamicFormBlockJson(
+            value.blocksJson,
+            value.excelBlockJson,
+            nextBlockJson,
+          );
+          const next = { ...value, ...nextPatch };
+          const nextSections = normalizeSections(next.sections);
+          setValue({
+            ...next,
+            sections: nextSections,
+            fields: normalizeFields(next.fields, nextSections),
+          });
+          const nextBlocks = getDynamicFormBlockJsonList(next.blocksJson, next.excelBlockJson);
+          setSelectedBlockIndex(Math.max(0, nextBlocks.length - 1));
+          setSelectedFieldId(null);
+        }
       }
     } catch (err) {
       setError(readErrorMessage(err, "Không nhập được bảng Excel động."));
@@ -339,6 +375,12 @@ export default function DynamicFormEditor({
   );
   const excelBlockIndexMapCount = getExcelBlockIndexMapCount(selectedExcelBlockJson);
   const visibleExcelBlockDataRows = excelBlockDataRows.slice(0, 100);
+  const excelBlocksInSelectedSection = excelBlockJsonList
+    .map((blockJson, index) => ({ blockJson, index }))
+    .filter(({ blockJson }) => {
+      const sectionId = getExcelBlockSectionId(blockJson) ?? sections[0]?.id ?? "";
+      return sectionId === selectedSection?.id;
+    });
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -439,7 +481,7 @@ export default function DynamicFormEditor({
               >
                 Quản lý nhãn
               </Button>
-              {!readOnly && onImportDynamicExcelBlock && (
+              {canAttachDynamicExcelBlock && (
                 <>
                   <Divider />
                   <Typography fontWeight={700}>{uiText(UITextKey.TextTableBlocks)}</Typography>
@@ -451,7 +493,9 @@ export default function DynamicFormEditor({
                     onChange={(item) => {
                       if (item?.id) void importDynamicExcelBlock(item.id);
                     }}
-                    disabled={busy || importingBlock || excelBlockJsonList.length >= MAX_DYNAMIC_FORM_TABLE_BLOCKS}
+                    disabled={attachDynamicExcelBlockDisabled}
+                    triggerMode="button"
+                    triggerLabel={`Thêm bảng biểu động (${excelBlockJsonList.length}/${MAX_DYNAMIC_FORM_TABLE_BLOCKS})`}
                   />
                 </>
               )}
@@ -808,14 +852,35 @@ export default function DynamicFormEditor({
                 }}
               >
                 <Stack spacing={1.5}>
-                  <Box>
-                    <Typography fontWeight={800}>{selectedSection?.title}</Typography>
-                    {selectedSection?.description && (
-                      <Typography variant="body2" color="text.secondary">
-                        {selectedSection.description}
-                      </Typography>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    alignItems={{ xs: "stretch", sm: "flex-start" }}
+                    justifyContent="space-between"
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography fontWeight={800}>{selectedSection?.title}</Typography>
+                      {selectedSection?.description && (
+                        <Typography variant="body2" color="text.secondary">
+                          {selectedSection.description}
+                        </Typography>
+                      )}
+                    </Box>
+
+                    {canAttachDynamicExcelBlock && (
+                      <Box sx={{ width: { xs: "100%", sm: 260 }, flexShrink: 0 }}>
+                        <DynamicExcelPicker
+                          value={null}
+                          onChange={(item) => {
+                            if (item?.id) void importDynamicExcelBlock(item.id);
+                          }}
+                          disabled={attachDynamicExcelBlockDisabled}
+                          triggerMode="button"
+                          triggerLabel="Thêm bảng biểu động"
+                        />
+                      </Box>
                     )}
-                  </Box>
+                  </Stack>
 
                   <Grid container spacing={1.5}>
                     {selectedSectionFields.map((field) => (
@@ -832,9 +897,26 @@ export default function DynamicFormEditor({
                         />
                       </Grid>
                     ))}
+                    {excelBlocksInSelectedSection.map(({ blockJson, index }) => (
+                      <Grid key={`${getExcelBlockTitle(blockJson, index)}_${index}`} size={{ xs: 12 }}>
+                        <ExcelBlockCard
+                          blockJson={blockJson}
+                          index={index}
+                          selected={index === effectiveSelectedBlockIndex && !selectedFieldId}
+                          readOnly={readOnly}
+                          onSelect={() => {
+                            setSelectedBlockIndex(index);
+                            setSelectedFieldId(null);
+                          }}
+                          onRemove={() => {
+                            removeExcelBlockAt(index);
+                          }}
+                        />
+                      </Grid>
+                    ))}
                   </Grid>
 
-                  {selectedSectionFields.length === 0 && (
+                  {selectedSectionFields.length === 0 && excelBlocksInSelectedSection.length === 0 && (
                     <Box
                       sx={{
                         minHeight: 180,
@@ -854,15 +936,19 @@ export default function DynamicFormEditor({
           </Grid>
 
           <Grid size={{ xs: 12, md: 3 }}>
-            <FieldSettingsPanel
-              field={selectedField}
-              readOnly={readOnly}
-              statisticReadOnly={statisticReadOnly}
-              onChange={(patch) => {
-                if (!selectedField) return;
-                updateField(selectedField.id, patch);
-              }}
-            />
+            {selectedExcelBlockJson && !selectedField ? (
+              <ExcelBlockSummaryPanel blockJson={selectedExcelBlockJson} />
+            ) : (
+              <FieldSettingsPanel
+                field={selectedField}
+                readOnly={readOnly}
+                statisticReadOnly={statisticReadOnly}
+                onChange={(patch) => {
+                  if (!selectedField) return;
+                  updateField(selectedField.id, patch);
+                }}
+              />
+            )}
           </Grid>
         </Grid>
       </Paper>
@@ -872,6 +958,80 @@ export default function DynamicFormEditor({
         onClose={() => setLabelManagerOpen(false)}
       />
     </Box>
+  );
+}
+
+function ExcelBlockCard({
+  blockJson,
+  index,
+  selected,
+  readOnly,
+  onSelect,
+  onRemove,
+}: {
+  blockJson: string;
+  index: number;
+  selected: boolean;
+  readOnly: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const obj = parseExcelBlockJson(blockJson);
+  const tableMode = getExcelBlockTableMode(blockJson);
+  const code =
+    readBlockString(obj?.dynamicExcelCode) ??
+    readBlockString(obj?.DynamicExcelCode) ??
+    readBlockString(obj?.dynamicExcelTemplateId);
+
+  return (
+    <Paper
+      variant="outlined"
+      onClick={onSelect}
+      sx={{
+        p: 1.25,
+        borderRadius: 1,
+        borderColor: selected ? "primary.main" : "divider",
+        cursor: "pointer",
+        bgcolor: selected ? "action.selected" : "background.paper",
+      }}
+    >
+      <Stack spacing={1}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography fontWeight={700} noWrap>
+              {getExcelBlockTitle(blockJson, index)}
+            </Typography>
+            {code && (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {code}
+              </Typography>
+            )}
+          </Box>
+          {!readOnly && (
+            <Tooltip title={uiText(UITextKey.TextRemoveBlock)}>
+              <IconButton
+                size="small"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove();
+                }}
+              >
+                <DeleteOutlineIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
+        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+          <Chip size="small" color="primary" variant="outlined" label="Bảng Excel động" />
+          <Chip size="small" variant="outlined" label={tableModeLabels[tableMode]} />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`${getExcelBlockIndexMapCount(blockJson)} chỉ số`}
+          />
+        </Stack>
+      </Stack>
+    </Paper>
   );
 }
 
@@ -1009,6 +1169,58 @@ function FieldPreview({ field }: { field: DynamicFormField }) {
   );
 }
 
+function ExcelBlockSummaryPanel({ blockJson }: { blockJson: string }) {
+  const obj = parseExcelBlockJson(blockJson);
+  const tableMode = getExcelBlockTableMode(blockJson);
+  const code =
+    readBlockString(obj?.dynamicExcelCode) ??
+    readBlockString(obj?.DynamicExcelCode) ??
+    readBlockString(obj?.dynamicExcelTemplateId);
+  const statisticColumns = getExcelBlockStatisticColumnsText(blockJson);
+  const rowLabels = getExcelBlockLabelCodes(blockJson, "allowedRowLabelCodes");
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+      <Stack spacing={1.5}>
+        <Typography fontWeight={800}>Bảng Excel động</Typography>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Tên bảng
+          </Typography>
+          <Typography fontWeight={700}>{getExcelBlockTitle(blockJson, 0).replace(/^1\.\s*/, "")}</Typography>
+        </Box>
+        {code && (
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Mã bảng
+            </Typography>
+            <Typography>{code}</Typography>
+          </Box>
+        )}
+        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+          <Chip size="small" color="primary" variant="outlined" label={tableModeLabels[tableMode]} />
+          <Chip size="small" variant="outlined" label={`${getExcelBlockIndexMapCount(blockJson)} chỉ số`} />
+        </Stack>
+        {statisticColumns && (
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Cột thống kê
+            </Typography>
+            <Typography>{statisticColumns}</Typography>
+          </Box>
+        )}
+        {rowLabels.length > 0 && (
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            {rowLabels.map((codeValue) => (
+              <Chip key={codeValue} size="small" variant="outlined" label={codeValue} />
+            ))}
+          </Stack>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
 function FieldSettingsPanel({
   field,
   readOnly,
@@ -1084,6 +1296,7 @@ function FieldSettingsPanel({
               statistic: field.isStatistic
                 ? { ...defaultStatistic(), aggregateOps: defaultAggregateOps(nextType) }
                 : undefined,
+              statisticLabelCodes: field.isStatistic ? [] : field.statisticLabelCodes,
             });
           }}
         >
@@ -1098,9 +1311,10 @@ function FieldSettingsPanel({
           value={field.statisticLabelCodes ?? []}
           disabled={statisticReadOnly || !field.isStatistic}
           usage="statistic"
+          allowedDataTypes={getStatisticLabelDataTypesForField(field.type)}
           label={uiText(UITextKey.TextFieldLabels)}
           placeholder={uiText(UITextKey.TextChonNhanField)}
-          helperText={uiText(UITextKey.TextChiFieldDaBatStatisticMoiDuocGanLabel)}
+          helperText={`${uiText(UITextKey.TextChiFieldDaBatStatisticMoiDuocGanLabel)} Kiểu nhãn phải khớp với kiểu trường.`}
           onChange={(codes) =>
             onChange({
               statisticLabelCodes: codes,
@@ -1230,6 +1444,14 @@ function FieldSettingsPanel({
       </Stack>
     </Paper>
   );
+}
+
+function getStatisticLabelDataTypesForField(fieldType: DynamicFormFieldType): LabelDataType[] {
+  if (fieldType === "number") return ["NUMBER"];
+  if (fieldType === "date") return ["DATE"];
+  if (fieldType === "boolean") return ["BOOLEAN"];
+  if (fieldType === "longText") return ["LONG_TEXT"];
+  return ["SHORT_TEXT"];
 }
 
 type ExcelBlockLabelField = "tagCodes" | "allowedRowLabelCodes";

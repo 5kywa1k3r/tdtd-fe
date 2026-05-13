@@ -467,6 +467,21 @@ export function setDynamicFormBlockJson(
   return buildBlocksPatch(blocks);
 }
 
+export function appendDynamicFormBlockJson(
+  blocksJson: string | null | undefined,
+  excelBlockJson: string | null | undefined,
+  nextBlockJson: string | null | undefined,
+): Pick<DynamicFormEditorValue, "excelBlockJson" | "blocksJson"> {
+  const normalizedNextBlock = normalizeExcelBlockJson(nextBlockJson);
+  const blocks = getDynamicFormBlockJsonList(blocksJson, excelBlockJson);
+
+  if (normalizedNextBlock) {
+    blocks.push(normalizedNextBlock);
+  }
+
+  return buildBlocksPatch(blocks);
+}
+
 export function setDynamicFormBlockSectionId(
   blockJson: string | null | undefined,
   sectionId: string,

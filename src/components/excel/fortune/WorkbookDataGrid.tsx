@@ -74,6 +74,10 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
   const settings = React.useMemo(() => {
     return {
       data: workbookData as Sheet[],
+      row: workbookData?.[0]?.row,
+      column: workbookData?.[0]?.column,
+      allowEdit: !isView,
+      showSheetTabs: false,
       onChange: (data: any) => {
         if (isView) return;
         if (Array.isArray(data)) {

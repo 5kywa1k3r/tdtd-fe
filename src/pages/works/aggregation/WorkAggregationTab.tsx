@@ -35,8 +35,12 @@ import {
   useGetAggregateTableMutation,
   useGetDynamicFormAggregateTableMutation,
   useGetReportsByAssignmentQuery,
+  usePreviewDynamicFormAggregateDraftMutation,
 } from "../../../api/reportApi";
-import { useGetWorkAssignmentsByWorkQuery } from "../../../api/workAssignmentApi";
+import {
+  useGetWorkAssignmentByIdQuery,
+  useGetWorkAssignmentsByWorkQuery,
+} from "../../../api/workAssignmentApi";
 import {
   exportFieldTextConcatCsv,
   useSearchFieldStatisticSummaryMutation,
@@ -51,7 +55,11 @@ import type {
   DynamicFormAggregateRequest,
   DynamicFormAggregateResponse,
 } from "../../../types/reportAggregate";
-import type { WorkReportDataOrigin } from "../../../types/report";
+import type {
+  WorkAssignmentReportListRow,
+  WorkAssignmentReportResponse,
+  WorkReportDataOrigin,
+} from "../../../types/report";
 import { WorkAssignmentReportStatus } from "../../../types/reportStatus";
 import type { WorkAssignmentListResponse } from "../../../types/workAssignment";
 import AggregateFilterBar from "../../../components/works/aggregate/AggregateFilterBar";
@@ -85,6 +93,7 @@ import type {
 } from "../../../types/aggregateTypes";
 import { UITextKey, uiText } from '../../../constants/uiText';
 import { getMeSnapshot } from "../../../stores/authStorage";
+import WorkReportEditorPage from "../report/WorkReportEditorPage";
 
 type Props = {
   workId?: string | null;
@@ -193,6 +202,9 @@ type AggregationScopeOption = {
   assignees?: WorkAssignmentListResponse["assignees"];
   latestPeriodKey?: string | null;
   isActive?: boolean | null;
+  parentAssignmentId?: string | null;
+  rootAssignmentId?: string | null;
+  level?: number | null;
 };
 
 function createDefaultFilter(
@@ -230,41 +242,17 @@ function toAggregationScopeOption(row: WorkAssignmentListResponse): AggregationS
     assignees: row.assignees,
     latestPeriodKey: normalizeOptionalText(row.latestPeriodKey),
     isActive: row.isActive,
+    parentAssignmentId: normalizeOptionalText(row.parentAssignmentId),
+    rootAssignmentId: normalizeOptionalText(row.rootAssignmentId),
+    level: row.level,
   };
 }
 
-function formatScopeAssignees(assignees?: AggregationScopeOption["assignees"]) {
-  const labels = (assignees ?? [])
-    .map((item) => {
-      const name =
-        normalizeOptionalText(item.fullName) ??
-        normalizeOptionalText(item.username) ??
-        normalizeOptionalText(item.unitShortName) ??
-        normalizeOptionalText(item.unitName) ??
-        normalizeOptionalText(item.unitSymbol);
-      return name;
-    })
-    .filter((item): item is string => Boolean(item));
-
-  if (labels.length === 0) return "";
-  if (labels.length === 1) return labels[0];
-  return `${labels[0]} +${labels.length - 1}`;
-}
-
-function formatAggregationScopeLabel(option: AggregationScopeOption) {
-  const code =
-    normalizeOptionalText(option.dynamicFormTemplateCode) ??
-    normalizeOptionalText(option.dynamicExcelCode);
-  const name =
-    normalizeOptionalText(option.dynamicFormTemplateName) ??
-    normalizeOptionalText(option.dynamicExcelName);
-  const template = [code, name].filter(Boolean).join(" - ") || option.id;
-  const assignees = formatScopeAssignees(option.assignees);
-  const period = normalizeOptionalText(option.latestPeriodKey)
-    ? `Kỳ gần nhất ${formatDayKeyLabel(option.latestPeriodKey)}`
-    : null;
-
-  return [template, assignees, period].filter(Boolean).join(" | ");
+function isRootAggregationScope(option?: AggregationScopeOption | null) {
+  if (!option) return false;
+  if (option.level === 0) return true;
+  if (!option.parentAssignmentId) return true;
+  return Boolean(option.rootAssignmentId && option.rootAssignmentId === option.id);
 }
 
 function normalizeBlockId(value?: string | null) {
@@ -570,6 +558,23 @@ function formatDraftReportOptionLabel(row: {
 
 function getAggregateDraftDefaultClearExisting(origin: WorkReportDataOrigin) {
   return origin === "PARTIAL_MAPPING" ? false : true;
+}
+
+function formatAggregateDraftContributionPolicy(
+  origin: WorkReportDataOrigin,
+  clearExisting: boolean,
+) {
+  if (origin === "PARTIAL_MAPPING") {
+    return clearExisting
+      ? "Báo cáo sẽ lưu dạng gán một phần, xóa giá trị cũ ở block đích và loại trừ các chỉ số lấy từ cấp con khi tính thống kê để tránh cộng hai lần."
+      : "Báo cáo sẽ lưu dạng gán một phần, giữ các ô nhập tay và loại trừ các chỉ số lấy từ cấp con khi tính thống kê để tránh cộng hai lần.";
+  }
+
+  if (origin === "AUTO_SUMMARY") {
+    return "Báo cáo tự tổng hợp mặc định không đóng góp ngược vào thống kê chính thức sau khi duyệt.";
+  }
+
+  return "Báo cáo sao chép tổng hợp mặc định không đóng góp ngược vào thống kê chính thức sau khi duyệt.";
 }
 
 function formatFieldStatisticValue(row: FieldStatisticSummaryRow) {
@@ -1062,6 +1067,8 @@ const WorkAggregationTab: React.FC<Props> = ({
     useGetDynamicFormAggregateTableMutation();
   const [applyDynamicFormAggregateDraft, applyDynamicFormAggregateDraftState] =
     useApplyDynamicFormAggregateDraftMutation();
+  const [previewDynamicFormAggregateDraft, previewDynamicFormAggregateDraftState] =
+    usePreviewDynamicFormAggregateDraftMutation();
   const [createUserCreatedReport, createUserCreatedReportState] =
     useCreateUserCreatedReportMutation();
   const [searchFieldStatisticSummary, fieldStatisticState] =
@@ -1070,11 +1077,10 @@ const WorkAggregationTab: React.FC<Props> = ({
     useSearchFieldTextConcatMutation();
   const currentUserId = React.useMemo(() => getMeSnapshot()?.id ?? null, []);
   const externalParentAssignmentId = normalizeOptionalText(parentAssignmentId);
-  const hasExternalScope = Boolean(externalParentAssignmentId);
 
   const scopeOptionsQuery = useGetWorkAssignmentsByWorkQuery(
     { workId: workId ?? "" },
-    { skip: !workId || hasExternalScope }
+    { skip: !workId }
   );
 
   const scopeOptions = React.useMemo(
@@ -1089,34 +1095,29 @@ const WorkAggregationTab: React.FC<Props> = ({
     [scopeOptionsQuery.data]
   );
 
-  const [selectedScopeAssignmentId, setSelectedScopeAssignmentId] = React.useState("");
-
-  React.useEffect(() => {
-    if (hasExternalScope) {
-      setSelectedScopeAssignmentId("");
-      return;
-    }
-
-    if (
-      selectedScopeAssignmentId &&
-      scopeOptions.some((option) => option.id === selectedScopeAssignmentId)
-    ) {
-      return;
-    }
-
-    setSelectedScopeAssignmentId(scopeOptions[0]?.id ?? "");
-  }, [hasExternalScope, scopeOptions, selectedScopeAssignmentId]);
-
-  const selectedScopeOption = React.useMemo(
+  const scopeOptionFromList = React.useMemo(
     () =>
-      hasExternalScope
-        ? null
-        : scopeOptions.find((option) => option.id === selectedScopeAssignmentId) ?? null,
-    [hasExternalScope, scopeOptions, selectedScopeAssignmentId]
+      externalParentAssignmentId
+        ? scopeOptions.find((option) => option.id === externalParentAssignmentId) ?? null
+        : null,
+    [externalParentAssignmentId, scopeOptions]
   );
 
-  const effectiveParentAssignmentId =
-    externalParentAssignmentId ?? selectedScopeOption?.id ?? null;
+  const selectedAssignmentQuery = useGetWorkAssignmentByIdQuery(
+    { id: externalParentAssignmentId ?? "" },
+    { skip: !externalParentAssignmentId || Boolean(scopeOptionFromList) }
+  );
+
+  const selectedScopeOption = React.useMemo(() => {
+    if (scopeOptionFromList) return scopeOptionFromList;
+    return selectedAssignmentQuery.data
+      ? toAggregationScopeOption(selectedAssignmentQuery.data as unknown as WorkAssignmentListResponse)
+      : null;
+  }, [scopeOptionFromList, selectedAssignmentQuery.data]);
+
+  const selectedScopeIsRoot = isRootAggregationScope(selectedScopeOption);
+
+  const effectiveParentAssignmentId = externalParentAssignmentId ?? null;
   const seedDynamicExcelId =
     normalizeOptionalText(defaultDynamicExcelId) ??
     normalizeOptionalText(selectedScopeOption?.dynamicExcelId);
@@ -1153,6 +1154,8 @@ const WorkAggregationTab: React.FC<Props> = ({
     React.useState<FieldTextConcatRequest | null>(null);
   const [fieldTextConcatExporting, setFieldTextConcatExporting] = React.useState(false);
   const [targetDraftReportId, setTargetDraftReportId] = React.useState("");
+  const [createdDraftReportOption, setCreatedDraftReportOption] =
+    React.useState<WorkAssignmentReportListRow | null>(null);
   const [aggregateDraftDataOrigin, setAggregateDraftDataOrigin] =
     React.useState<WorkReportDataOrigin>("PARTIAL_MAPPING");
   const [aggregateDraftValueSelector, setAggregateDraftValueSelector] =
@@ -1160,6 +1163,10 @@ const WorkAggregationTab: React.FC<Props> = ({
   const [aggregateDraftClearExisting, setAggregateDraftClearExisting] =
     React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "" });
+  const [previewReportId, setPreviewReportId] = React.useState("");
+  const [mappedPreviewReport, setMappedPreviewReport] =
+    React.useState<WorkAssignmentReportResponse | null>(null);
+  const [applyConfirmOpen, setApplyConfirmOpen] = React.useState(false);
 
   const showMessage = React.useCallback((message: string) => {
     setSnackbar({ open: true, message });
@@ -1171,7 +1178,7 @@ const WorkAggregationTab: React.FC<Props> = ({
   );
   const assignmentReportsQuery = useGetReportsByAssignmentQuery(
     { workAssignmentId: effectiveParentAssignmentId ?? "" },
-    { skip: !effectiveParentAssignmentId || !seedDynamicFormTemplateId }
+    { skip: !effectiveParentAssignmentId || !seedDynamicFormTemplateId || selectedScopeIsRoot }
   );
 
   const resolvedDynamicFormExcelBlock = React.useMemo(
@@ -1200,6 +1207,8 @@ const WorkAggregationTab: React.FC<Props> = ({
     setFieldTextConcatResult(null);
     setFieldTextConcatRequest(null);
     setTargetDraftReportId("");
+    setCreatedDraftReportOption(null);
+    setMappedPreviewReport(null);
   }, [
     effectiveDynamicExcelId,
     effectiveParentAssignmentId,
@@ -1237,12 +1246,14 @@ const WorkAggregationTab: React.FC<Props> = ({
     fieldStatisticState.isLoading ||
     fieldTextConcatState.isLoading ||
     applyDynamicFormAggregateDraftState.isLoading ||
+    previewDynamicFormAggregateDraftState.isLoading ||
     createUserCreatedReportState.isLoading ||
     fieldTextConcatExporting ||
     templateQuery.isFetching ||
     dynamicFormQuery.isFetching ||
     assignmentReportsQuery.isFetching ||
-    scopeOptionsQuery.isFetching;
+    scopeOptionsQuery.isFetching ||
+    selectedAssignmentQuery.isFetching;
   const hasDynamicFormSeed = Boolean(seedDynamicFormTemplateId);
   const dynamicFormResolutionPending =
     Boolean(effectiveParentAssignmentId) &&
@@ -1264,9 +1275,30 @@ const WorkAggregationTab: React.FC<Props> = ({
   const dynamicFormUnsupportedMessage = formatUnsupportedDynamicFormBlockMessage(
     resolvedDynamicFormExcelBlock
   );
+  React.useEffect(() => {
+    if (
+      createdDraftReportOption &&
+      assignmentReportsQuery.data?.some((row) => row.id === createdDraftReportOption.id)
+    ) {
+      setCreatedDraftReportOption(null);
+    }
+  }, [assignmentReportsQuery.data, createdDraftReportOption]);
+
+  const assignmentReportRows = React.useMemo(() => {
+    const rows = assignmentReportsQuery.data ?? [];
+    if (
+      !createdDraftReportOption ||
+      createdDraftReportOption.workAssignmentId !== effectiveParentAssignmentId ||
+      rows.some((row) => row.id === createdDraftReportOption.id)
+    ) {
+      return rows;
+    }
+    return [createdDraftReportOption, ...rows];
+  }, [assignmentReportsQuery.data, createdDraftReportOption, effectiveParentAssignmentId]);
+
   const templateDraftReports = React.useMemo(
     () =>
-      (assignmentReportsQuery.data ?? []).filter((row) => {
+      assignmentReportRows.filter((row) => {
         const sameTemplate =
           !seedDynamicFormTemplateId ||
           row.dynamicFormTemplateId === seedDynamicFormTemplateId;
@@ -1276,17 +1308,23 @@ const WorkAggregationTab: React.FC<Props> = ({
           row.isActive !== false
         );
       }),
-    [assignmentReportsQuery.data, seedDynamicFormTemplateId]
+    [assignmentReportRows, seedDynamicFormTemplateId]
   );
   const targetDraftReports = React.useMemo(
     () =>
       templateDraftReports.filter((row) =>
-        currentUserId ? row.assigneeUserId === currentUserId : true
+        currentUserId
+          ? row.assigneeUserId === currentUserId || row.id === createdDraftReportOption?.id
+          : true
       ),
-    [currentUserId, templateDraftReports]
+    [createdDraftReportOption?.id, currentUserId, templateDraftReports]
   );
   const hasReadOnlyDraftReports =
     templateDraftReports.length > 0 && targetDraftReports.length === 0;
+  const selectedTargetDraftReport = React.useMemo(
+    () => targetDraftReports.find((row) => row.id === targetDraftReportId) ?? null,
+    [targetDraftReportId, targetDraftReports]
+  );
 
   React.useEffect(() => {
     if (!supportsDynamicFormAggregate) {
@@ -1304,6 +1342,16 @@ const WorkAggregationTab: React.FC<Props> = ({
     setTargetDraftReportId(targetDraftReports[0]?.id ?? "");
   }, [supportsDynamicFormAggregate, targetDraftReportId, targetDraftReports]);
 
+  React.useEffect(() => {
+    setMappedPreviewReport(null);
+  }, [
+    aggregateDraftClearExisting,
+    aggregateDraftDataOrigin,
+    aggregateDraftValueSelector,
+    lastDynamicFormAggregateRequest,
+    targetDraftReportId,
+  ]);
+
   const handleReset = React.useCallback(() => {
     setFilter(createDefaultFilter(effectiveDynamicExcelId, seedPeriodDate));
     setResult(null);
@@ -1313,11 +1361,14 @@ const WorkAggregationTab: React.FC<Props> = ({
     setFieldTextConcatResult(null);
     setFieldTextConcatRequest(null);
     setTargetDraftReportId("");
+    setCreatedDraftReportOption(null);
+    setMappedPreviewReport(null);
   }, [effectiveDynamicExcelId, seedPeriodDate]);
 
   const validateFilter = React.useCallback(() => {
     if (dynamicFormUnsupported) return dynamicFormUnsupportedMessage;
     if (!effectiveParentAssignmentId) return "Thiếu công việc gốc để tổng hợp.";
+    if (selectedScopeIsRoot) return "Assignment root không ghi tổng hợp lên báo cáo cấp trên.";
     const aggregateDynamicExcelId =
       filter.dynamicExcelId.trim() || effectiveDynamicExcelId || "";
     if (!seedDynamicFormTemplateId && !aggregateDynamicExcelId) {
@@ -1343,6 +1394,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     effectiveParentAssignmentId,
     filter,
     seedDynamicFormTemplateId,
+    selectedScopeIsRoot,
   ]);
 
   const handleRunAggregate = React.useCallback(async () => {
@@ -1451,6 +1503,10 @@ const WorkAggregationTab: React.FC<Props> = ({
       showMessage("Thiếu công việc để tạo bản nháp tổng hợp.");
       return;
     }
+    if (selectedScopeIsRoot) {
+      showMessage("Assignment root không tạo bản nháp tổng hợp để báo cáo cấp trên.");
+      return;
+    }
 
     const periodKey =
       normalizeDayKeyInput(filter.periodDate) ||
@@ -1474,6 +1530,7 @@ const WorkAggregationTab: React.FC<Props> = ({
         },
       }).unwrap();
 
+      setCreatedDraftReportOption(created);
       setTargetDraftReportId(created.id);
       void assignmentReportsQuery.refetch();
       showMessage("Đã tạo bản nháp báo cáo tổng hợp.");
@@ -1487,10 +1544,15 @@ const WorkAggregationTab: React.FC<Props> = ({
     filter.periodDate,
     filter.periodDateFrom,
     filter.periodDateTo,
+    selectedScopeIsRoot,
     showMessage,
   ]);
 
   const handleApplyDynamicFormAggregateDraft = React.useCallback(async () => {
+    if (selectedScopeIsRoot) {
+      showMessage("Assignment root không ghi tổng hợp lên báo cáo cấp trên.");
+      return;
+    }
     if (!targetDraftReportId) {
       showMessage("Chọn một bản nháp báo cáo để ghi kết quả tổng hợp.");
       return;
@@ -1517,6 +1579,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           ? "Đã ghi kết quả tổng hợp vào bản nháp."
           : "Đã lưu cấu hình tổng hợp; báo cáo chưa duyệt sẽ tự cộng khi được duyệt.",
       );
+      setApplyConfirmOpen(false);
     } catch (err: unknown) {
       showMessage(getErrorMessage(err, "Không ghi được kết quả tổng hợp vào bản nháp."));
     }
@@ -1528,9 +1591,69 @@ const WorkAggregationTab: React.FC<Props> = ({
     assignmentReportsQuery,
     dynamicFormResult,
     lastDynamicFormAggregateRequest,
+    selectedScopeIsRoot,
     showMessage,
     targetDraftReportId,
   ]);
+
+  const handlePreviewDynamicFormAggregateDraft = React.useCallback(async () => {
+    if (selectedScopeIsRoot) {
+      showMessage("Assignment root không preview ghi tổng hợp lên báo cáo cấp trên.");
+      return;
+    }
+    if (!targetDraftReportId) {
+      showMessage("Chọn một bản nháp báo cáo để preview sau khi gán.");
+      return;
+    }
+    if (!lastDynamicFormAggregateRequest || !dynamicFormResult) {
+      showMessage("Chạy tổng hợp biểu mẫu động trước khi preview sau khi gán.");
+      return;
+    }
+
+    try {
+      const response = await previewDynamicFormAggregateDraft({
+        id: targetDraftReportId,
+        data: {
+          aggregateRequest: lastDynamicFormAggregateRequest,
+          dataOrigin: aggregateDraftDataOrigin,
+          targetBlockId: dynamicFormResult.meta.blockId,
+          valueSelector: aggregateDraftValueSelector,
+          clearExistingValues: aggregateDraftClearExisting,
+        },
+      }).unwrap();
+
+      setMappedPreviewReport(response);
+    } catch (err: unknown) {
+      showMessage(getErrorMessage(err, "Không preview được report sau khi gán tổng hợp."));
+    }
+  }, [
+    aggregateDraftClearExisting,
+    aggregateDraftDataOrigin,
+    aggregateDraftValueSelector,
+    dynamicFormResult,
+    lastDynamicFormAggregateRequest,
+    previewDynamicFormAggregateDraft,
+    selectedScopeIsRoot,
+    showMessage,
+    targetDraftReportId,
+  ]);
+
+  const handleRequestApplyDynamicFormAggregateDraft = React.useCallback(() => {
+    if (selectedScopeIsRoot) {
+      showMessage("Assignment root không ghi tổng hợp lên báo cáo cấp trên.");
+      return;
+    }
+    if (!targetDraftReportId) {
+      showMessage("Chọn một bản nháp báo cáo để ghi kết quả tổng hợp.");
+      return;
+    }
+    if (!lastDynamicFormAggregateRequest || !dynamicFormResult) {
+      showMessage("Chạy tổng hợp biểu mẫu động trước khi ghi vào bản nháp.");
+      return;
+    }
+
+    setApplyConfirmOpen(true);
+  }, [dynamicFormResult, lastDynamicFormAggregateRequest, selectedScopeIsRoot, showMessage, targetDraftReportId]);
 
   const handleRunFieldStatistics = React.useCallback(async () => {
     if (!workId) {
@@ -1751,54 +1874,46 @@ const WorkAggregationTab: React.FC<Props> = ({
       <Stack spacing={2} sx={{ height: "100%", minHeight: 0 }}>
         <Stack spacing={0.5}>
           <Typography variant="h6" sx={{ fontWeight: 800 }}>
-            Tổng hợp biểu mẫu
+            Tổng hợp theo công việc được giao
           </Typography>
           <Typography variant="body2" sx={{ opacity: 0.72 }}>
-            Tổng hợp dữ liệu báo cáo, hiển thị lại lên biểu mẫu hoặc ghép theo người dùng.
+            Ngữ cảnh tổng hợp lấy từ dòng giao việc đã chọn; báo cáo nguồn và bản nháp đích được xem trước trước khi ghi dữ liệu.
           </Typography>
         </Stack>
 
-        {!hasExternalScope && (
-          <Box>
-            <TextField
-              select
-              size="small"
-              fullWidth
-              label="Công việc cần tổng hợp"
-              value={selectedScopeAssignmentId}
-              onChange={(event) => setSelectedScopeAssignmentId(event.target.value)}
-              disabled={scopeOptionsQuery.isFetching || scopeOptions.length === 0}
-              helperText={
-                scopeOptions.length > 0
-                  ? "Chọn dòng giao việc làm phạm vi cha; hệ thống sẽ tổng hợp báo cáo đã duyệt từ các công việc con."
-                  : "Chưa tìm thấy công việc có biểu mẫu để tổng hợp trong phạm vi bạn quản lý."
-              }
-            >
-              {scopeOptions.length === 0 && (
-                <MenuItem value="" disabled>
-                  {scopeOptionsQuery.isFetching
-                    ? "Đang tải danh sách công việc..."
-                    : "Không có công việc phù hợp"}
-                </MenuItem>
-              )}
-              {scopeOptions.map((option) => (
-                <MenuItem key={option.id} value={option.id}>
-                  {formatAggregationScopeLabel(option)}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Box>
-        )}
-
         {!effectiveParentAssignmentId && !scopeOptionsQuery.isFetching && (
           <Alert severity="info">
-            Chọn một công việc có biểu mẫu động để nạp phạm vi tổng hợp.
+            Mở tổng hợp từ một dòng giao việc để hệ thống có đủ ngữ cảnh biểu mẫu, báo cáo và nguồn dữ liệu. Màn này không cho chọn lại công việc cha.
+          </Alert>
+        )}
+
+        {effectiveParentAssignmentId &&
+          (scopeOptionsQuery.isFetching || selectedAssignmentQuery.isFetching) &&
+          !selectedTemplateLabel && (
+          <Alert severity="info">
+            Đang tải ngữ cảnh công việc được giao để xác định biểu mẫu và nguồn tổng hợp.
+          </Alert>
+        )}
+
+        {effectiveParentAssignmentId &&
+          !selectedScopeOption &&
+          !scopeOptionsQuery.isFetching &&
+          !selectedAssignmentQuery.isFetching &&
+          selectedAssignmentQuery.error && (
+          <Alert severity="error">
+            Không tải được ngữ cảnh công việc được giao. Hãy mở tổng hợp từ dòng giao việc phù hợp hoặc kiểm tra quyền truy cập assignment.
           </Alert>
         )}
 
         {effectiveParentAssignmentId && selectedTemplateLabel && (
           <Alert severity="info">
             Đang tổng hợp cho biểu mẫu: <b>{selectedTemplateLabel}</b>
+          </Alert>
+        )}
+
+        {effectiveParentAssignmentId && selectedScopeIsRoot && !scopeOptionsQuery.isFetching && (
+          <Alert severity="warning">
+            Assignment root không ghi tổng hợp vào report cấp trên. Hãy mở tổng hợp từ assignment của reviewer ở cấp trung gian.
           </Alert>
         )}
 
@@ -1841,7 +1956,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           </Alert>
         )}
 
-        {effectiveParentAssignmentId && (
+        {effectiveParentAssignmentId && !selectedScopeIsRoot && (
           <AggregateFilterBar
             value={filter}
             defaultDynamicExcelCode={effectiveDynamicExcelCode}
@@ -1858,7 +1973,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           />
         )}
 
-        {effectiveParentAssignmentId && workId && (
+        {effectiveParentAssignmentId && !selectedScopeIsRoot && workId && (
           <Box
             sx={{
               p: 2,
@@ -2074,10 +2189,21 @@ const WorkAggregationTab: React.FC<Props> = ({
               }}
             >
               <Stack spacing={1.5}>
-                <Stack
-                  direction={{ xs: "column", md: "row" }}
-                  alignItems={{ xs: "stretch", md: "center" }}
-                  spacing={1}
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      md: "repeat(2, minmax(0, 1fr))",
+                      xl: "minmax(300px, 1.4fr) max-content max-content minmax(170px, 0.8fr) minmax(140px, 0.7fr) minmax(130px, 0.6fr)",
+                    },
+                    gap: 1,
+                    alignItems: "center",
+                    "& .MuiButton-root": {
+                      minHeight: 40,
+                      whiteSpace: "nowrap",
+                    },
+                  }}
                 >
                   <TextField
                     select
@@ -2085,7 +2211,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                     label="Bản nháp báo cáo"
                     value={targetDraftReportId}
                     onChange={(event) => setTargetDraftReportId(event.target.value)}
-                    sx={{ minWidth: { xs: "100%", md: 320 } }}
+                    sx={{ minWidth: 0 }}
                   >
                     {targetDraftReports.length === 0 && (
                       <MenuItem value="" disabled>
@@ -2099,6 +2225,29 @@ const WorkAggregationTab: React.FC<Props> = ({
                     ))}
                   </TextField>
 
+                  <Button
+                    variant="outlined"
+                    onClick={() => setPreviewReportId(targetDraftReportId)}
+                    disabled={!targetDraftReportId}
+                  >
+                    Xem report hiện có
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    onClick={() => void handlePreviewDynamicFormAggregateDraft()}
+                    disabled={
+                      selectedScopeIsRoot ||
+                      !targetDraftReportId ||
+                      !lastDynamicFormAggregateRequest ||
+                      previewDynamicFormAggregateDraftState.isLoading
+                    }
+                  >
+                    {previewDynamicFormAggregateDraftState.isLoading
+                      ? "Đang preview..."
+                      : "Preview sau khi gán"}
+                  </Button>
+
                   <TextField
                     select
                     size="small"
@@ -2107,7 +2256,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                     onChange={(event) =>
                       handleAggregateDraftDataOriginChange(event.target.value as WorkReportDataOrigin)
                     }
-                    sx={{ minWidth: { xs: "100%", md: 180 } }}
+                    sx={{ minWidth: 0 }}
                   >
                     {AGGREGATE_DRAFT_DATA_ORIGINS.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
@@ -2124,7 +2273,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                     onChange={(event) =>
                       setAggregateDraftValueSelector(event.target.value as AggregateDraftValueSelector)
                     }
-                    sx={{ minWidth: { xs: "100%", md: 150 } }}
+                    sx={{ minWidth: 0 }}
                   >
                     {AGGREGATE_DRAFT_VALUE_SELECTORS.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
@@ -2141,18 +2290,23 @@ const WorkAggregationTab: React.FC<Props> = ({
                     onChange={(event) =>
                       setAggregateDraftClearExisting(event.target.value === "YES")
                     }
-                    sx={{ minWidth: { xs: "100%", md: 130 } }}
+                    sx={{ minWidth: 0 }}
                   >
                     <MenuItem value="NO">Giữ ô cũ</MenuItem>
                     <MenuItem value="YES">Xóa ô cũ</MenuItem>
                   </TextField>
-                </Stack>
+                </Box>
+
+                <Alert severity="info">
+                  {formatAggregateDraftContributionPolicy(aggregateDraftDataOrigin, aggregateDraftClearExisting)}
+                </Alert>
 
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                   <Button
                     variant="contained"
-                    onClick={() => void handleApplyDynamicFormAggregateDraft()}
+                    onClick={handleRequestApplyDynamicFormAggregateDraft}
                     disabled={
+                      selectedScopeIsRoot ||
                       !targetDraftReportId ||
                       !lastDynamicFormAggregateRequest ||
                       applyDynamicFormAggregateDraftState.isLoading
@@ -2165,7 +2319,11 @@ const WorkAggregationTab: React.FC<Props> = ({
                   <Button
                     variant="outlined"
                     onClick={() => void handleCreateAggregateDraftReport()}
-                    disabled={createUserCreatedReportState.isLoading || !effectiveParentAssignmentId}
+                    disabled={
+                      createUserCreatedReportState.isLoading ||
+                      !effectiveParentAssignmentId ||
+                      selectedScopeIsRoot
+                    }
                   >
                     {createUserCreatedReportState.isLoading
                       ? "Đang tạo..."
@@ -2186,6 +2344,15 @@ const WorkAggregationTab: React.FC<Props> = ({
                 )}
               </Stack>
             </Box>
+
+            <Stack spacing={0.75}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                Sau khi tổng hợp/gán
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.72 }}>
+                Đây là kết quả xem trước theo nguồn đã duyệt và bộ lọc hiện tại. Dữ liệu chỉ được ghi khi bấm ghi vào bản nháp.
+              </Typography>
+            </Stack>
 
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
@@ -2236,7 +2403,10 @@ const WorkAggregationTab: React.FC<Props> = ({
               </Table>
             </TableContainer>
 
-            <AggregateSourceTable rows={dynamicFormResult.sources ?? []} />
+            <AggregateSourceTable
+              rows={dynamicFormResult.sources ?? []}
+              onPreviewReport={setPreviewReportId}
+            />
           </>
         )}
 
@@ -2292,10 +2462,120 @@ const WorkAggregationTab: React.FC<Props> = ({
               </>
             )}
 
-            <AggregateSourceTable rows={result.sources ?? []} />
+            <AggregateSourceTable rows={result.sources ?? []} onPreviewReport={setPreviewReportId} />
           </>
         )}
       </Stack>
+
+      <Dialog
+        open={applyConfirmOpen}
+        onClose={() => setApplyConfirmOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Xác nhận ghi vào bản nháp</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={1.5}>
+            <Alert severity="warning">
+              Chỉ bản nháp được cập nhật. Báo cáo đã duyệt không bị ghi đè.
+            </Alert>
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                Bản nháp đích
+              </Typography>
+              <Typography fontWeight={700}>
+                {selectedTargetDraftReport
+                  ? formatDraftReportOptionLabel(selectedTargetDraftReport)
+                  : targetDraftReportId || "-"}
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${dynamicFormResult?.rows?.length ?? 0} chỉ số`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${dynamicFormResult?.sources?.length ?? 0} báo cáo nguồn`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Giá trị: ${aggregateDraftValueSelector}`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={aggregateDraftClearExisting ? "Xóa ô cũ" : "Giữ ô cũ"}
+              />
+            </Stack>
+            <Alert severity="info">
+              {formatAggregateDraftContributionPolicy(aggregateDraftDataOrigin, aggregateDraftClearExisting)}
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setApplyConfirmOpen(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleApplyDynamicFormAggregateDraft()}
+            disabled={applyDynamicFormAggregateDraftState.isLoading}
+          >
+            {applyDynamicFormAggregateDraftState.isLoading ? "Đang ghi..." : "Ghi vào bản nháp"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(previewReportId)}
+        onClose={() => setPreviewReportId("")}
+        fullWidth
+        maxWidth="xl"
+      >
+        <DialogTitle>Preview báo cáo</DialogTitle>
+        <DialogContent dividers sx={{ height: "78vh", p: 0 }}>
+          {previewReportId && workId ? (
+            <Box sx={{ height: "100%", p: 2 }}>
+              <WorkReportEditorPage
+                workId={workId}
+                reportId={previewReportId}
+                forceReadOnly
+                onBack={() => setPreviewReportId("")}
+              />
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewReportId("")}>Đóng</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(mappedPreviewReport)}
+        onClose={() => setMappedPreviewReport(null)}
+        fullWidth
+        maxWidth="xl"
+      >
+        <DialogTitle>Preview report sau khi gán tổng hợp</DialogTitle>
+        <DialogContent dividers sx={{ height: "78vh", p: 0 }}>
+          {mappedPreviewReport && workId ? (
+            <Box sx={{ height: "100%", p: 2 }}>
+              <WorkReportEditorPage
+                workId={workId}
+                reportId={mappedPreviewReport.id}
+                previewData={mappedPreviewReport}
+                forceReadOnly
+                onBack={() => setMappedPreviewReport(null)}
+              />
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMappedPreviewReport(null)}>Đóng</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={Boolean(fieldTextConcatResult)}
