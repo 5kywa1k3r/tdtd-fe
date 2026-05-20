@@ -12,6 +12,7 @@ export const baseApi = createApi({
      'WorkAssignmentChildren', 'WorkAssignmentChildrenByDynamicExcel',
      'AssignmentEvaluationLog', 'ReviewSummary', 'ReviewReport',
      'LabelStatisticSummary', 'TableStatisticSummary', 'FieldStatisticSummary',
+     'ReportPayloadDiagnostics',
      'Notification',
      'UserActionLog', 'JobRun',
      //evaluation

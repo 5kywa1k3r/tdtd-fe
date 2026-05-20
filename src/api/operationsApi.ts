@@ -210,6 +210,74 @@ export type ProcessJobRunResponse = {
   batchSize?: number;
 };
 
+export type ReportPayloadDiagnosticsRequest = {
+  workId?: string;
+  workAssignmentId?: string;
+  workReportPeriodId?: string;
+  workAssignmentReportId?: string;
+  limit?: number;
+};
+
+export type ReportPayloadDiagnosticsRepairRequest = ReportPayloadDiagnosticsRequest & {
+  dryRun?: boolean;
+  softDeleteOrphanPayloadRows?: boolean;
+  softDeleteOrphanTableValueRows?: boolean;
+  enqueueStatisticRebuilds?: boolean;
+  highPriorityStatisticRebuilds?: boolean;
+};
+
+export type ReportPayloadDiagnosticIssue = {
+  type: string;
+  key: string;
+  workId?: string | null;
+  workAssignmentId?: string | null;
+  workReportPeriodId?: string | null;
+  workAssignmentReportId?: string | null;
+  payloadId?: string | null;
+  tableValueId?: string | null;
+  statValueId?: string | null;
+  statCollection?: string | null;
+  message: string;
+  recommendedAction: string;
+  fields: Record<string, string | null>;
+};
+
+export type ReportPayloadDiagnosticsResult = {
+  checkedAtUtc: string;
+  workId?: string | null;
+  workAssignmentId?: string | null;
+  workReportPeriodId?: string | null;
+  workAssignmentReportId?: string | null;
+  limit: number;
+  scannedReportCount: number;
+  scannedPayloadRowCount: number;
+  scannedTableValueRowCount: number;
+  scannedStatValueRowCount: number;
+  issues: ReportPayloadDiagnosticIssue[];
+  issueCount: number;
+  hasIssues: boolean;
+  issueCountsByType: Record<string, number>;
+};
+
+export type ReportPayloadDiagnosticsRepairResult = {
+  dryRun: boolean;
+  limit: number;
+  softDeleteOrphanPayloadRows: boolean;
+  softDeleteOrphanTableValueRows: boolean;
+  enqueueStatisticRebuilds: boolean;
+  highPriorityStatisticRebuilds: boolean;
+  diagnostics: ReportPayloadDiagnosticsResult;
+  plannedOrphanPayloadRows: number;
+  softDeletedPayloadRows: number;
+  plannedOrphanTableValueRows: number;
+  softDeletedTableValueRows: number;
+  plannedStatisticTemplateRebuilds: number;
+  enqueuedStatisticTemplateRebuilds: number;
+  statisticRebuildJobs: unknown[];
+  errors: string[];
+  failedCount: number;
+};
+
 const cleanParams = <T extends Record<string, unknown>>(params: T) =>
   Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== undefined && value !== ""),
@@ -321,6 +389,31 @@ export const operationsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [{ type: "JobRun" as const, id: "STATISTIC_REBUILD" }],
     }),
+
+    checkReportPayloadDiagnostics: build.query<ReportPayloadDiagnosticsResult, ReportPayloadDiagnosticsRequest>({
+      query: (req) => ({
+        url: "admin/operations/report-payloads/diagnostics",
+        method: "GET",
+        params: cleanParams(req),
+      }),
+      providesTags: [{ type: "ReportPayloadDiagnostics" as const, id: "CURRENT" }],
+    }),
+
+    repairReportPayloadDiagnostics: build.mutation<
+      ReportPayloadDiagnosticsRepairResult,
+      ReportPayloadDiagnosticsRepairRequest
+    >({
+      query: (req) => ({
+        url: "admin/operations/report-payloads/diagnostics/repair",
+        method: "POST",
+        params: cleanParams(req),
+      }),
+      invalidatesTags: [
+        { type: "ReportPayloadDiagnostics" as const, id: "CURRENT" },
+        { type: "JobRun" as const, id: "OPERATION_LOGS" },
+        { type: "JobRun" as const, id: "STATISTIC_REBUILD" },
+      ],
+    }),
   }),
   overrideExisting: true,
 });
@@ -335,4 +428,6 @@ export const {
   useProcessActionLogRetryJobsMutation,
   useSearchStatisticRebuildJobsQuery,
   useProcessStatisticRebuildJobsMutation,
+  useCheckReportPayloadDiagnosticsQuery,
+  useRepairReportPayloadDiagnosticsMutation,
 } = operationsApi;

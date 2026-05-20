@@ -1,4 +1,5 @@
 import HistoryIcon from "@mui/icons-material/History";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
 import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import ReplayIcon from "@mui/icons-material/Replay";
 import SearchIcon from "@mui/icons-material/Search";
@@ -27,6 +28,8 @@ import {
   useProcessActionLogRetryJobsMutation,
   useProcessProjectionRetryJobsMutation,
   useProcessStatisticRebuildJobsMutation,
+  useCheckReportPayloadDiagnosticsQuery,
+  useRepairReportPayloadDiagnosticsMutation,
   useSearchActionLogRetryJobsQuery,
   useSearchActionLogsQuery,
   useSearchJobOperationLogsQuery,
@@ -37,6 +40,8 @@ import {
 import type {
   JobRunSearchReq,
   MaterializeJobRow,
+  ReportPayloadDiagnosticIssue,
+  ReportPayloadDiagnosticsRequest,
   ProjectionRetryJobRow,
   StatisticRebuildJobRow,
   UserActionLogRetryJobRow,
@@ -51,7 +56,7 @@ import { Role } from "../../constants/roles";
 import type { PagedResult } from "../../types/pagedResult";
 import { UITextKey, uiText } from '../../constants/uiText';
 
-type MainTab = "history" | "jobRuns";
+type MainTab = "history" | "jobRuns" | "payloadDiagnostics";
 type JobRunTab = "operationLogs" | "materialize" | "projectionRetry" | "actionLogRetry" | "statisticRebuild";
 type ChipColor = "default" | "success" | "error" | "warning" | "info";
 
@@ -73,6 +78,14 @@ type JobRunFilters = {
   userId: string;
   includeInactive: boolean;
   pageSize: number;
+};
+
+type PayloadDiagnosticsFilters = {
+  workId: string;
+  workAssignmentId: string;
+  workReportPeriodId: string;
+  workAssignmentReportId: string;
+  limit: number;
 };
 
 type PagedTableProps<T> = {
@@ -105,6 +118,14 @@ const jobRunDefaultFilters: JobRunFilters = {
   userId: "",
   includeInactive: false,
   pageSize: 25,
+};
+
+const payloadDiagnosticsDefaultFilters: PayloadDiagnosticsFilters = {
+  workId: "",
+  workAssignmentId: "",
+  workReportPeriodId: "",
+  workAssignmentReportId: "",
+  limit: 100,
 };
 
 const operationsFilterRowSx = {
@@ -385,6 +406,14 @@ const renderUnitScope = (row: UserActionLogRow) => {
   );
 };
 
+const toPayloadDiagnosticsRequest = (filters: PayloadDiagnosticsFilters): ReportPayloadDiagnosticsRequest => ({
+  workId: filters.workId.trim() || undefined,
+  workAssignmentId: filters.workAssignmentId.trim() || undefined,
+  workReportPeriodId: filters.workReportPeriodId.trim() || undefined,
+  workAssignmentReportId: filters.workAssignmentReportId.trim() || undefined,
+  limit: Math.max(1, Math.min(500, filters.limit || 100)),
+});
+
 function PagedTable<T>({
   data,
   isFetching,
@@ -428,7 +457,7 @@ function OperationsPage() {
   const [tab, setTab] = useState<MainTab>("history");
 
   const handleMainTabChange = (_event: unknown, value: MainTab) => {
-    setTab(value === "jobRuns" && !isSystemAdmin ? "history" : value);
+    setTab(value !== "history" && !isSystemAdmin ? "history" : value);
   };
 
   return (
@@ -449,10 +478,14 @@ function OperationsPage() {
         {isSystemAdmin && (
           <Tab value="jobRuns" icon={<ManageSearchIcon />} iconPosition="start" label={uiText(UITextKey.TextJobRun)} />
         )}
+        {isSystemAdmin && (
+          <Tab value="payloadDiagnostics" icon={<FactCheckIcon />} iconPosition="start" label="Payload báo cáo" />
+        )}
       </Tabs>
 
       {tab === "history" && <HistoryPanel />}
       {tab === "jobRuns" && isSystemAdmin && <JobRunsPanel />}
+      {tab === "payloadDiagnostics" && isSystemAdmin && <ReportPayloadDiagnosticsPanel />}
     </Box>
   );
 }
@@ -614,6 +647,171 @@ function HistoryPanel() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
+    </Stack>
+  );
+}
+
+function ReportPayloadDiagnosticsPanel() {
+  const [draft, setDraft] = useState<PayloadDiagnosticsFilters>(payloadDiagnosticsDefaultFilters);
+  const [applied, setApplied] = useState<PayloadDiagnosticsFilters>(payloadDiagnosticsDefaultFilters);
+  const [notice, setNotice] = useState<ReactNode>(null);
+  const queryArgs = useMemo(() => toPayloadDiagnosticsRequest(applied), [applied]);
+  const query = useCheckReportPayloadDiagnosticsQuery(queryArgs);
+  const [repairDiagnostics, repairState] = useRepairReportPayloadDiagnosticsMutation();
+
+  const columns = useMemo<AppTableColumn<ReportPayloadDiagnosticIssue>[]>(
+    () => [
+      {
+        field: "type",
+        header: "Loại",
+        width: 220,
+        render: (row) => <Chip size="small" color={row.type.includes("ORPHAN") ? "warning" : "error"} label={row.type} />,
+      },
+      { field: "workAssignmentReportId", header: "Báo cáo", width: 160, render: (row) => compactId(row.workAssignmentReportId) },
+      { field: "payloadId", header: "Payload", width: 160, render: (row) => compactId(row.payloadId || row.tableValueId || row.statValueId) },
+      { field: "statCollection", header: "Projection", width: 190, render: (row) => row.statCollection || "-" },
+      { field: "message", header: "Vấn đề", render: (row) => renderLimitedText(row.message, 420) },
+      { field: "recommendedAction", header: "Xử lý", render: (row) => renderLimitedText(row.recommendedAction, 420) },
+    ],
+    [],
+  );
+
+  const applyFilters = () => {
+    setNotice(null);
+    setApplied(draft);
+  };
+
+  const runRepair = async (dryRun: boolean) => {
+    if (!dryRun && !window.confirm("Áp dụng repair sẽ soft-delete orphan rows và enqueue rebuild jobs theo diagnostics hiện tại. Tiếp tục?")) {
+      return;
+    }
+
+    setNotice(null);
+    const req = toPayloadDiagnosticsRequest(draft);
+    setApplied(draft);
+
+    try {
+      const result = await repairDiagnostics({
+        ...req,
+        dryRun,
+        softDeleteOrphanPayloadRows: true,
+        softDeleteOrphanTableValueRows: true,
+        enqueueStatisticRebuilds: true,
+        highPriorityStatisticRebuilds: true,
+      }).unwrap();
+
+      setNotice(
+        dryRun
+          ? `Dry-run: ${result.diagnostics.issueCount} vấn đề, ${result.plannedOrphanPayloadRows} payload orphan, ${result.plannedOrphanTableValueRows} table orphan, ${result.plannedStatisticTemplateRebuilds} template cần rebuild.`
+          : `Đã áp dụng: ${result.softDeletedPayloadRows} payload, ${result.softDeletedTableValueRows} table rows, ${result.enqueuedStatisticTemplateRebuilds} rebuild jobs.`,
+      );
+    } catch {
+      setNotice("Không chạy được diagnostics repair.");
+    }
+  };
+
+  const issueCounts = Object.entries(query.data?.issueCountsByType ?? {});
+
+  return (
+    <Stack spacing={2}>
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Box sx={operationsFilterRowSx}>
+          <TextField
+            size="small"
+            label="Mã đầu việc"
+            value={draft.workId}
+            onChange={(event) => setDraft((current) => ({ ...current, workId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label={uiText(UITextKey.TextAssignmentID)}
+            value={draft.workAssignmentId}
+            onChange={(event) => setDraft((current) => ({ ...current, workAssignmentId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label="Mã kỳ báo cáo"
+            value={draft.workReportPeriodId}
+            onChange={(event) => setDraft((current) => ({ ...current, workReportPeriodId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label="Mã báo cáo"
+            value={draft.workAssignmentReportId}
+            onChange={(event) => setDraft((current) => ({ ...current, workAssignmentReportId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            type="number"
+            label="Giới hạn"
+            value={draft.limit}
+            onChange={(event) => setDraft((current) => ({ ...current, limit: Number(event.target.value) || 100 }))}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.5 }}
+            inputProps={{ min: 1, max: 500 }}
+          />
+          <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters} sx={operationsFilterButtonSx}>
+            Kiểm tra
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<ReplayIcon />}
+            disabled={repairState.isLoading}
+            onClick={() => runRepair(true)}
+            sx={operationsFilterButtonSx}
+          >
+            Dry-run
+          </Button>
+          <Button
+            color="warning"
+            variant="outlined"
+            startIcon={<ReplayIcon />}
+            disabled={repairState.isLoading}
+            onClick={() => runRepair(false)}
+            sx={operationsFilterButtonSx}
+          >
+            Áp dụng
+          </Button>
+        </Box>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        {query.isFetching && <LinearProgress sx={{ mx: -2, mt: -2, mb: 2 }} />}
+        {query.isError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Không tải được diagnostics payload báo cáo.
+          </Alert>
+        )}
+        {notice && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {notice}
+          </Alert>
+        )}
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} useFlexGap flexWrap="wrap">
+          <Chip label={`Báo cáo: ${query.data?.scannedReportCount ?? 0}`} />
+          <Chip label={`Payload: ${query.data?.scannedPayloadRowCount ?? 0}`} />
+          <Chip label={`Table rows: ${query.data?.scannedTableValueRowCount ?? 0}`} />
+          <Chip label={`Stat rows: ${query.data?.scannedStatValueRowCount ?? 0}`} />
+          <Chip color={query.data?.hasIssues ? "warning" : "success"} label={`Vấn đề: ${query.data?.issueCount ?? 0}`} />
+          {issueCounts.map(([type, count]) => (
+            <Chip key={type} size="small" color="warning" label={`${type}: ${count}`} />
+          ))}
+        </Stack>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+        <AppTable
+          rows={query.data?.issues ?? []}
+          columns={columns}
+          rowKey={(row) => `${row.type}:${row.key}`}
+          enablePagination
+          initialPageSize={25}
+          rowsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </Paper>
     </Stack>
   );
 }
