@@ -5,11 +5,17 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Paper,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 
 import WorkReportPeriodTable from "../../../components/reports/WorkReportPeriodTable";
 import WorkReportPeriodFilterBar, {
@@ -17,9 +23,11 @@ import WorkReportPeriodFilterBar, {
 } from "../../../components/reports/WorkReportPeriodFilterBar";
 
 import {
+  useCreateUserCreatedReportMutation,
   useGetMyReportTemplateDetailQuery,
   useOpenWorkReportPeriodMutation,
 } from "../../../api/reportApi";
+import SingleDayKeyField, { dayKeyToIsoDate } from "../../../components/common/SingleDayKeyField";
 
 import type { MyReportTemplateRow, WorkReportPeriodRow } from "../../../types/report";
 import { parseMyReportTemplateDetail } from "../../../types/report.parses";
@@ -85,6 +93,16 @@ function todayDayKey() {
   return `${yyyy}${mm}${dd}`;
 }
 
+function dayKeyToApiDate(dayKey?: string | null) {
+  const normalized = normalizeDayKey(dayKey);
+  return normalized.length === 8 ? `${dayKeyToIsoDate(normalized)}T00:00:00.000Z` : null;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const anyError = error as any;
+  return anyError?.data?.message || anyError?.data?.title || anyError?.message || fallback;
+}
+
 function getPeriodAnchorDayKey(row: WorkReportPeriodRow) {
   return (
     normalizeDayKey(row.periodEnd) ||
@@ -110,6 +128,12 @@ export default function WorkReportTemplateDetailPage(
   const [filterValue, setFilterValue] = useState<WorkReportPeriodFilterValue>(
     defaultFilterValue()
   );
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createStartDay, setCreateStartDay] = useState("");
+  const [createEndDay, setCreateEndDay] = useState("");
+  const [createReportDay, setCreateReportDay] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, error, refetch } = useGetMyReportTemplateDetailQuery(
     {
@@ -122,6 +146,8 @@ export default function WorkReportTemplateDetailPage(
   );
 
   const [openWorkReportPeriod] = useOpenWorkReportPeriodMutation();
+  const [createUserCreatedReport, createUserCreatedReportState] =
+    useCreateUserCreatedReportMutation();
 
   const parsed = useMemo(() => {
     if (!data) return null;
@@ -160,6 +186,72 @@ export default function WorkReportTemplateDetailPage(
       setSelectedReportId(rs.id);
     } catch (err: any) {
       setOpenError(err?.data?.message || err?.message || "Không mở được kỳ báo cáo.");
+    }
+  };
+
+  const handleOpenCreateUserReport = () => {
+    const day = todayDayKey();
+    setCreateTitle("");
+    setCreateStartDay(day);
+    setCreateEndDay(day);
+    setCreateReportDay(day);
+    setCreateError(null);
+    setCreateOpen(true);
+  };
+
+  const handleCloseCreateUserReport = () => {
+    if (createUserCreatedReportState.isLoading) return;
+    setCreateOpen(false);
+    setCreateError(null);
+  };
+
+  const handleCreateUserReport = async () => {
+    if (!parsed?.workAssignmentId) {
+      setCreateError("Thiếu assignment để tạo báo cáo chủ động.");
+      return;
+    }
+
+    const startDay = normalizeDayKey(createStartDay);
+    const endDay = normalizeDayKey(createEndDay);
+    const reportDay = normalizeDayKey(createReportDay || endDay);
+
+    if (startDay.length !== 8 || endDay.length !== 8 || reportDay.length !== 8) {
+      setCreateError("Nhập đủ ngày bắt đầu, ngày kết thúc và ngày báo cáo.");
+      return;
+    }
+
+    if (endDay < startDay) {
+      setCreateError("Ngày kết thúc không được trước ngày bắt đầu.");
+      return;
+    }
+
+    if (reportDay < startDay || reportDay > endDay) {
+      setCreateError("Ngày báo cáo phải nằm trong khoảng ngày bắt đầu - kết thúc.");
+      return;
+    }
+
+    try {
+      setCreateError(null);
+      const completedDate = endDay < todayDayKey() ? dayKeyToApiDate(endDay) : null;
+      const created = await createUserCreatedReport({
+        workAssignmentId: parsed.workAssignmentId,
+        data: {
+          periodKey: reportDay,
+          reportDate: dayKeyToApiDate(reportDay),
+          periodStart: dayKeyToApiDate(startDay),
+          periodEnd: dayKeyToApiDate(endDay),
+          startedDate: dayKeyToApiDate(startDay),
+          completedDate,
+          reportTitle: createTitle.trim() || `Báo cáo chủ động ${reportDay}`,
+        },
+      }).unwrap();
+
+      setCreateOpen(false);
+      setSelectedWorkReportPeriodId(created.workReportPeriodId);
+      setSelectedReportId(created.id);
+      void refetch();
+    } catch (err: unknown) {
+      setCreateError(getErrorMessage(err, "Không tạo được báo cáo chủ động."));
     }
   };
 
@@ -211,6 +303,16 @@ export default function WorkReportTemplateDetailPage(
           </Box>
 
           <Button
+            variant="contained"
+            startIcon={<AddCircleOutlineIcon />}
+            onClick={handleOpenCreateUserReport}
+            disabled={!parsed?.workAssignmentId || createUserCreatedReportState.isLoading}
+            sx={{ borderRadius: 2 }}
+          >
+            Tạo báo cáo chủ động
+          </Button>
+
+          <Button
             variant="outlined"
             startIcon={<ArrowBackIcon />}
             onClick={onBack}
@@ -260,6 +362,80 @@ export default function WorkReportTemplateDetailPage(
           Đang đồng bộ dữ liệu kỳ báo cáo...
         </Typography>
       )}
+
+      <Dialog open={createOpen} onClose={handleCloseCreateUserReport} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>Tạo báo cáo chủ động</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <TextField
+              size="small"
+              label="Tiêu đề"
+              value={createTitle}
+              onChange={(event) => setCreateTitle(event.target.value)}
+              disabled={createUserCreatedReportState.isLoading}
+              fullWidth
+              autoFocus
+            />
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <SingleDayKeyField
+                label="Ngày bắt đầu"
+                value={createStartDay}
+                onChange={(dayKey) => {
+                  setCreateStartDay(dayKey);
+                  if (createEndDay && dayKey && createEndDay < dayKey) {
+                    setCreateEndDay(dayKey);
+                    setCreateReportDay(dayKey);
+                  }
+                }}
+                maxDayKey={createEndDay || undefined}
+                disabled={createUserCreatedReportState.isLoading}
+                fullWidth
+              />
+              <SingleDayKeyField
+                label="Ngày kết thúc"
+                value={createEndDay}
+                onChange={(dayKey) => {
+                  setCreateEndDay(dayKey);
+                  if (dayKey) {
+                    setCreateReportDay(dayKey);
+                  }
+                }}
+                minDayKey={createStartDay || undefined}
+                disabled={createUserCreatedReportState.isLoading}
+                fullWidth
+              />
+            </Stack>
+            <SingleDayKeyField
+              label="Ngày báo cáo"
+              value={createReportDay}
+              onChange={setCreateReportDay}
+              minDayKey={createStartDay || undefined}
+              maxDayKey={createEndDay || undefined}
+              disabled={createUserCreatedReportState.isLoading}
+              fullWidth
+            />
+            {createError ? (
+              <Alert severity="error">{createError}</Alert>
+            ) : (
+              <Alert severity="info">
+                Báo cáo chủ động sẽ được tạo dạng bản nháp; có thể nhập dữ liệu và nộp ngay sau khi mở.
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCreateUserReport} disabled={createUserCreatedReportState.isLoading}>
+            Hủy
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleCreateUserReport()}
+            disabled={createUserCreatedReportState.isLoading}
+          >
+            {createUserCreatedReportState.isLoading ? "Đang tạo..." : "Tạo bản nháp"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {openError && <Alert severity="error">{openError}</Alert>}
     </Stack>

@@ -70,9 +70,10 @@ function buildDynamicExcelBlockJson(
   sectionId?: string | null,
 ) {
   const blockId = `excel_${detail.id}`;
-  const isRecordTable = detail.tableKind === "RECORD_TABLE";
   const width = Math.max(0, Number(detail.w ?? 0));
   const height = Math.max(0, Number(detail.h ?? 0));
+  const specMetadata = readExcelSpecMetadata(detail.specJson);
+  const tableMode = detail.tableMode || "FIXED_GRID";
 
   const block = {
     dynamicExcelTemplateId: detail.id,
@@ -83,37 +84,52 @@ function buildDynamicExcelBlockJson(
     h: height,
     blockId,
     sectionId: sectionId || null,
-    tableMode: "FIXED_GRID",
-    indexMap: isRecordTable ? [] : buildFixedGridIndexMap(blockId, width, height),
-    excelSpecKind: readExcelSpecKind(detail.specJson),
-    tableKind: detail.tableKind ?? "NUMERIC_GRID",
-    recordTableSpecJson: detail.recordTableSpecJson ?? null,
+    tableMode,
+    indexMap: [],
+    excelSpecKind: specMetadata.kind ?? detail.headerKind ?? null,
+    defaultDataType: specMetadata.defaultDataType,
+    defaultOptions: specMetadata.defaultOptions,
+    dataTypeOverrides: specMetadata.dataTypeOverrides,
   };
 
   return JSON.stringify(block);
 }
 
-function buildFixedGridIndexMap(blockId: string, width: number, height: number) {
-  if (width <= 0 || height <= 0) return [];
-
-  return Array.from({ length: width * height }, (_item, index) => {
-    const rowKey = `row_${Math.floor(index / width) + 1}`;
-    const columnKey = `col_${(index % width) + 1}`;
-    return {
-      index,
-      rowKey,
-      columnKey,
-      metricKey: `table:${blockId}.row:${rowKey}.column:${columnKey}`,
-    };
-  });
-}
-
-function readExcelSpecKind(specJson?: string | null) {
+function readExcelSpecMetadata(specJson?: string | null): {
+  kind: "TOP" | "LEFT" | "MATRIX" | null;
+  defaultDataType: string;
+  defaultOptions: unknown[];
+  dataTypeOverrides: unknown[];
+} {
   try {
     const parsed = specJson ? JSON.parse(specJson) : null;
     const kind = typeof parsed?.kind === "string" ? parsed.kind.trim().toUpperCase() : "";
-    return kind === "TOP" || kind === "LEFT" || kind === "MATRIX" ? kind : null;
+    return {
+      kind: kind === "TOP" || kind === "LEFT" || kind === "MATRIX" ? kind : null,
+      defaultDataType: normalizeExcelDataType(parsed?.defaultDataType),
+      defaultOptions: Array.isArray(parsed?.defaultOptions)
+        ? parsed.defaultOptions.filter((item: unknown) => isPlainObject(item) || typeof item === "string")
+        : [],
+      dataTypeOverrides: Array.isArray(parsed?.dataTypeOverrides)
+        ? parsed.dataTypeOverrides.filter(isPlainObject)
+        : [],
+    };
   } catch {
-    return null;
+    return { kind: null, defaultDataType: "NUMBER", defaultOptions: [], dataTypeOverrides: [] };
   }
+}
+
+function normalizeExcelDataType(value: unknown) {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (raw === "STRINGLIST" || raw === "STRING_LIST" || raw === "TEXT" || raw === "STRING" || raw === "SHORTTEXT") return "SHORT_TEXT";
+  if (raw === "MULTISELECT" || raw === "MULTI_SELECT") return "MULTI_SELECT";
+  if (raw === "FULLDATE" || raw === "STRICT_DATE") return "FULL_DATE";
+  if (raw === "DATE" || raw === "FULL_DATE" || raw === "BOOLEAN" || raw === "SHORT_TEXT" || raw === "MULTI_SELECT") {
+    return raw;
+  }
+  return "NUMBER";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

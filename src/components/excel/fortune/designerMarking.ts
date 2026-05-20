@@ -5,6 +5,8 @@ export type Rect = { r0: number; c0: number; r1: number; c1: number };
 export const MARK_COLORS = {
   HEADER_BG: "#FFF2CC",
   DATA_BG: "#E9FFF3",
+  ACTIVE_BG: "#DDEBFF",
+  RANGE_BG: "#FCE7F3",
   LOCK_BG: "#F3F4F6",
 } as const;
 

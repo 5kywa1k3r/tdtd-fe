@@ -25,6 +25,22 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
   onPeriodDateFromChange,
   onPeriodDateToChange,
 }) => {
+  const handlePeriodDateFromChange = (nextFrom: string) => {
+    onPeriodDateFromChange(nextFrom);
+    if (nextFrom && periodDateTo && periodDateTo < nextFrom) {
+      onPeriodDateToChange(nextFrom);
+    }
+  };
+
+  const handlePeriodDateToChange = (nextTo: string) => {
+    if (periodDateFrom && nextTo && nextTo < periodDateFrom) {
+      onPeriodDateToChange(periodDateFrom);
+      return;
+    }
+
+    onPeriodDateToChange(nextTo);
+  };
+
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" spacing={0.75} alignItems="center">
@@ -66,8 +82,9 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
             size="small"
             type="date"
             value={periodDateFrom}
-            onChange={(e) => onPeriodDateFromChange(e.target.value)}
+            onChange={(e) => handlePeriodDateFromChange(e.target.value)}
             InputLabelProps={{ shrink: true }}
+            inputProps={{ max: periodDateTo || undefined }}
             fullWidth
           />
           <TextField
@@ -75,8 +92,9 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
             size="small"
             type="date"
             value={periodDateTo}
-            onChange={(e) => onPeriodDateToChange(e.target.value)}
+            onChange={(e) => handlePeriodDateToChange(e.target.value)}
             InputLabelProps={{ shrink: true }}
+            inputProps={{ min: periodDateFrom || undefined }}
             fullWidth
           />
         </Stack>

@@ -11,7 +11,7 @@ export interface ReportDataRect {
   c1: number;
 }
 
-export type ReportCellValue = string | number | null;
+export type ReportCellValue = string | string[] | number | boolean | null;
 
 export interface ParsedMyReportTemplateDetail
   extends Omit<MyReportTemplateDetailResponse, "specJson" | "templateWorkbookJson"> {

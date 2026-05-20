@@ -31,13 +31,20 @@ import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 
 import WorkbookDataGrid from "../../../components/excel/fortune/WorkbookDataGrid";
-import RecordTableRuntimeEditor, {
-  buildRecordTableBlockPayload,
-  extractRecordRowsFromTableValues,
-  parseRecordTableSpecJson,
-  type RecordTableRuntimeRow,
-} from "../../../components/excel/recordTable/RecordTableRuntimeEditor";
+import type { WorkbookValueValidationIssue } from "../../../components/excel/fortune/fortuneAdapter";
+import {
+  getCellDataType,
+  getCellStringListOptions,
+  isDynamicExcelEnumDataType,
+  normalizeSpecDataTypeMetadata,
+} from "../../../components/excel/fortune/dataTypes";
+import type {
+  DynamicExcelDataType,
+  DynamicExcelStringListOption,
+  HeaderSpec,
+} from "../../../components/excel/fortune/types";
 import LabelPicker from "../../../components/labels/LabelPicker";
+import type { LabelDataType } from "../../../api/labelApi";
 import ReportStatusChip from "../../../components/reports/ReportStatusChip";
 import ReportPeriodStatusChip from "../../../components/reports/ReportPeriodStatusChip";
 import SingleDayKeyField, {
@@ -85,6 +92,12 @@ import DynamicFormRuntimeFields, {
   type DynamicFormRuntimeValue,
   type DynamicFormRuntimeValues,
 } from "../../../features/dynamicForms/runtime/DynamicFormRuntimeFields";
+import {
+  getDateInputErrorText,
+  isDateInputValueValid,
+  normalizeDateInputValue,
+  type DateInputMode,
+} from "../../../utils/dateInputFormat";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
 export interface WorkReportEditorPageProps {
@@ -101,10 +114,11 @@ export interface WorkReportEditorPageProps {
 type WorkbookSavePayload = {
   blockId?: string;
   values1D: ReportCellValue[];
+  validationIssues?: WorkbookValueValidationIssue[];
 };
 
 type WorkbookValueMap = Record<string, ReportCellValue[]>;
-type RecordRowsByBlock = Record<string, RecordTableRuntimeRow[]>;
+type WorkbookValidationIssueMap = Record<string, WorkbookValueValidationIssue[]>;
 
 type ParsedReportDetail = ReturnType<typeof parseReportDetail>;
 type DynamicFormRuntimeSchema = ReturnType<typeof buildEditorValue>;
@@ -223,8 +237,8 @@ function resolveInitialStartedDayKey(detail: ParsedReportDetail) {
 function resolveInitialCompletedDayKey(detail: ParsedReportDetail) {
   const existing = toDayKey(detail.completedDate);
   if (existing) return existing;
-  if (isHistoricalReportDetail(detail)) return getReportAnchorDayKey(detail);
-  return todayDayKey();
+  if (detail.requiresCompletedDate) return getReportAnchorDayKey(detail);
+  return "";
 }
 
 function formatDate(value?: string | null, withTime = false) {
@@ -281,8 +295,22 @@ function normalizeDynamicValue(
     return Number.isFinite(n) ? n : null;
   }
 
+  if (field.type === "date" || field.type === "fullDate") {
+    if (value == null || value === "") return null;
+    const mode: DateInputMode = field.type === "fullDate" ? "full" : "flexible";
+    const normalized = normalizeDateInputValue(value, mode);
+    const text = String(value).trim();
+    return normalized ?? (text ? text : null);
+  }
+
   if (field.type === "multiSelect") {
-    return Array.isArray(value) ? value.filter(Boolean) : [];
+    return Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
+  }
+
+  if (field.type === "stringList" || field.type === "longText") {
+    if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+    if (typeof value === "string" && value.trim()) return [value.trim()];
+    return [];
   }
 
   if (value == null) return null;
@@ -336,8 +364,6 @@ type ReportExcelBlockRuntime = {
   blockId: string;
   label: string;
   dynamicExcelTemplateId?: string | null;
-  tableKind?: string | null;
-  recordTableSpecJson?: string | null;
   blockJson?: string | null;
   excelBlock?: Record<string, unknown> | null;
   spec: any;
@@ -358,6 +384,7 @@ type ExcelBlockRowLabelDefault = {
   rowKey?: string;
   rowIndex?: number;
   rowLabelCodes?: string[];
+  targetDataType?: LabelDataType;
   locked?: boolean;
   source?: string;
 };
@@ -461,8 +488,6 @@ function buildLegacyReportBlock(detail: ParsedReportDetail): ReportExcelBlockRun
     blockId: "excel_block",
     label: detail.dynamicExcelTemplateName || detail.dynamicExcelTemplateCode || "Phần bảng",
     dynamicExcelTemplateId: detail.dynamicExcelTemplateId,
-    tableKind: detail.tableKind ?? "NUMERIC_GRID",
-    recordTableSpecJson: detail.recordTableSpecJson ?? null,
     blockJson: null,
     excelBlock: null,
     spec: detail.spec,
@@ -500,9 +525,6 @@ function buildReportExcelBlocks(
         blockId,
         label: getBlockLabel(detail, excelBlock, index),
         dynamicExcelTemplateId: dynamicExcelTemplateId ?? null,
-        tableKind: getOptionalString(excelBlock.tableKind) ?? detail.tableKind ?? "NUMERIC_GRID",
-        recordTableSpecJson:
-          getOptionalString(excelBlock.recordTableSpecJson) ?? detail.recordTableSpecJson ?? null,
         blockJson,
         excelBlock,
         spec: parseBlockSpec(excelBlock, isTopLevelTemplate ? detail.spec : null),
@@ -531,9 +553,15 @@ function getExpectedValueLength(block: ReportExcelBlockRuntime) {
 
 function normalizeReportCellValue(value: ReportCellValue | undefined): ReportCellValue {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => typeof item === "string" ? item.trim() : "")
+      .filter(Boolean);
+    return items.length > 0 ? items : null;
+  }
   if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    return value.trim();
   }
   return null;
 }
@@ -645,28 +673,6 @@ function buildInitialRowLabelsByBlock(
   );
 }
 
-function isRecordTableBlock(block?: ReportExcelBlockRuntime | null) {
-  return block?.tableKind?.trim().toUpperCase() === "RECORD_TABLE";
-}
-
-function buildInitialRecordRowsByBlock(
-  detail: ParsedReportDetail,
-  blocks: ReportExcelBlockRuntime[],
-): RecordRowsByBlock {
-  return Object.fromEntries(
-    blocks
-      .filter(isRecordTableBlock)
-      .map((block) => [
-        block.blockId,
-        extractRecordRowsFromTableValues(
-          detail.tableValuesJson,
-          block.blockId,
-          block.dynamicExcelTemplateId,
-        ),
-      ]),
-  );
-}
-
 function resolveTopLevelBlockId(
   detail: ParsedReportDetail,
   blocks: ReportExcelBlockRuntime[],
@@ -745,39 +751,16 @@ function buildTableValuesJson(
   blocks: ReportExcelBlockRuntime[],
   valuesByBlock: WorkbookValueMap,
   rowLabelsByBlock: RowLabelStateMap,
-  recordRowsByBlock: RecordRowsByBlock,
 ) {
-  if (!detail.dynamicFormTemplateId || !form) {
-    const recordBlocks = blocks
-      .filter(isRecordTableBlock)
-      .map((block) =>
-        buildTableValuesBlock(
-          detail,
-          block,
-          [],
-          [],
-          recordRowsByBlock[block.blockId] ?? [],
-        ),
-      )
-      .filter((block): block is NonNullable<typeof block> => Boolean(block));
-
-    if (recordBlocks.length === 0) return detail.tableValuesJson ?? null;
-
-    return JSON.stringify({
-      updatedAtUtc: new Date().toISOString(),
-      blocks: recordBlocks,
-    });
-  }
+  if (!detail.dynamicFormTemplateId || !form) return detail.tableValuesJson ?? null;
 
   const tableBlocks = blocks
     .map((block) =>
       block.excelBlock
         ? buildTableValuesBlock(
-            detail,
             block,
             valuesByBlock[block.blockId] ?? [],
             rowLabelsByBlock[block.blockId],
-            recordRowsByBlock[block.blockId] ?? [],
           )
         : null,
     )
@@ -795,27 +778,11 @@ function buildTableValuesJson(
 }
 
 function buildTableValuesBlock(
-  detail: ParsedReportDetail,
   block: ReportExcelBlockRuntime,
   values1D: ReportCellValue[],
   runtimeRowLabels?: ReportRuntimeRowLabel[],
-  recordRows?: RecordTableRuntimeRow[],
 ) {
   const excelBlock = block.excelBlock;
-  if (isRecordTableBlock(block)) {
-    const payload = buildRecordTableBlockPayload({
-      blockId: block.blockId,
-      dynamicExcelTemplateId: block.dynamicExcelTemplateId ?? detail.dynamicExcelTemplateId ?? null,
-      orientation: parseRecordTableSpecJson(block.recordTableSpecJson)?.orientation,
-      records: recordRows ?? [],
-    });
-
-    return payload.records.length > 0 ? payload : {
-      ...payload,
-      records: [],
-    };
-  }
-
   if (!excelBlock) return null;
 
   const tableMode = normalizeTableMode(excelBlock.tableMode);
@@ -824,6 +791,19 @@ function buildTableValuesBlock(
   const dataRect = getExcelBlockDataRect(excelBlock) ?? block.dataRect;
   const tableValues = normalizeWorkbookValues(values1D, getExpectedValueLength(block));
   const rowLabels = normalizeRuntimeRowLabels(runtimeRowLabels ?? getTemplateRowLabels(block));
+  const metricDefinitions = buildTableMetricDefinitions(
+    blockId,
+    tableMode,
+    excelBlock,
+    dataRect,
+    indexMap,
+  );
+  const statisticIndexMap = metricDefinitions.map((metric) => ({
+    index: metric.index,
+    rowKey: metric.rowKey,
+    columnKey: metric.columnKey,
+    metricKey: metric.metricKey,
+  }));
   const appendRows = buildAppendRowsTableRecords(tableMode, blockId, dataRect, tableValues, rowLabels);
   const appendColumns = buildAppendColumnsTableRecords(tableMode, blockId, dataRect, tableValues);
   const matrixCells = buildMatrixTableCellRecords(tableMode, blockId, dataRect, tableValues, indexMap);
@@ -831,7 +811,7 @@ function buildTableValuesBlock(
   if (
     rowLabels.length === 0 &&
     tableValues.length === 0 &&
-    indexMap.length === 0 &&
+    statisticIndexMap.length === 0 &&
     appendRows.length === 0 &&
     appendColumns.length === 0 &&
     matrixCells.length === 0
@@ -842,13 +822,14 @@ function buildTableValuesBlock(
   return {
     blockId,
     dynamicExcelTemplateId:
-      getOptionalString(excelBlock.dynamicExcelTemplateId) ?? detail.dynamicExcelTemplateId ?? null,
+      getOptionalString(excelBlock.dynamicExcelTemplateId) ?? block.dynamicExcelTemplateId ?? null,
     tableMode,
     w: getPositiveInt(excelBlock.w ?? excelBlock.W) || null,
     h: getPositiveInt(excelBlock.h ?? excelBlock.H) || null,
     dataRect,
     values1D: tableValues,
-    indexMap,
+    indexMap: statisticIndexMap,
+    metricDefinitions,
     rowLabels,
     rows: appendRows,
     columns: appendColumns,
@@ -874,9 +855,8 @@ function buildAppendRowsTableRecords(
     const cells = Object.fromEntries(
       Array.from({ length: width }, (_, colOffset) => {
         const value = tableValues[rowOffset * width + colOffset];
-        const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
-        return [`col_${colOffset + 1}`, numericValue] as const;
-      }).filter(([, value]) => value !== null),
+        return [`col_${colOffset + 1}`, value] as const;
+      }).filter(([, value]) => !isBlankReportCellValue(value)),
     );
 
     const rowLabelCodes = normalizeLabelCodes(
@@ -910,9 +890,8 @@ function buildAppendColumnsTableRecords(
     const cells = Object.fromEntries(
       Array.from({ length: height }, (_, rowOffset) => {
         const value = tableValues[rowOffset * width + colOffset];
-        const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
-        return [`row_${rowOffset + 1}`, numericValue] as const;
-      }).filter(([, value]) => value !== null),
+        return [`row_${rowOffset + 1}`, value] as const;
+      }).filter(([, value]) => !isBlankReportCellValue(value)),
     );
 
     return {
@@ -944,7 +923,7 @@ function buildMatrixTableCellRecords(
     const rowOffset = Math.floor(index / width);
     const colOffset = index % width;
     const value = tableValues[index];
-    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    if (isBlankReportCellValue(value)) return null;
 
     const metric =
       metricByIndex.get(index) ?? {
@@ -963,6 +942,336 @@ function buildMatrixTableCellRecords(
       value,
     };
   }).filter((cell): cell is NonNullable<typeof cell> => Boolean(cell));
+}
+
+function isBlankReportCellValue(value: ReportCellValue | undefined) {
+  return value == null ||
+    (typeof value === "string" && value.trim() === "") ||
+    (Array.isArray(value) && value.every((item) => !item.trim()));
+}
+
+type ReportTableMetricDefinition = {
+  blockId: string;
+  metricKey: string;
+  rowKey: string;
+  columnKey: string;
+  index: number;
+  displayLabel: string;
+  dataType: DynamicExcelDataType;
+  sourceKind: DynamicFormTableMode;
+  supportedOps: string[];
+  options?: DynamicExcelStringListOption[];
+};
+
+function buildTableMetricDefinitions(
+  blockId: string,
+  tableMode: DynamicFormTableMode,
+  excelBlock: Record<string, unknown>,
+  dataRect: ExcelBlockDataRect | null,
+  indexMap: DynamicFormTableIndexMapItem[],
+): ReportTableMetricDefinition[] {
+  if (!dataRect) return [];
+
+  const w = getPositiveInt(excelBlock.w ?? excelBlock.W) || dataRect.c1 - dataRect.c0 + 1;
+  const h = getPositiveInt(excelBlock.h ?? excelBlock.H) || dataRect.r1 - dataRect.r0 + 1;
+  if (w <= 0 || h <= 0) return [];
+
+  const spec = buildMetricHeaderSpec(excelBlock, dataRect);
+  const targets = resolveConfiguredTableMetricTargets(
+    blockId,
+    tableMode,
+    excelBlock,
+    dataRect,
+    w,
+    h,
+    indexMap,
+  );
+
+  return targets
+    .filter((metric) => isMetricIndexInBounds(metric, tableMode, w, h))
+    .map((metric) => {
+      const absoluteCell = resolveMetricAbsoluteCell(metric, tableMode, dataRect, w);
+      const dataType = getCellDataType(spec, dataRect, absoluteCell.row, absoluteCell.column);
+      const options = isDynamicExcelEnumDataType(dataType)
+        ? getCellStringListOptions(spec, dataRect, absoluteCell.row, absoluteCell.column)
+        : [];
+
+      return {
+        blockId,
+        metricKey: metric.metricKey,
+        rowKey: metric.rowKey,
+        columnKey: metric.columnKey,
+        index: metric.index,
+        displayLabel: `${metric.rowKey} / ${metric.columnKey}`,
+        dataType,
+        sourceKind: tableMode,
+        supportedOps: getSupportedMetricOps(dataType),
+        ...(options.length > 0 ? { options } : {}),
+      };
+    });
+}
+
+function resolveConfiguredTableMetricTargets(
+  blockId: string,
+  tableMode: DynamicFormTableMode,
+  excelBlock: Record<string, unknown>,
+  dataRect: ExcelBlockDataRect,
+  width: number,
+  height: number,
+  indexMap: DynamicFormTableIndexMapItem[],
+): DynamicFormTableIndexMapItem[] {
+  const byMetricKey = new Map<string, DynamicFormTableIndexMapItem>();
+  const knownByMetricKey = new Map(indexMap.map((item) => [item.metricKey, item]));
+
+  const addMetric = (metric: DynamicFormTableIndexMapItem | null) => {
+    if (!metric?.metricKey || byMetricKey.has(metric.metricKey)) return;
+    byMetricKey.set(metric.metricKey, metric);
+  };
+
+  const addMetricKey = (metricKey: string | null, fallbackIndex: number) => {
+    if (!metricKey) return;
+    addMetric(knownByMetricKey.get(metricKey) ?? parseConfiguredMetricKey(metricKey, tableMode, width, fallbackIndex));
+  };
+
+  (Array.isArray(excelBlock.metricRules) ? excelBlock.metricRules : []).forEach((rule, index) => {
+    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return;
+    addMetricKey(readOptionalString((rule as Record<string, unknown>).metricKey), index);
+  });
+
+  (Array.isArray(excelBlock.metricLabelTargets) ? excelBlock.metricLabelTargets : []).forEach((target, targetIndex) => {
+    if (!target || typeof target !== "object" || Array.isArray(target)) return;
+    const row = target as Record<string, unknown>;
+    const metricKey = readOptionalString(row.metricKey);
+    if (metricKey) {
+      addMetricKey(metricKey, targetIndex);
+      return;
+    }
+
+    const range = readMetricTargetRange(row);
+    if (!range) return;
+    expandMetricTargetRange(blockId, tableMode, dataRect, range, width, height).forEach(addMetric);
+  });
+
+  return Array.from(byMetricKey.values()).sort((a, b) => a.index - b.index || a.metricKey.localeCompare(b.metricKey));
+}
+
+function parseConfiguredMetricKey(
+  metricKey: string,
+  tableMode: DynamicFormTableMode,
+  width: number,
+  fallbackIndex: number,
+): DynamicFormTableIndexMapItem {
+  const fixed = metricKey.match(/\.row:([^.]+)\.column:([^.]+)$/);
+  if (fixed) {
+    const rowKey = normalizeMetricPart(fixed[1], `row_${fallbackIndex + 1}`);
+    const columnKey = normalizeMetricPart(fixed[2], "value");
+    const index = indexFromRowColumn(rowKey, columnKey, width) ?? fallbackIndex;
+    return { index, rowKey, columnKey, metricKey };
+  }
+
+  const appendColumn = metricKey.match(/\.column:([^.]+)$/);
+  if (tableMode === "APPEND_ROWS" && appendColumn) {
+    const columnKey = normalizeMetricPart(appendColumn[1], `col_${fallbackIndex + 1}`);
+    return {
+      index: indexFromOrdinalPart(columnKey, "col_") ?? fallbackIndex,
+      rowKey: "APPEND_ROWS",
+      columnKey,
+      metricKey,
+    };
+  }
+
+  const appendRow = metricKey.match(/\.row:([^.]+)$/);
+  if (tableMode === "APPEND_COLUMNS" && appendRow) {
+    const rowKey = normalizeMetricPart(appendRow[1], `row_${fallbackIndex + 1}`);
+    return {
+      index: indexFromOrdinalPart(rowKey, "row_") ?? fallbackIndex,
+      rowKey,
+      columnKey: "APPEND_COLUMNS",
+      metricKey,
+    };
+  }
+
+  return {
+    index: fallbackIndex,
+    rowKey: tableMode === "APPEND_ROWS" ? "APPEND_ROWS" : `row_${fallbackIndex + 1}`,
+    columnKey: tableMode === "APPEND_COLUMNS" ? "APPEND_COLUMNS" : "value",
+    metricKey,
+  };
+}
+
+function expandMetricTargetRange(
+  blockId: string,
+  tableMode: DynamicFormTableMode,
+  dataRect: ExcelBlockDataRect,
+  range: ExcelBlockDataRect,
+  width: number,
+  height: number,
+): DynamicFormTableIndexMapItem[] {
+  const r0 = Math.max(dataRect.r0, range.r0);
+  const c0 = Math.max(dataRect.c0, range.c0);
+  const r1 = Math.min(dataRect.r1, range.r1);
+  const c1 = Math.min(dataRect.c1, range.c1);
+  if (r1 < r0 || c1 < c0) return [];
+
+  const rows: DynamicFormTableIndexMapItem[] = [];
+  if (tableMode === "APPEND_ROWS") {
+    for (let c = c0; c <= c1; c += 1) {
+      const columnOffset = c - dataRect.c0;
+      if (columnOffset < 0 || columnOffset >= width) continue;
+      const columnKey = `col_${columnOffset + 1}`;
+      rows.push({
+        index: columnOffset,
+        rowKey: "APPEND_ROWS",
+        columnKey,
+        metricKey: `table:${normalizeMetricPart(blockId, "excel_block")}.column:${columnKey}`,
+      });
+    }
+    return rows;
+  }
+
+  if (tableMode === "APPEND_COLUMNS") {
+    for (let r = r0; r <= r1; r += 1) {
+      const rowOffset = r - dataRect.r0;
+      if (rowOffset < 0 || rowOffset >= height) continue;
+      const rowKey = `row_${rowOffset + 1}`;
+      rows.push({
+        index: rowOffset,
+        rowKey,
+        columnKey: "APPEND_COLUMNS",
+        metricKey: `table:${normalizeMetricPart(blockId, "excel_block")}.row:${rowKey}`,
+      });
+    }
+    return rows;
+  }
+
+  for (let r = r0; r <= r1; r += 1) {
+    for (let c = c0; c <= c1; c += 1) {
+      const rowOffset = r - dataRect.r0;
+      const colOffset = c - dataRect.c0;
+      if (rowOffset < 0 || rowOffset >= height || colOffset < 0 || colOffset >= width) continue;
+      const rowKey = `row_${rowOffset + 1}`;
+      const columnKey = `col_${colOffset + 1}`;
+      rows.push({
+        index: rowOffset * width + colOffset,
+        rowKey,
+        columnKey,
+        metricKey: buildMetricKey(blockId, rowKey, columnKey),
+      });
+    }
+  }
+  return rows;
+}
+
+function isMetricIndexInBounds(
+  metric: DynamicFormTableIndexMapItem,
+  tableMode: DynamicFormTableMode,
+  width: number,
+  height: number,
+) {
+  if (metric.index < 0) return false;
+  if (tableMode === "APPEND_ROWS") return metric.index < width;
+  if (tableMode === "APPEND_COLUMNS") return metric.index < height;
+  return metric.index < width * height;
+}
+
+function resolveMetricAbsoluteCell(
+  metric: DynamicFormTableIndexMapItem,
+  tableMode: DynamicFormTableMode,
+  dataRect: ExcelBlockDataRect,
+  width: number,
+) {
+  if (tableMode === "APPEND_ROWS") {
+    return { row: dataRect.r0, column: dataRect.c0 + metric.index };
+  }
+
+  if (tableMode === "APPEND_COLUMNS") {
+    return { row: dataRect.r0 + metric.index, column: dataRect.c0 };
+  }
+
+  return {
+    row: dataRect.r0 + Math.floor(metric.index / Math.max(1, width)),
+    column: dataRect.c0 + metric.index % Math.max(1, width),
+  };
+}
+
+function readMetricTargetRange(value: Record<string, unknown>): ExcelBlockDataRect | null {
+  const raw = value.range && typeof value.range === "object" && !Array.isArray(value.range)
+    ? value.range as Record<string, unknown>
+    : value;
+  const r0 = Number(raw.r0 ?? raw.R0);
+  const c0 = Number(raw.c0 ?? raw.C0);
+  const r1 = Number(raw.r1 ?? raw.R1);
+  const c1 = Number(raw.c1 ?? raw.C1);
+  if (![r0, c0, r1, c1].every(Number.isFinite)) return null;
+  if (r1 < r0 || c1 < c0) return null;
+  return { r0, c0, r1, c1 };
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function indexFromRowColumn(rowKey: string, columnKey: string, width: number) {
+  const rowIndex = indexFromOrdinalPart(rowKey, "row_");
+  const columnIndex = indexFromOrdinalPart(columnKey, "col_");
+  if (rowIndex == null || columnIndex == null || width <= 0) return null;
+  return rowIndex * width + columnIndex;
+}
+
+function indexFromOrdinalPart(value: string, prefix: string) {
+  if (!value.toLowerCase().startsWith(prefix)) return null;
+  const n = Number(value.slice(prefix.length));
+  return Number.isInteger(n) && n > 0 ? n - 1 : null;
+}
+
+function buildMetricHeaderSpec(
+  excelBlock: Record<string, unknown>,
+  dataRect: ExcelBlockDataRect,
+): HeaderSpec {
+  const kindRaw = getOptionalString(excelBlock.excelSpecKind) ?? getOptionalString(excelBlock.kind);
+  const kind = kindRaw === "LEFT" || kindRaw === "MATRIX" ? kindRaw : "TOP";
+  const base = {
+    defaultDataType: getOptionalString(excelBlock.defaultDataType) as DynamicExcelDataType | undefined,
+    defaultOptions: Array.isArray(excelBlock.defaultOptions) ? excelBlock.defaultOptions as DynamicExcelStringListOption[] : [],
+    dataTypeOverrides: Array.isArray(excelBlock.dataTypeOverrides) ? excelBlock.dataTypeOverrides as HeaderSpec["dataTypeOverrides"] : [],
+  };
+
+  if (kind === "LEFT") {
+    return normalizeSpecDataTypeMetadata({
+      kind,
+      leftRows: dataRect.r1 + 1,
+      leftCols: Math.max(1, dataRect.c0),
+      dataCols: dataRect.c1 - dataRect.c0 + 1,
+      ...base,
+    });
+  }
+
+  if (kind === "MATRIX") {
+    return normalizeSpecDataTypeMetadata({
+      kind,
+      topRows: Math.max(1, dataRect.r0),
+      topCols: dataRect.c1 - dataRect.c0 + 1,
+      leftRows: dataRect.r1 - dataRect.r0 + 1,
+      leftCols: Math.max(1, dataRect.c0),
+      ...base,
+    });
+  }
+
+  return normalizeSpecDataTypeMetadata({
+    kind: "TOP",
+    topRows: Math.max(1, dataRect.r0),
+    topCols: dataRect.c1 - dataRect.c0 + 1,
+    dataRows: dataRect.r1 - dataRect.r0 + 1,
+    ...base,
+  });
+}
+
+function getSupportedMetricOps(dataType: DynamicExcelDataType) {
+  if (dataType === "NUMBER") return ["count", "sum", "min", "max", "average"];
+  if (dataType === "SHORT_TEXT" || dataType === "MULTI_SELECT") return ["count", "bucketCount"];
+  if (dataType === "BOOLEAN") return ["count", "trueCount", "falseCount"];
+  if (dataType === "DATE" || dataType === "FULL_DATE") return ["count", "earliest", "latest"];
+  return ["count"];
 }
 
 function getExcelBlockIndexMap(
@@ -991,22 +1300,7 @@ function getExcelBlockIndexMap(
     })
     .filter((item): item is DynamicFormTableIndexMapItem => Boolean(item));
 
-  if (normalized.length > 0) return normalized;
-
-  const width = getPositiveInt(excelBlock.w ?? excelBlock.W);
-  const height = getPositiveInt(excelBlock.h ?? excelBlock.H);
-  if (width <= 0 || height <= 0) return [];
-
-  return Array.from({ length: width * height }, (_, index) => {
-    const rowKey = `row_${Math.floor(index / width) + 1}`;
-    const columnKey = `col_${(index % width) + 1}`;
-    return {
-      index,
-      rowKey,
-      columnKey,
-      metricKey: buildMetricKey(blockId, rowKey, columnKey),
-    };
-  });
+  return normalized;
 }
 
 function getExcelBlockDataRect(excelBlock: Record<string, unknown>): ExcelBlockDataRect | null {
@@ -1073,6 +1367,54 @@ function getReportBlockAllowedRowLabelCodes(block: ReportExcelBlockRuntime | nul
   return normalizeLabelCodes(raw.filter((item): item is string => typeof item === "string"));
 }
 
+function getReportBlockRowLabelDataType(block: ReportExcelBlockRuntime | null): LabelDataType {
+  return normalizeTableTargetLabelDataType(
+    block?.excelBlock?.rowLabelDataType ??
+      block?.excelBlock?.rowLabelTargetDataType ??
+      block?.excelBlock?.targetDataType ??
+      block?.excelBlock?.labelDataType ??
+      block?.excelBlock?.defaultDataType ??
+      block?.excelBlock?.dataType,
+  );
+}
+
+function getInvalidDynamicField(
+  fields: DynamicFormField[],
+  values: DynamicFormRuntimeValues,
+) {
+  return fields.find((field) => {
+    if (field.type !== "date" && field.type !== "fullDate") return false;
+    const value = values[field.id];
+    if (value == null || value === "") return false;
+    const mode: DateInputMode = field.type === "fullDate" ? "full" : "flexible";
+    return !isDateInputValueValid(value, mode);
+  });
+}
+
+function getDynamicFieldValidationMessage(field: DynamicFormField) {
+  const mode: DateInputMode = field.type === "fullDate" ? "full" : "flexible";
+  return getDateInputErrorText(getDynamicFormFieldDisplayName(field), mode);
+}
+
+function normalizeTableTargetLabelDataType(value: unknown): LabelDataType {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (raw === "TEXT" || raw === "STRING" || raw === "SHORTTEXT") return "SHORT_TEXT";
+  if (raw === "MULTI_SELECT" || raw === "MULTISELECT") return "SHORT_TEXT";
+  if (raw === "STRINGLIST" || raw === "STRING_LIST" || raw === "LONGTEXT" || raw === "LONG_TEXT") return "STRING_LIST";
+  if (
+    raw === "NUMBER" ||
+    raw === "SHORT_TEXT" ||
+    raw === "STRING_LIST" ||
+    raw === "DATE" ||
+    raw === "FULL_DATE" ||
+    raw === "FULLDATE" ||
+    raw === "BOOLEAN"
+  ) {
+    return raw === "FULL_DATE" || raw === "FULLDATE" ? "DATE" : raw;
+  }
+  return "NUMBER";
+}
+
 function getRowLabelCodes(rowLabels: ReportRuntimeRowLabel[], rowIndex: number) {
   const row = rowLabels.find((item) => Number(item.rowIndex) === rowIndex);
   return normalizeLabelCodes(row?.rowLabelCodes ?? []);
@@ -1085,7 +1427,7 @@ function isRowLabelLocked(rowLabels: ReportRuntimeRowLabel[], rowIndex: number) 
 function hasRequiredDynamicValue(field: DynamicFormField, values: DynamicFormRuntimeValues) {
   const value = values[field.id];
   if (field.type === "boolean") return value === true || value === false;
-  if (Array.isArray(value)) return value.length > 0;
+  if (Array.isArray(value)) return value.some((item) => String(item).trim());
   return value !== null && value !== undefined && value !== "";
 }
 
@@ -1094,6 +1436,17 @@ function getMissingRequiredFields(
   values: DynamicFormRuntimeValues,
 ) {
   return fields.filter((field) => field.required && !hasRequiredDynamicValue(field, values));
+}
+
+function getFirstWorkbookValidationIssue(
+  blocks: ReportExcelBlockRuntime[],
+  issuesByBlock: WorkbookValidationIssueMap,
+) {
+  for (const block of blocks) {
+    const issue = issuesByBlock[block.blockId]?.[0];
+    if (issue) return { block, issue };
+  }
+  return null;
 }
 
 function getLogActionLabel(action?: string) {
@@ -1179,11 +1532,20 @@ function ReportHeaderSection(props: HeaderSectionProps) {
             </Alert>
           )}
 
-          {detail.status === WorkAssignmentReportStatus.Approved && (
-            <Alert severity="success">
-              Báo cáo đã được duyệt. Hiện chỉ có thể xem.
-            </Alert>
-          )}
+          {detail.status === WorkAssignmentReportStatus.Approved &&
+            detail.autoApproved === true &&
+            detail.autoApprovalLocked !== true && (
+              <Alert severity="success">
+                Báo cáo đã được tự duyệt. Có thể thu hồi cho đến khi người duyệt xác nhận.
+              </Alert>
+            )}
+
+          {detail.status === WorkAssignmentReportStatus.Approved &&
+            !(detail.autoApproved === true && detail.autoApprovalLocked !== true) && (
+              <Alert severity="success">
+                Báo cáo đã được duyệt. Hiện chỉ có thể xem.
+              </Alert>
+            )}
 
           {canEdit && (
             <Alert severity="info">
@@ -1392,6 +1754,10 @@ type BusinessFormSectionProps = {
   busy: boolean;
   overdue: boolean;
   isHistoricalData: boolean;
+  canEditCompletedDate: boolean;
+  requiresCompletedDate: boolean;
+  completedDateMin?: string;
+  completedDateMax?: string;
   startedDate: string;
   completedDate: string;
   currentProgressStatus: string;
@@ -1414,6 +1780,10 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
     busy,
     overdue,
     isHistoricalData,
+    canEditCompletedDate,
+    requiresCompletedDate,
+    completedDateMin,
+    completedDateMax,
     startedDate,
     completedDate,
     currentProgressStatus,
@@ -1429,6 +1799,7 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
     setProposedSolution,
     setLateReason,
   } = props;
+  const showCompletedDate = canEditCompletedDate || Boolean(completedDate);
 
   return (
     <Card variant="outlined">
@@ -1450,17 +1821,20 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
               value={startedDate}
               disabled={!canEdit || busy}
               fullWidth
-              maxDayKey={completedDate || undefined}
+              maxDayKey={showCompletedDate ? completedDate || undefined : undefined}
               onChange={setStartedDate}
             />
-            <SingleDayKeyField
-              label="Ngày hoàn thành"
-              value={completedDate}
-              disabled={!canEdit || busy}
-              fullWidth
-              minDayKey={startedDate || undefined}
-              onChange={setCompletedDate}
-            />
+            {showCompletedDate && (
+              <SingleDayKeyField
+                label={requiresCompletedDate ? "Ngày hoàn thành *" : "Ngày hoàn thành"}
+                value={completedDate}
+                disabled={!canEdit || busy || !canEditCompletedDate}
+                fullWidth
+                minDayKey={completedDateMin || startedDate || undefined}
+                maxDayKey={completedDateMax || undefined}
+                onChange={setCompletedDate}
+              />
+            )}
           </Stack>
 
           <TextField
@@ -1531,13 +1905,14 @@ type ReportRowLabelEditorProps = {
   block: ReportExcelBlockRuntime | null;
   rowLabels: ReportRuntimeRowLabel[];
   allowedCodes: string[];
+  allowedDataTypes?: LabelDataType[];
   canEdit: boolean;
   busy: boolean;
   onChange: (rowIndex: number, codes: string[]) => void;
 };
 
 function ReportRowLabelEditor(props: ReportRowLabelEditorProps) {
-  const { block, rowLabels, allowedCodes, canEdit, busy, onChange } = props;
+  const { block, rowLabels, allowedCodes, allowedDataTypes, canEdit, busy, onChange } = props;
   const rowIndexes = React.useMemo(() => getReportBlockDataRows(block), [block]);
 
   if (!block?.excelBlock || rowIndexes.length === 0) return null;
@@ -1592,7 +1967,9 @@ function ReportRowLabelEditor(props: ReportRowLabelEditorProps) {
               size="small"
               value={getRowLabelCodes(rowLabels, rowIndex)}
               allowedCodes={allowed}
+              allowedDataTypes={allowedDataTypes}
               disabled={!canEdit || busy || isRowLabelLocked(rowLabels, rowIndex)}
+              usage="tableTarget"
               label={`Dòng ${rowIndex + 1}`}
               placeholder={uiText(UITextKey.TextChonNhan)}
               limitTags={2}
@@ -1711,6 +2088,7 @@ export default function WorkReportEditorPage(
     [dynamicFormDetail],
   );
   const latestWorkbookPayloadRef = React.useRef<WorkbookValueMap>({});
+  const latestWorkbookIssuesRef = React.useRef<WorkbookValidationIssueMap>({});
   const reportBlocks = React.useMemo(
     () => (detail ? buildReportExcelBlocks(detail, dynamicFormRuntime) : []),
     [detail, dynamicFormRuntime],
@@ -1746,9 +2124,6 @@ export default function WorkReportEditorPage(
 
     return {
       ...selectedReportBlock,
-      tableKind: selectedDynamicExcelDetail.tableKind ?? selectedReportBlock.tableKind,
-      recordTableSpecJson:
-        selectedDynamicExcelDetail.recordTableSpecJson ?? selectedReportBlock.recordTableSpecJson,
       spec,
       templateWorkbookData:
         templateWorkbookData.length > 0
@@ -1787,12 +2162,26 @@ export default function WorkReportEditorPage(
     () => getReportBlockAllowedRowLabelCodes(selectedReportBlock),
     [selectedReportBlock],
   );
+  const selectedBlockRowLabelDataType = React.useMemo(
+    () => getReportBlockRowLabelDataType(selectedReportBlock),
+    [selectedReportBlock],
+  );
 
   const canEdit = detail ? !props.forceReadOnly && isEditableReportStatus(detail.status) : false;
-  const canWithdraw = detail ? !props.forceReadOnly && detail.status === WorkAssignmentReportStatus.Submitted : false;
+  const canWithdraw = detail
+    ? !props.forceReadOnly &&
+      (detail.status === WorkAssignmentReportStatus.Submitted ||
+        (detail.status === WorkAssignmentReportStatus.Approved &&
+          detail.autoApproved === true &&
+          detail.autoApprovalLocked !== true))
+    : false;
   const isHistoricalData = isHistoricalReportDetail(detail);
   const overdue = isOverdue(detail?.dueAtUtc);
   const requiresLateReason = overdue && !isHistoricalData;
+  const canEditCompletedDate = Boolean(detail?.canEditCompletedDate);
+  const requiresCompletedDate = Boolean(detail?.requiresCompletedDate);
+  const completedDateMin = toDayKey(detail?.completedDateMin);
+  const completedDateMax = toDayKey(detail?.completedDateMax);
 
   const [currentProgressStatus, setCurrentProgressStatus] = React.useState("");
   const [reportReason, setReportReason] = React.useState("");
@@ -1808,20 +2197,9 @@ export default function WorkReportEditorPage(
   const canEditReportData = canEdit && !reportDataLocked;
   const [fieldValues, setFieldValues] = React.useState<DynamicFormRuntimeValues>({});
   const [rowLabelsByBlock, setRowLabelsByBlock] = React.useState<RowLabelStateMap>({});
-  const [recordRowsByBlock, setRecordRowsByBlock] = React.useState<RecordRowsByBlock>({});
   const selectedBlockRowLabels = React.useMemo(
     () => (selectedReportBlock ? rowLabelsByBlock[selectedReportBlock.blockId] ?? [] : []),
     [selectedReportBlock, rowLabelsByBlock],
-  );
-  const selectedRecordRows = React.useMemo(
-    () => (selectedReportBlock ? recordRowsByBlock[selectedReportBlock.blockId] ?? [] : []),
-    [recordRowsByBlock, selectedReportBlock],
-  );
-  const selectedRecordSpec = React.useMemo(
-    () => parseRecordTableSpecJson(
-      selectedRenderableBlock?.recordTableSpecJson ?? selectedReportBlock?.recordTableSpecJson,
-    ),
-    [selectedRenderableBlock?.recordTableSpecJson, selectedReportBlock?.recordTableSpecJson],
   );
 
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
@@ -1844,6 +2222,7 @@ export default function WorkReportEditorPage(
 
   React.useEffect(() => {
     latestWorkbookPayloadRef.current = {};
+    latestWorkbookIssuesRef.current = {};
   }, [detail?.id, detail?.tableValuesJson, detail?.updatedAtUtc]);
 
   React.useEffect(() => {
@@ -1885,12 +2264,10 @@ export default function WorkReportEditorPage(
   React.useEffect(() => {
     if (!detail) {
       setRowLabelsByBlock({});
-      setRecordRowsByBlock({});
       return;
     }
 
     setRowLabelsByBlock(buildInitialRowLabelsByBlock(detail, reportBlocks));
-    setRecordRowsByBlock(buildInitialRecordRowsByBlock(detail, reportBlocks));
   }, [detail, reportBlockKeys, reportBlocks]);
 
   const handleDynamicFieldChange = React.useCallback(
@@ -1935,17 +2312,6 @@ export default function WorkReportEditorPage(
     [selectedReportBlock],
   );
 
-  const handleSelectedRecordRowsChange = React.useCallback(
-    (rows: RecordTableRuntimeRow[]) => {
-      if (!selectedReportBlock) return;
-      setRecordRowsByBlock((prev) => ({
-        ...prev,
-        [selectedReportBlock.blockId]: rows,
-      }));
-    },
-    [selectedReportBlock],
-  );
-
   const handleSaveDraft = async (payload?: WorkbookSavePayload) => {
     if (!detail) return;
 
@@ -1955,6 +2321,29 @@ export default function WorkReportEditorPage(
         ...latestWorkbookPayloadRef.current,
         [payloadBlockId]: payload.values1D,
       };
+      latestWorkbookIssuesRef.current = {
+        ...latestWorkbookIssuesRef.current,
+        [payloadBlockId]: payload.validationIssues ?? [],
+      };
+    }
+
+    if (!reportDataLocked) {
+      const tableIssue = getFirstWorkbookValidationIssue(
+        reportBlocks,
+        latestWorkbookIssuesRef.current,
+      );
+      if (tableIssue) {
+        showMessage(`Dữ liệu bảng không hợp lệ: ${tableIssue.block.label} - ${tableIssue.issue.message}`);
+        return;
+      }
+    }
+
+    if (!reportDataLocked && dynamicFormRuntime) {
+      const invalidField = getInvalidDynamicField(dynamicFormRuntime.fields, fieldValues);
+      if (invalidField) {
+        showMessage(getDynamicFieldValidationMessage(invalidField));
+        return;
+      }
     }
 
     const valuesByBlock = buildWorkbookValuesByBlock(
@@ -1978,8 +2367,8 @@ export default function WorkReportEditorPage(
       reportBlocks,
       valuesByBlock,
       rowLabelsByBlock,
-      recordRowsByBlock,
     );
+    const completedDatePayload = canEditCompletedDate ? dayKeyToApiDate(completedDate) : null;
 
     try {
       await saveDraft({
@@ -1997,7 +2386,7 @@ export default function WorkReportEditorPage(
           difficulties: difficulties.trim() || null,
           proposedSolution: proposedSolution.trim() || null,
           startedDate: dayKeyToApiDate(startedDate),
-          completedDate: dayKeyToApiDate(completedDate),
+          completedDate: completedDatePayload,
           lateReason: lateReason.trim() || null,
           note: null,
         },
@@ -2020,8 +2409,8 @@ export default function WorkReportEditorPage(
       return;
     }
 
-    if (isHistoricalData && !completedDate) {
-      showMessage("Dữ liệu từ quá khứ bắt buộc có ngày hoàn thành.");
+    if (requiresCompletedDate && !completedDate) {
+      showMessage("Báo cáo này bắt buộc có ngày hoàn thành.");
       return;
     }
 
@@ -2030,8 +2419,37 @@ export default function WorkReportEditorPage(
       return;
     }
 
+    if (completedDate && completedDateMin && completedDate < completedDateMin) {
+      showMessage("Ngày hoàn thành nằm ngoài khoảng được phép của kỳ báo cáo.");
+      return;
+    }
+
+    if (completedDate && completedDateMax && completedDate > completedDateMax) {
+      showMessage("Ngày hoàn thành nằm ngoài khoảng được phép của kỳ báo cáo.");
+      return;
+    }
+
     if (!reportDataLocked && dynamicFormTemplateId && !dynamicFormRuntime) {
       showMessage("Chưa tải xong trường bổ sung.");
+      return;
+    }
+
+    if (!reportDataLocked) {
+      const tableIssue = getFirstWorkbookValidationIssue(
+        reportBlocks,
+        latestWorkbookIssuesRef.current,
+      );
+      if (tableIssue) {
+        showMessage(`Dữ liệu bảng không hợp lệ: ${tableIssue.block.label} - ${tableIssue.issue.message}`);
+        return;
+      }
+    }
+
+    const invalidDynamicField = !reportDataLocked && dynamicFormRuntime
+      ? getInvalidDynamicField(dynamicFormRuntime.fields, fieldValues)
+      : null;
+    if (invalidDynamicField) {
+      showMessage(getDynamicFieldValidationMessage(invalidDynamicField));
       return;
     }
 
@@ -2047,6 +2465,8 @@ export default function WorkReportEditorPage(
       );
       return;
     }
+
+    const completedDatePayload = canEditCompletedDate ? dayKeyToApiDate(completedDate) : null;
 
     try {
       const valuesByBlock = buildWorkbookValuesByBlock(
@@ -2069,7 +2489,6 @@ export default function WorkReportEditorPage(
         reportBlocks,
         valuesByBlock,
         rowLabelsByBlock,
-        recordRowsByBlock,
       );
 
       await saveDraft({
@@ -2087,7 +2506,7 @@ export default function WorkReportEditorPage(
           difficulties: difficulties.trim() || null,
           proposedSolution: proposedSolution.trim() || null,
           startedDate: dayKeyToApiDate(startedDate),
-          completedDate: dayKeyToApiDate(completedDate),
+          completedDate: completedDatePayload,
           lateReason: lateReason.trim() || null,
           note: null,
         },
@@ -2107,7 +2526,7 @@ export default function WorkReportEditorPage(
           difficulties: difficulties.trim() || null,
           proposedSolution: proposedSolution.trim() || null,
           startedDate: dayKeyToApiDate(startedDate),
-          completedDate: dayKeyToApiDate(completedDate),
+          completedDate: completedDatePayload,
           lateReason: lateReason.trim() || null,
           note: null,
         },
@@ -2295,16 +2714,6 @@ export default function WorkReportEditorPage(
                   />
                 </Stack>
               )}
-              {isRecordTableBlock(selectedReportBlock) ? (
-                <RecordTableRuntimeEditor
-                  spec={selectedRecordSpec}
-                  rows={selectedRecordRows}
-                  readOnly={!canEditReportData}
-                  disabled={busy}
-                  onChange={handleSelectedRecordRowsChange}
-                />
-              ) : (
-                <>
               <Box sx={{ height: 520, minHeight: 320 }}>
                 <WorkbookDataGrid
                   initialSpec={selectedRenderableBlock?.spec ?? selectedReportBlock?.spec ?? detail.spec}
@@ -2331,6 +2740,10 @@ export default function WorkReportEditorPage(
                         latestWorkbookPayloadRef.current[selectedReportBlock.blockId] ??
                         selectedBlockValues,
                     };
+                    latestWorkbookIssuesRef.current = {
+                      ...latestWorkbookIssuesRef.current,
+                      [selectedReportBlock.blockId]: payload?.validationIssues ?? [],
+                    };
                   }}
                   onSave={(payload) => {
                     if (!selectedReportBlock) return;
@@ -2338,9 +2751,14 @@ export default function WorkReportEditorPage(
                       ...latestWorkbookPayloadRef.current,
                       [selectedReportBlock.blockId]: payload.values1D,
                     };
+                    latestWorkbookIssuesRef.current = {
+                      ...latestWorkbookIssuesRef.current,
+                      [selectedReportBlock.blockId]: payload.validationIssues,
+                    };
                     void handleSaveDraft({
                       blockId: selectedReportBlock.blockId,
                       values1D: payload.values1D,
+                      validationIssues: payload.validationIssues,
                     });
                   }}
                 />
@@ -2350,12 +2768,11 @@ export default function WorkReportEditorPage(
                 block={selectedReportBlock}
                 rowLabels={selectedBlockRowLabels}
                 allowedCodes={selectedBlockAllowedRowLabelCodes}
+                allowedDataTypes={[selectedBlockRowLabelDataType]}
                 canEdit={canEditReportData}
                 busy={busy}
                 onChange={handleSelectedBlockRowLabelChange}
               />
-                </>
-              )}
             </Stack>
           </CardContent>
         </Card>
@@ -2391,6 +2808,10 @@ export default function WorkReportEditorPage(
           busy={busy}
           overdue={requiresLateReason}
           isHistoricalData={isHistoricalData}
+          canEditCompletedDate={canEditCompletedDate}
+          requiresCompletedDate={requiresCompletedDate}
+          completedDateMin={completedDateMin || undefined}
+          completedDateMax={completedDateMax || undefined}
           startedDate={startedDate}
           completedDate={completedDate}
           currentProgressStatus={currentProgressStatus}
@@ -2420,7 +2841,8 @@ export default function WorkReportEditorPage(
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Alert severity="warning">
-              Báo cáo sẽ quay về trạng thái <b>Nháp</b>. Đã duyệt thì không được thu hồi.
+              Báo cáo sẽ quay về trạng thái <b>Nháp</b>
+              {detail?.status === WorkAssignmentReportStatus.Approved ? ". Báo cáo tự duyệt chỉ thu hồi được trước khi người duyệt xác nhận." : "."}
             </Alert>
 
             <TextField

@@ -43,6 +43,19 @@ function copyText(text: string) {
   }
 }
 
+function formatTableMode(value?: string | null) {
+  if (value === "APPEND_ROWS") return "Thêm dòng";
+  if (value === "APPEND_COLUMNS") return "Thêm cột";
+  return "Lưới cố định";
+}
+
+function formatHeaderKind(value?: string | null) {
+  if (value === "TOP") return "Bảng ngang";
+  if (value === "LEFT") return "Bảng dọc";
+  if (value === "MATRIX") return "Bảng ma trận";
+  return "Chưa xác định";
+}
+
 export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
   rows,
   total,
@@ -166,6 +179,20 @@ export const DynamicExcelListTable: React.FC<DynamicExcelListTableProps> = ({
         sortable: true,
         width: "35%",
         render: (row) => <CommonLabelText text={row.name} />,
+      },
+      {
+        field: "headerKind",
+        header: "Loại bảng",
+        sortable: false,
+        width: 140,
+        render: (row) => <Chip size="small" variant="outlined" label={formatHeaderKind(row.headerKind)} />,
+      },
+      {
+        field: "tableMode",
+        header: "Kiểu nhập",
+        sortable: false,
+        width: 140,
+        render: (row) => <Chip size="small" variant="outlined" label={formatTableMode(row.tableMode)} />,
       },
       {
         field: "createdAtUtc",

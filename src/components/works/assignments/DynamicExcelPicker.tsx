@@ -22,14 +22,19 @@ import PreviewIcon from "@mui/icons-material/Preview";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 
-import { useSearchDynamicExcelMutation } from "../../../api/dynamicExcelApi";
+import {
+  type DynamicExcelHeaderKind,
+  type DynamicExcelTableMode,
+  useSearchDynamicExcelMutation,
+} from "../../../api/dynamicExcelApi";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
 type DynamicExcelOption = {
   id: string;
   code: string;
   name: string;
-  labels: string[];
+  headerKind?: DynamicExcelHeaderKind | null;
+  tableMode?: DynamicExcelTableMode | null;
   createdByUsername: string;
   createdAtUtc: string;
 };
@@ -44,6 +49,19 @@ type DynamicExcelPickerProps = {
   triggerMode?: "field" | "button";
   triggerLabel?: string;
 };
+
+function formatHeaderKind(value?: DynamicExcelHeaderKind | null) {
+  if (value === "TOP") return "Bảng ngang";
+  if (value === "LEFT") return "Bảng dọc";
+  if (value === "MATRIX") return "Bảng ma trận";
+  return "Chưa xác định";
+}
+
+function formatTableMode(value?: DynamicExcelTableMode | null) {
+  if (value === "APPEND_ROWS") return "Thêm dòng";
+  if (value === "APPEND_COLUMNS") return "Thêm cột";
+  return "Lưới cố định";
+}
 
 export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(function DynamicExcelPicker({
   value,
@@ -187,9 +205,8 @@ export const DynamicExcelPicker: React.FC<DynamicExcelPickerProps> = React.memo(
                       secondaryTypographyProps={{ component: "div" }}
                       secondary={
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: "wrap" }}>
-                          {(x.labels ?? []).slice(0, 4).map((lb) => (
-                            <Chip key={lb} size="small" label={lb} />
-                          ))}
+                          <Chip size="small" variant="outlined" label={formatHeaderKind(x.headerKind)} />
+                          <Chip size="small" variant="outlined" label={formatTableMode(x.tableMode)} />
                           <Typography variant="caption" color="text.secondary" component="span">
                             {x.createdByUsername}
                           </Typography>

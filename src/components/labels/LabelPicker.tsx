@@ -12,12 +12,13 @@ import {
 
 import {
   type LabelDataType,
+  type LabelUsage,
   type LabelRow,
   useSearchLabelsMutation,
 } from "../../api/labelApi";
 import { formatLabelDataType, LabelSwatch } from "./labelUi";
 
-export type LabelPickerUsage = "generic" | "tag" | "row" | "statistic";
+export type LabelPickerUsage = "classification" | "tag" | "statistic" | "tableTarget";
 
 type LabelPickerProps = {
   value?: string[];
@@ -47,7 +48,7 @@ function uniqueCodes(values?: string[]) {
   );
 }
 
-function fallbackLabel(code: string): LabelRow {
+function fallbackLabel(code: string, usage: LabelPickerUsage): LabelRow {
   return {
     id: `code:${code}`,
     code,
@@ -55,6 +56,7 @@ function fallbackLabel(code: string): LabelRow {
     description: null,
     color: null,
     groupCode: null,
+    usage: searchUsageForPicker(usage) ?? "CLASSIFICATION",
     dataType: "NUMBER",
     scopeType: "GLOBAL",
     scopeId: null,
@@ -64,6 +66,14 @@ function fallbackLabel(code: string): LabelRow {
     createdAtUtc: "",
     updatedAtUtc: "",
   };
+}
+
+function searchUsageForPicker(usage: LabelPickerUsage): LabelUsage | null {
+  if (usage === "classification") return "CLASSIFICATION";
+  if (usage === "tag") return "CLASSIFICATION";
+  if (usage === "tableTarget") return "TABLE_TARGET";
+  if (usage === "statistic") return "STATISTIC";
+  return null;
 }
 
 function labelMetaText(row: LabelRow, showDataType: boolean) {
@@ -81,7 +91,7 @@ export default function LabelPicker({
   allowedCodes,
   allowedDataTypes,
   groupCode,
-  usage = "generic",
+  usage = "classification",
   label = "Nhãn",
   placeholder = "Chọn nhãn",
   helperText,
@@ -94,7 +104,7 @@ export default function LabelPicker({
 }: LabelPickerProps) {
   const [inputValue, setInputValue] = useState("");
   const [search, searchState] = useSearchLabelsMutation();
-  const showDataType = usage === "generic" || usage === "statistic";
+  const showDataType = usage === "statistic" || usage === "tableTarget";
 
   const selectedCodes = useMemo(() => uniqueCodes(value), [value]);
   const allowedSet = useMemo(() => {
@@ -114,6 +124,7 @@ export default function LabelPicker({
       search({
         q: inputValue.trim() || null,
         groupCode: groupCode?.trim() || null,
+        usage: searchUsageForPicker(usage),
         isActive: true,
         page: 0,
         pageSize: 50,
@@ -123,7 +134,7 @@ export default function LabelPicker({
     }, 250);
 
     return () => window.clearTimeout(handle);
-  }, [disabled, groupCode, inputValue, lazySearch, search]);
+  }, [disabled, groupCode, inputValue, lazySearch, search, usage]);
 
   const options = useMemo(() => {
     const rows = searchState.data?.rows ?? [];
@@ -136,9 +147,9 @@ export default function LabelPicker({
 
   const selectedRows = useMemo(() => {
     return selectedCodes.map(
-      (code) => options.find((row) => row.code === code) ?? fallbackLabel(code),
+      (code) => options.find((row) => row.code === code) ?? fallbackLabel(code, usage),
     );
-  }, [options, selectedCodes]);
+  }, [options, selectedCodes, usage]);
 
   const mergedOptions = useMemo(() => {
     const seen = new Set<string>();

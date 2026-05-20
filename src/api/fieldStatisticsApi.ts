@@ -49,6 +49,7 @@ export type FieldStatisticSummaryRow = {
   average?: number | null;
   trueCount: number;
   falseCount: number;
+  earliestDateUtc?: string | null;
   latestDateUtc?: string | null;
   reportCount: number;
   updatedAtUtc: string;
@@ -82,6 +83,7 @@ export type FieldTextConcatRequest = {
   dynamicFormTemplateId: string;
   fieldId?: string | null;
   fieldKey?: string | null;
+  bucketKey?: string | null;
   q?: string | null;
   periodKey?: string | null;
   periodKeyFrom?: string | null;
@@ -113,8 +115,14 @@ export type FieldTextConcatRow = {
   text: string;
   charCount: number;
   rowTruncated: boolean;
+  items?: FieldTextConcatItem[];
   submittedAtUtc?: string | null;
   approvedAtUtc?: string | null;
+};
+
+export type FieldTextConcatItem = {
+  value: string;
+  label: string;
 };
 
 export type FieldTextConcatResponse = {

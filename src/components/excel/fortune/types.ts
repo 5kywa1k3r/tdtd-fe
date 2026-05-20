@@ -1,6 +1,49 @@
 export type HeaderKind = "TOP" | "LEFT" | "MATRIX";
 
-export type HeaderSpec =
+export type DynamicExcelDataType =
+  | "NUMBER"
+  | "DATE"
+  | "FULL_DATE"
+  | "BOOLEAN"
+  | "SHORT_TEXT"
+  | "MULTI_SELECT";
+
+export type DynamicExcelStringListOption = {
+  code: string;
+  label: string;
+};
+
+export type DataTypeOverride =
+  | {
+      scope: "COLUMN";
+      index: number;
+      dataType: DynamicExcelDataType;
+      options?: DynamicExcelStringListOption[];
+    }
+  | {
+      scope: "ROW";
+      index: number;
+      dataType: DynamicExcelDataType;
+      options?: DynamicExcelStringListOption[];
+    }
+  | {
+      scope: "RANGE";
+      id?: string;
+      r0: number;
+      c0: number;
+      r1: number;
+      c1: number;
+      dataType: DynamicExcelDataType;
+      options?: DynamicExcelStringListOption[];
+    };
+
+export type HeaderSpecMetadata = {
+  defaultDataType?: DynamicExcelDataType;
+  defaultOptions?: DynamicExcelStringListOption[];
+  dataTypeOverrides?: DataTypeOverride[];
+};
+
+export type HeaderSpec = (
   | {
       kind: "TOP";
       topRows: number;   // số hàng header
@@ -19,7 +62,8 @@ export type HeaderSpec =
       topCols: number;
       leftRows: number;
       leftCols: number;
-    };
+    }
+) & HeaderSpecMetadata;
 
 export type Anchor = { r0: number; c0: number };
 

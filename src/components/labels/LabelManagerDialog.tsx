@@ -29,6 +29,7 @@ import {
   type LabelRow,
   type LabelScopeType,
   type LabelSearchReq,
+  type LabelUsage,
   useCreateLabelMutation,
   useDeleteLabelMutation,
   useSearchLabelsMutation,
@@ -38,11 +39,14 @@ import { UITextKey, uiText } from '../../constants/uiText';
 import { getApiErrorMessage } from "../../utils/apiError";
 import {
   formatLabelDataType,
+  formatLabelUsage,
   isValidLabelColor,
   LABEL_DATA_TYPE_OPTIONS,
+  LABEL_USAGE_OPTIONS,
   LabelColorPalette,
   LabelColorPreview,
   LabelPreviewChip,
+  labelUsageUsesDataType,
 } from "./labelUi";
 
 type LabelFormState = {
@@ -52,6 +56,7 @@ type LabelFormState = {
   description: string;
   color: string;
   groupCode: string;
+  usage: LabelUsage;
   dataType: LabelRow["dataType"];
   scopeType: LabelScopeType;
   scopeId: string;
@@ -64,6 +69,7 @@ const emptyForm = (): LabelFormState => ({
   description: "",
   color: "#2563EB",
   groupCode: "",
+  usage: "CLASSIFICATION",
   dataType: "NUMBER",
   scopeType: "GLOBAL",
   scopeId: "",
@@ -173,6 +179,7 @@ export default function LabelManagerDialog({
       description: row.description ?? "",
       color: row.color ?? "#2563EB",
       groupCode: row.groupCode ?? "",
+      usage: row.usage ?? "CLASSIFICATION",
       dataType: row.dataType ?? "NUMBER",
       scopeType: row.scopeType,
       scopeId: row.scopeId ?? "",
@@ -190,6 +197,7 @@ export default function LabelManagerDialog({
       description: form.description.trim() || null,
       color: form.color.trim() || null,
       groupCode: form.groupCode.trim() || null,
+      usage: form.usage,
       dataType: form.dataType,
       scopeType: isSystemAdmin ? form.scopeType : null,
       scopeId: isSystemAdmin ? form.scopeId.trim() || null : null,
@@ -206,6 +214,7 @@ export default function LabelManagerDialog({
             description: payload.description,
             color: payload.color,
             groupCode: payload.groupCode,
+            usage: payload.usage,
             dataType: payload.dataType,
             isActive: payload.isActive,
           },
@@ -301,8 +310,61 @@ export default function LabelManagerDialog({
                       direction="row"
                       spacing={1}
                       alignItems="center"
-                      sx={{ px: 1.25, py: 1, borderBottom: "1px solid", borderColor: "divider" }}
+                      onClick={() => startEdit(row)}
+                      sx={{
+                        px: 1.25,
+                        py: 1,
+                        borderBottom: "1px solid",
+                        borderColor: "divider",
+                        cursor: "pointer",
+                        "&:hover": { bgcolor: "action.hover" },
+                      }}
                     >
+                      <Stack direction="row" spacing={0.25} flexShrink={0}>
+                        <Tooltip title={uiText(UITextKey.TextTaoNhanMoi)}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startCreate();
+                              }}
+                            >
+                              <AddIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={uiText(UITextKey.TextSuaNhan)}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={!row.canManage || row.isSystem || busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEdit(row);
+                              }}
+                            >
+                              <EditOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={uiText(UITextKey.TextXoaNhan)}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              disabled={!row.canManage || row.isSystem || busy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void removeLabel(row);
+                              }}
+                            >
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Stack>
                       <Box
                         sx={{
                           width: 14,
@@ -315,37 +377,19 @@ export default function LabelManagerDialog({
                         }}
                       />
                       <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Stack direction="row" spacing={0.75} alignItems="center" minWidth={0}>
+                        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0, maxWidth: "100%" }}>
                           <LabelPreviewChip name={row.name} code={row.code} color={row.color} />
                           {!row.isActive && <Chip size="small" label={uiText(UITextKey.TextInactive)} variant="outlined" />}
                         </Stack>
                         <Typography variant="caption" color="text.secondary" noWrap>
-                          {row.code} | {formatLabelDataType(row.dataType)} | {row.groupCode || "-"} | {scopeLabel(row)}
+                          {[
+                            formatLabelUsage(row.usage),
+                            labelUsageUsesDataType(row.usage) ? formatLabelDataType(row.dataType) : null,
+                            row.groupCode || "-",
+                            scopeLabel(row),
+                          ].filter(Boolean).join(" | ")}
                         </Typography>
                       </Box>
-                      <Tooltip title={uiText(UITextKey.TextSuaNhan)}>
-                        <span>
-                          <IconButton
-                            size="small"
-                            disabled={!row.canManage || row.isSystem || busy}
-                            onClick={() => startEdit(row)}
-                          >
-                            <EditOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={uiText(UITextKey.TextXoaNhan)}>
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            disabled={!row.canManage || row.isSystem || busy}
-                            onClick={() => void removeLabel(row)}
-                          >
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
                     </Stack>
                   ))
                 )}
@@ -382,6 +426,7 @@ export default function LabelManagerDialog({
                 value={form.code}
                 disabled={Boolean(form.id) || busy}
                 onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))}
+                InputLabelProps={{ shrink: true }}
                 required
               />
               <TextField
@@ -390,6 +435,7 @@ export default function LabelManagerDialog({
                 value={form.name}
                 disabled={busy}
                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                InputLabelProps={{ shrink: true }}
                 required
               />
               <Stack direction="row" spacing={1}>
@@ -412,6 +458,24 @@ export default function LabelManagerDialog({
                   helperText={!isValidLabelColor(form.color) ? uiText(UITextKey.TextMauNhanKhongHopLe) : " "}
                 />
               </Stack>
+              <TextField
+                select
+                size="small"
+                label="Mục đích sử dụng"
+                value={form.usage}
+                disabled={busy}
+                helperText={labelUsageUsesDataType(form.usage) ? "Kiểu dữ liệu bắt buộc và phải khớp với nơi gắn nhãn." : "Nhãn này chỉ dùng để phân loại, không tham gia thống kê."}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, usage: event.target.value as LabelUsage }))
+                }
+                InputLabelProps={{ shrink: true }}
+              >
+                {LABEL_USAGE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
               <Stack spacing={1}>
                 <Typography variant="caption" color="text.secondary">
                   {uiText(UITextKey.TextMauGoiY)}
@@ -429,27 +493,31 @@ export default function LabelManagerDialog({
                   name={form.name}
                   color={form.color}
                   groupCode={form.groupCode}
+                  usage={form.usage}
                   dataType={form.dataType}
                   showDataType
                 />
               </Stack>
-              <TextField
-                select
-                size="small"
-                label={uiText(UITextKey.TextKieuDuLieuMacDinhThongKe)}
-                value={form.dataType}
-                disabled={busy}
-                helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
-                }
-              >
-                {LABEL_DATA_TYPE_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </TextField>
+              {labelUsageUsesDataType(form.usage) && (
+                <TextField
+                  select
+                  size="small"
+                  label="Kiểu dữ liệu"
+                  value={form.dataType}
+                  disabled={busy}
+                  helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
+                  }
+                  InputLabelProps={{ shrink: true }}
+                >
+                  {LABEL_DATA_TYPE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
               {isSystemAdmin && !form.id && (
                 <Stack direction="row" spacing={1}>
                   <TextField

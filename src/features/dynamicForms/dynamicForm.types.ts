@@ -1,8 +1,10 @@
 export type DynamicFormFieldType =
   | "shortText"
   | "longText"
+  | "stringList"
   | "number"
   | "date"
+  | "fullDate"
   | "singleSelect"
   | "multiSelect"
   | "boolean";
@@ -37,23 +39,19 @@ export type DynamicFormTableMetricRule = {
   columnKey?: string | null;
 };
 
-export type DynamicFormStatisticColumnLabel = {
-  columnIndex?: number | null;
-  columnKey?: string | null;
-  header?: string | null;
-  statisticLabelCode: string;
-  aggregateOps?: string[];
-  showInDetail?: boolean;
-  showInTree?: boolean;
+export type DynamicFormMetricLabelRange = {
+  r0: number;
+  c0: number;
+  r1: number;
+  c1: number;
 };
 
-export type DynamicFormStatisticColumn = {
-  columnIndex?: number | null;
-  columnKey?: string | null;
-  header?: string | null;
-  aggregateOps?: string[];
-  showInDetail?: boolean;
-  showInTree?: boolean;
+export type DynamicFormMetricLabelTarget = {
+  targetKind: "METRIC" | "RANGE";
+  statisticLabelCode: string;
+  metricKey?: string | null;
+  range?: DynamicFormMetricLabelRange | null;
+  dataType?: string | null;
 };
 
 export type DynamicFormSummaryTemplateRepeatFor =
@@ -86,10 +84,8 @@ export type DynamicFormSection = {
 export type DynamicFormField = {
   id: string;
   sectionId: string;
-  key: string;
+  key?: string | null;
   name?: string | null;
-  displayName?: string | null;
-  label: string;
   type: DynamicFormFieldType;
   required: boolean;
   colSpan: number;

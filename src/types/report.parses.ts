@@ -214,12 +214,14 @@ export function applyValues1DToWorkbook(
       const col = c0 + cc;
       const raw = values1D[idx];
 
+      const displayValue = Array.isArray(raw) ? raw.join("; ") : String(raw);
+
       data[row][col] =
-        raw == null || raw === ""
+        raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)
           ? null
           : {
-              v: raw,
-              m: String(raw),
+              v: displayValue,
+              m: displayValue,
             };
     }
   }

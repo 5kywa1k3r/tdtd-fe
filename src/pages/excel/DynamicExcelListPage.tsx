@@ -60,7 +60,6 @@ export default function DynamicExcelListPage() {
         : null,
       q: undefined,
       createdBy: undefined,
-      labels: null,
       page,
       pageSize,
       sortField: sortField ?? "createdAtUtc",
@@ -172,7 +171,7 @@ export default function DynamicExcelListPage() {
               Bạn có chắc muốn xóa bảng <b>{deleteTarget?.code}</b>?
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Xóa mềm (soft delete).
+              Xóa mềm.
             </Typography>
           </>
         }

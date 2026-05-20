@@ -9,7 +9,7 @@ import {
   type Theme,
 } from "@mui/material";
 
-import type { LabelDataType } from "../../api/labelApi";
+import type { LabelDataType, LabelUsage } from "../../api/labelApi";
 
 export const LABEL_COLOR_PALETTE = [
   "#2563EB",
@@ -34,10 +34,39 @@ export const LABEL_FALLBACK_COLOR = "#64748B";
 
 export const LABEL_DATA_TYPE_OPTIONS: Array<{ value: LabelDataType; label: string }> = [
   { value: "NUMBER", label: "Số" },
-  { value: "SHORT_TEXT", label: "Văn bản ngắn" },
-  { value: "LONG_TEXT", label: "Văn bản dài" },
+  { value: "SHORT_TEXT", label: "Nội dung cố định" },
+  { value: "STRING_LIST", label: "Danh sách nội dung" },
   { value: "DATE", label: "Ngày" },
   { value: "BOOLEAN", label: "Có/không" },
+];
+
+export const LABEL_USAGE_OPTIONS: Array<{
+  value: LabelUsage;
+  label: string;
+  description: string;
+  usesDataType: boolean;
+}> = [
+  {
+    value: "CLASSIFICATION",
+    label: "Thẻ phân loại",
+    description:
+      "Dùng để gắn tag cho biểu mẫu, phần hoặc block bảng. Chỉ phục vụ tìm kiếm/nhóm/gợi ý mapping, không tạo số liệu thống kê và không cần kiểu dữ liệu.",
+    usesDataType: false,
+  },
+  {
+    value: "STATISTIC",
+    label: "Nhãn thống kê",
+    description:
+      "Dùng cho trường hoặc cột đã bật thống kê. Bắt buộc có kiểu dữ liệu và kiểu này phải khớp với trường/cột được gắn nhãn.",
+    usesDataType: true,
+  },
+  {
+    value: "TABLE_TARGET",
+    label: "Nhãn vị trí bảng",
+    description:
+      "Dùng cho vị trí trong bảng Excel động như dòng, cột, ô hoặc vùng. Kiểu dữ liệu của nhãn phải khớp với vị trí được gắn.",
+    usesDataType: true,
+  },
 ];
 
 export function normalizeLabelColor(value?: string | null) {
@@ -61,6 +90,21 @@ export function getReadableTextColor(color?: string | null) {
 
 export function formatLabelDataType(dataType?: string | null) {
   return LABEL_DATA_TYPE_OPTIONS.find((item) => item.value === dataType)?.label ?? "Số";
+}
+
+export function formatLabelUsage(usage?: string | null) {
+  return LABEL_USAGE_OPTIONS.find((item) => item.value === usage)?.label ?? "Thẻ phân loại";
+}
+
+export function formatLabelUsageDescription(usage?: string | null) {
+  return (
+    LABEL_USAGE_OPTIONS.find((item) => item.value === usage)?.description ??
+    "Chọn nhãn theo đúng nơi sẽ sử dụng để hệ thống lọc picker và kiểm tra dữ liệu chính xác."
+  );
+}
+
+export function labelUsageUsesDataType(usage?: string | null) {
+  return usage === "STATISTIC" || usage === "TABLE_TARGET";
 }
 
 export function LabelSwatch({
@@ -168,6 +212,7 @@ export function LabelColorPreview({
   name,
   color,
   groupCode,
+  usage,
   dataType,
   showDataType = false,
 }: {
@@ -175,13 +220,15 @@ export function LabelColorPreview({
   name: string;
   color?: string | null;
   groupCode?: string | null;
+  usage?: string | null;
   dataType?: string | null;
   showDataType?: boolean;
 }) {
   const details = [
     code.trim() || "-",
+    usage ? formatLabelUsage(usage) : null,
     groupCode?.trim() || null,
-    showDataType ? formatLabelDataType(dataType) : null,
+    showDataType && labelUsageUsesDataType(usage) ? formatLabelDataType(dataType) : null,
   ].filter(Boolean);
 
   return (

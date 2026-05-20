@@ -74,6 +74,11 @@ export interface WorkReportPeriodRow {
   linkedScheduledPeriodId?: string | null;
   startedDate?: string | null;
   completedDate?: string | null;
+  canEditCompletedDate?: boolean | null;
+  requiresCompletedDate?: boolean | null;
+  completedDateMin?: string | null;
+  completedDateMax?: string | null;
+  completedDatePolicyReason?: string | null;
   isHistoricalData?: boolean | null;
   historicalDataApproved?: boolean | null;
   historicalDataApprovedAtUtc?: string | null;
@@ -147,6 +152,11 @@ export interface WorkAssignmentReportResponse {
   linkedScheduledPeriodId?: string | null;
   startedDate?: string | null;
   completedDate?: string | null;
+  canEditCompletedDate?: boolean | null;
+  requiresCompletedDate?: boolean | null;
+  completedDateMin?: string | null;
+  completedDateMax?: string | null;
+  completedDatePolicyReason?: string | null;
   isHistoricalData?: boolean | null;
   historicalDataApproved?: boolean | null;
   historicalDataApprovedAtUtc?: string | null;
@@ -165,8 +175,6 @@ export interface WorkAssignmentReportResponse {
   dynamicExcelTemplateId?: string | null;
   dynamicExcelTemplateCode?: string | null;
   dynamicExcelTemplateName?: string | null;
-  tableKind?: "NUMERIC_GRID" | "RECORD_TABLE" | string | null;
-  recordTableSpecJson?: string | null;
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
@@ -223,6 +231,13 @@ export interface WorkAssignmentReportResponse {
 
   approvedAtUtc?: string | null;
   approvedByUserId?: string | null;
+  autoApproved?: boolean | null;
+  autoApprovedAtUtc?: string | null;
+  autoApprovedByUserId?: string | null;
+  autoApproveConditionSnapshotJson?: string | null;
+  autoApprovalLocked?: boolean | null;
+  autoApprovalConfirmedAtUtc?: string | null;
+  autoApprovalConfirmedByUserId?: string | null;
 
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -289,6 +304,12 @@ export interface WorkAssignmentReportListRow {
 
   approvedAtUtc?: string | null;
   approvedByUserId?: string | null;
+  autoApproved?: boolean | null;
+  autoApprovedAtUtc?: string | null;
+  autoApprovedByUserId?: string | null;
+  autoApprovalLocked?: boolean | null;
+  autoApprovalConfirmedAtUtc?: string | null;
+  autoApprovalConfirmedByUserId?: string | null;
 
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -325,7 +346,7 @@ export interface WorkAssignmentReportSearchRequest {
  * ========================= */
 
 export interface SaveWorkAssignmentReportDraftRequest {
-  values1D: Array<string | number | null>;
+  values1D: Array<string | string[] | number | boolean | null>;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
   dataOrigin?: WorkReportDataOrigin | string | null;
@@ -361,7 +382,7 @@ export interface ReturnWorkAssignmentReportRequest {
 }
 
 export interface SubmitWorkAssignmentReportRequest {
-  values1D?: Array<string | number | null>;
+  values1D?: Array<string | string[] | number | boolean | null>;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
   dataOrigin?: WorkReportDataOrigin | string | null;

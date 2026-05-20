@@ -1,5 +1,8 @@
 ﻿import React from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -22,6 +25,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import type { Sheet } from "@fortune-sheet/core";
 import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
@@ -117,10 +121,11 @@ type DynamicFormExcelBlockLike = {
   DynamicExcelName?: string | null;
   tableMode?: string | null;
   TableMode?: string | null;
-  tableKind?: string | null;
-  TableKind?: string | null;
   indexMap?: DynamicFormMetricMapLike[] | null;
   metricRules?: DynamicFormMetricRuleLike[] | null;
+  metricLabelTargets?: DynamicFormMetricLabelTargetLike[] | null;
+  dataRect?: DynamicFormMetricRangeLike | null;
+  DataRect?: DynamicFormMetricRangeLike | null;
   sourceBlockId?: string | null;
   sourceTableMode?: string | null;
   groupBy?: string[] | null;
@@ -142,6 +147,24 @@ type DynamicFormMetricMapLike = {
 type DynamicFormMetricRuleLike = {
   metricKey?: string | null;
   label?: string | null;
+};
+
+type DynamicFormMetricRangeLike = {
+  r0?: number | string | null;
+  c0?: number | string | null;
+  r1?: number | string | null;
+  c1?: number | string | null;
+  R0?: number | string | null;
+  C0?: number | string | null;
+  R1?: number | string | null;
+  C1?: number | string | null;
+};
+
+type DynamicFormMetricLabelTargetLike = {
+  metricKey?: string | null;
+  statisticLabelCode?: string | null;
+  range?: DynamicFormMetricRangeLike | null;
+  dataType?: string | null;
 };
 
 type DynamicFormSummaryOutputLayoutLike = {
@@ -184,10 +207,10 @@ const AGGREGATE_DRAFT_VALUE_SELECTORS: Array<{ value: AggregateDraftValueSelecto
 type DynamicFormExcelBlockResolution = {
   blockId: string;
   tableMode: DynamicFormTableMode;
-  tableKind?: string | null;
   dynamicExcelId?: string | null;
   dynamicExcelCode?: string | null;
   dynamicExcelName?: string | null;
+  metricLabelTargetCount: number;
   metricOptions: AggregateMetricOption[];
 };
 
@@ -296,6 +319,14 @@ function resolveMetricOptions(
   block: DynamicFormExcelBlockLike,
   blockId: string
 ): AggregateMetricOption[] {
+  return resolveConfiguredMetricOptions(block, blockId, normalizeTableMode(block.tableMode ?? block.TableMode));
+}
+
+function resolveConfiguredMetricOptions(
+  block: DynamicFormExcelBlockLike,
+  blockId: string,
+  tableMode: DynamicFormTableMode,
+): AggregateMetricOption[] {
   const labelByMetricKey = new Map(
     (Array.isArray(block.metricRules) ? block.metricRules : [])
       .map((rule) => {
@@ -305,72 +336,233 @@ function resolveMetricOptions(
       .filter((item): item is readonly [string, string | null] => Boolean(item))
   );
 
-  const fromIndexMap = (Array.isArray(block.indexMap) ? block.indexMap : [])
-    .map((item, fallbackIndex) => {
-      const index = Number(item?.index ?? fallbackIndex);
-      const rowKey = normalizeMetricPart(item?.rowKey, `row_${fallbackIndex + 1}`);
-      const columnKey = normalizeMetricPart(item?.columnKey, "value");
-      const metricKey =
-        normalizeOptionalText(item?.metricKey) ?? buildMetricKey(blockId, rowKey, columnKey);
-
-      return {
-        metricKey,
-        rowKey,
-        columnKey,
-        index: Number.isInteger(index) && index >= 0 ? index : fallbackIndex,
-        label: labelByMetricKey.get(metricKey) ?? null,
-      };
-    })
-    .filter((item) => Boolean(item.metricKey));
-
-  const options = fromIndexMap.length > 0
-    ? fromIndexMap
-    : buildFallbackMetricOptions(blockId, block.w ?? block.W, block.h ?? block.H);
-
+  const knownByMetricKey = new Map(
+    (Array.isArray(block.indexMap) ? block.indexMap : [])
+      .map((item, fallbackIndex) => {
+        const metric = buildMetricOptionFromMapItem(item, blockId, fallbackIndex);
+        return metric ? [metric.metricKey, metric] as const : null;
+      })
+      .filter((item): item is readonly [string, AggregateMetricOption] => Boolean(item))
+  );
+  const options: AggregateMetricOption[] = [];
   const seen = new Set<string>();
-  return options.filter((item) => {
-    if (seen.has(item.metricKey)) return false;
-    seen.add(item.metricKey);
-    return true;
+
+  const addOption = (option: AggregateMetricOption | null) => {
+    if (!option || seen.has(option.metricKey)) return;
+    seen.add(option.metricKey);
+    options.push({
+      ...option,
+      label: labelByMetricKey.get(option.metricKey) ?? option.label,
+    });
+  };
+
+  (Array.isArray(block.metricRules) ? block.metricRules : []).forEach((rule, fallbackIndex) => {
+    const metricKey = normalizeOptionalText(rule?.metricKey);
+    if (!metricKey) return;
+    addOption(knownByMetricKey.get(metricKey) ?? parseConfiguredMetricOption(metricKey, tableMode, fallbackIndex));
   });
+
+  (Array.isArray(block.metricLabelTargets) ? block.metricLabelTargets : []).forEach((target, fallbackIndex) => {
+    const metricKey = normalizeOptionalText(target?.metricKey);
+    const label = normalizeOptionalText(target?.statisticLabelCode);
+    if (metricKey) {
+      const option = knownByMetricKey.get(metricKey) ?? parseConfiguredMetricOption(metricKey, tableMode, fallbackIndex);
+      addOption(option ? { ...option, label: label ?? option.label } : null);
+      return;
+    }
+
+    const dataRect = normalizeMetricRange(block.dataRect ?? block.DataRect);
+    const range = normalizeMetricRange(target?.range);
+    if (!dataRect || !range) return;
+    expandMetricOptionRange(blockId, tableMode, dataRect, range, block.w ?? block.W, block.h ?? block.H)
+      .forEach((option) => addOption({ ...option, label: label ?? option.label }));
+  });
+
+  return options.sort((a, b) => (a.index ?? 0) - (b.index ?? 0) || a.metricKey.localeCompare(b.metricKey));
+}
+
+function buildMetricOptionFromMapItem(
+  item: DynamicFormMetricMapLike | null | undefined,
+  blockId: string,
+  fallbackIndex: number,
+): AggregateMetricOption | null {
+  if (!item) return null;
+  const index = Number(item.index ?? fallbackIndex);
+  const rowKey = normalizeMetricPart(item.rowKey, `row_${fallbackIndex + 1}`);
+  const columnKey = normalizeMetricPart(item.columnKey, "value");
+  const metricKey =
+    normalizeOptionalText(item.metricKey) ?? buildMetricKey(blockId, rowKey, columnKey);
+
+  return {
+    metricKey,
+    rowKey,
+    columnKey,
+    index: Number.isInteger(index) && index >= 0 ? index : fallbackIndex,
+    label: null,
+  };
+}
+
+function parseConfiguredMetricOption(
+  metricKey: string,
+  tableMode: DynamicFormTableMode,
+  fallbackIndex: number,
+): AggregateMetricOption {
+  const fixed = metricKey.match(/\.row:([^.]+)\.column:([^.]+)$/);
+  if (fixed) {
+    const rowKey = normalizeMetricPart(fixed[1], `row_${fallbackIndex + 1}`);
+    const columnKey = normalizeMetricPart(fixed[2], "value");
+    return {
+      metricKey,
+      rowKey,
+      columnKey,
+      index: indexFromRowColumn(rowKey, columnKey) ?? fallbackIndex,
+      label: null,
+    };
+  }
+
+  const appendColumn = metricKey.match(/\.column:([^.]+)$/);
+  if (tableMode === "APPEND_ROWS" && appendColumn) {
+    const columnKey = normalizeMetricPart(appendColumn[1], `col_${fallbackIndex + 1}`);
+    return {
+      metricKey,
+      rowKey: "APPEND_ROWS",
+      columnKey,
+      index: indexFromOrdinalPart(columnKey, "col_") ?? fallbackIndex,
+      label: null,
+    };
+  }
+
+  const appendRow = metricKey.match(/\.row:([^.]+)$/);
+  if (tableMode === "APPEND_COLUMNS" && appendRow) {
+    const rowKey = normalizeMetricPart(appendRow[1], `row_${fallbackIndex + 1}`);
+    return {
+      metricKey,
+      rowKey,
+      columnKey: "APPEND_COLUMNS",
+      index: indexFromOrdinalPart(rowKey, "row_") ?? fallbackIndex,
+      label: null,
+    };
+  }
+
+  return {
+    metricKey,
+    rowKey: tableMode === "APPEND_ROWS" ? "APPEND_ROWS" : `row_${fallbackIndex + 1}`,
+    columnKey: tableMode === "APPEND_COLUMNS" ? "APPEND_COLUMNS" : "value",
+    index: fallbackIndex,
+    label: null,
+  };
 }
 
 function resolveAppendRowsMetricOptions(
   block: DynamicFormExcelBlockLike,
   blockId: string
 ): AggregateMetricOption[] {
-  const width = getPositiveInt(block.w ?? block.W);
-  if (width <= 0) return [];
-
-  return Array.from({ length: width }, (_, columnIndex) => {
-    const columnKey = `col_${columnIndex + 1}`;
-    return {
-      metricKey: `table:${blockId}.column:${columnKey}`,
-      rowKey: "APPEND_ROWS",
-      columnKey,
-      index: columnIndex,
-      label: columnKey,
-    };
-  });
+  return resolveConfiguredMetricOptions(block, blockId, "APPEND_ROWS");
 }
 
 function resolveAppendColumnsMetricOptions(
   block: DynamicFormExcelBlockLike,
   blockId: string
 ): AggregateMetricOption[] {
-  const height = getPositiveInt(block.h ?? block.H);
-  if (height <= 0) return [];
+  return resolveConfiguredMetricOptions(block, blockId, "APPEND_COLUMNS");
+}
 
-  return Array.from({ length: height }, (_, rowIndex) => {
-    const rowKey = `row_${rowIndex + 1}`;
-    return {
-      metricKey: `table:${blockId}.row:${rowKey}`,
-      rowKey,
-      columnKey: "APPEND_COLUMNS",
-      index: rowIndex,
-      label: rowKey,
-    };
-  });
+function expandMetricOptionRange(
+  blockId: string,
+  tableMode: DynamicFormTableMode,
+  dataRect: Required<Pick<DynamicFormMetricRangeLike, "r0" | "c0" | "r1" | "c1">>,
+  range: Required<Pick<DynamicFormMetricRangeLike, "r0" | "c0" | "r1" | "c1">>,
+  widthValue: unknown,
+  heightValue: unknown,
+): AggregateMetricOption[] {
+  const dataR0 = Number(dataRect.r0);
+  const dataC0 = Number(dataRect.c0);
+  const dataR1 = Number(dataRect.r1);
+  const dataC1 = Number(dataRect.c1);
+  const r0 = Math.max(dataR0, Number(range.r0));
+  const c0 = Math.max(dataC0, Number(range.c0));
+  const r1 = Math.min(dataR1, Number(range.r1));
+  const c1 = Math.min(dataC1, Number(range.c1));
+  if (r1 < r0 || c1 < c0) return [];
+
+  const width = getPositiveInt(widthValue) || dataC1 - dataC0 + 1;
+  const height = getPositiveInt(heightValue) || dataR1 - dataR0 + 1;
+  const options: AggregateMetricOption[] = [];
+
+  if (tableMode === "APPEND_ROWS") {
+    for (let c = c0; c <= c1; c += 1) {
+      const columnOffset = c - dataC0;
+      if (columnOffset < 0 || columnOffset >= width) continue;
+      const columnKey = `col_${columnOffset + 1}`;
+      options.push({
+        metricKey: `table:${blockId}.column:${columnKey}`,
+        rowKey: "APPEND_ROWS",
+        columnKey,
+        index: columnOffset,
+        label: null,
+      });
+    }
+    return options;
+  }
+
+  if (tableMode === "APPEND_COLUMNS") {
+    for (let r = r0; r <= r1; r += 1) {
+      const rowOffset = r - dataR0;
+      if (rowOffset < 0 || rowOffset >= height) continue;
+      const rowKey = `row_${rowOffset + 1}`;
+      options.push({
+        metricKey: `table:${blockId}.row:${rowKey}`,
+        rowKey,
+        columnKey: "APPEND_COLUMNS",
+        index: rowOffset,
+        label: null,
+      });
+    }
+    return options;
+  }
+
+  for (let r = r0; r <= r1; r += 1) {
+    for (let c = c0; c <= c1; c += 1) {
+      const rowOffset = r - dataR0;
+      const columnOffset = c - dataC0;
+      if (rowOffset < 0 || rowOffset >= height || columnOffset < 0 || columnOffset >= width) continue;
+      const rowKey = `row_${rowOffset + 1}`;
+      const columnKey = `col_${columnOffset + 1}`;
+      options.push({
+        metricKey: buildMetricKey(blockId, rowKey, columnKey),
+        rowKey,
+        columnKey,
+        index: rowOffset * width + columnOffset,
+        label: null,
+      });
+    }
+  }
+
+  return options;
+}
+
+function normalizeMetricRange(value: DynamicFormMetricRangeLike | null | undefined) {
+  if (!value || typeof value !== "object") return null;
+  const r0 = Number(value.r0 ?? value.R0);
+  const c0 = Number(value.c0 ?? value.C0);
+  const r1 = Number(value.r1 ?? value.R1);
+  const c1 = Number(value.c1 ?? value.C1);
+  if (![r0, c0, r1, c1].every(Number.isFinite)) return null;
+  if (r1 < r0 || c1 < c0) return null;
+  return { r0, c0, r1, c1 };
+}
+
+function indexFromRowColumn(rowKey: string, columnKey: string) {
+  const rowIndex = indexFromOrdinalPart(rowKey, "row_");
+  const columnIndex = indexFromOrdinalPart(columnKey, "col_");
+  if (rowIndex == null || columnIndex == null) return null;
+  return rowIndex * 100000 + columnIndex;
+}
+
+function indexFromOrdinalPart(value: string, prefix: string) {
+  if (!value.toLowerCase().startsWith(prefix)) return null;
+  const n = Number(value.slice(prefix.length));
+  return Number.isInteger(n) && n > 0 ? n - 1 : null;
 }
 
 function resolveSummaryTemplateMetricOptions(
@@ -406,31 +598,10 @@ function resolveSummaryTemplateMetricOptions(
   return options;
 }
 
-function buildFallbackMetricOptions(
-  blockId: string,
-  widthValue: unknown,
-  heightValue: unknown
-): AggregateMetricOption[] {
-  const width = getPositiveInt(widthValue);
-  const height = getPositiveInt(heightValue);
-  if (width <= 0 || height <= 0) return [];
-
-  const rows: AggregateMetricOption[] = [];
-  for (let r = 0; r < height; r += 1) {
-    for (let c = 0; c < width; c += 1) {
-      const rowKey = `row_${r + 1}`;
-      const columnKey = `col_${c + 1}`;
-      rows.push({
-        metricKey: buildMetricKey(blockId, rowKey, columnKey),
-        rowKey,
-        columnKey,
-        index: r * width + c,
-        label: null,
-      });
-    }
-  }
-
-  return rows;
+function countMetricLabelTargets(block: DynamicFormExcelBlockLike) {
+  return Array.isArray(block.metricLabelTargets)
+    ? block.metricLabelTargets.filter((item) => item && typeof item === "object").length
+    : 0;
 }
 
 function resolveDynamicFormExcelBlock(
@@ -454,7 +625,6 @@ function resolveDynamicFormExcelBlock(
   return {
     blockId: normalizeBlockId(block.blockId ?? block.id),
     tableMode,
-    tableKind: normalizeOptionalText(block.tableKind ?? block.TableKind),
     dynamicExcelId,
     dynamicExcelCode: normalizeOptionalText(
       block.dynamicExcelCode ?? block.DynamicExcelCode
@@ -462,6 +632,7 @@ function resolveDynamicFormExcelBlock(
     dynamicExcelName: normalizeOptionalText(
       block.dynamicExcelName ?? block.DynamicExcelName
     ),
+    metricLabelTargetCount: countMetricLabelTargets(block),
     metricOptions:
       tableMode === "FIXED_GRID"
         ? resolveMetricOptions(block, normalizeBlockId(block.blockId ?? block.id))
@@ -483,10 +654,6 @@ function formatUnsupportedDynamicFormBlockMessage(
   }
 
   return `Biểu mẫu động đang dùng kiểu bảng ${formatTableModeLabel(block.tableMode)}, nhưng phần tổng hợp hiện chưa hỗ trợ kiểu này.`;
-}
-
-function isRecordTableBlock(block?: DynamicFormExcelBlockResolution | null) {
-  return block?.tableKind === "RECORD_TABLE";
 }
 
 function formatTableModeLabel(tableMode?: DynamicFormTableMode | string | null) {
@@ -578,15 +745,23 @@ function formatAggregateDraftContributionPolicy(
 }
 
 function formatFieldStatisticValue(row: FieldStatisticSummaryRow) {
-  const type = row.fieldType?.toUpperCase();
-  if (type === "NUMBER") {
-    return `Tổng ${formatMetricNumber(row.sum)} / Trung bình ${formatMetricNumber(row.average)}`;
+  const type = row.fieldType?.trim().toLowerCase();
+  if (type === "number") {
+    return `Tổng ${formatMetricNumber(row.sum)} / Min ${formatMetricNumber(row.min)} / Max ${formatMetricNumber(row.max)}`;
   }
-  if (type === "BOOLEAN") {
-    return `True ${row.trueCount} / False ${row.falseCount}`;
+  if (type === "boolean") {
+    return `Có ${row.trueCount} / Không ${row.falseCount}`;
   }
-  if (type === "DATE") {
-    return row.latestDateUtc ? new Date(row.latestDateUtc).toLocaleDateString("vi-VN") : "-";
+  if (type === "date") {
+    const minDate = row.earliestDateUtc
+      ? new Date(row.earliestDateUtc).toLocaleDateString("vi-VN")
+      : null;
+    const maxDate = row.latestDateUtc
+      ? new Date(row.latestDateUtc).toLocaleDateString("vi-VN")
+      : null;
+
+    if (minDate && maxDate && minDate !== maxDate) return `${minDate} - ${maxDate}`;
+    return maxDate ?? minDate ?? "-";
   }
   if (row.bucketLabel || row.bucketKey) {
     return `${row.bucketLabel ?? row.bucketKey}: ${row.valueCount}`;
@@ -602,71 +777,19 @@ function formatAggregateModeLabel(mode?: string | null) {
       return uiText(UITextKey.TextGhepNgangTheoNguoi);
     case "VERTICAL_BY_USER":
       return uiText(UITextKey.TextGhepDocTheoNguoi);
-    case "RECORD_TABLE_CONCAT":
-      return "Ghép bảng dữ liệu phát sinh";
     default:
       return mode || "-";
   }
 }
 
-function formatRecordAggregateValue(value: unknown) {
-  if (value == null || value === "") return "-";
-  if (typeof value === "boolean") return value ? "Có" : "Không";
-  if (typeof value === "number") {
-    return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value);
-  }
-  return String(value);
-}
-
-function RecordAggregateResultTable({ result }: { result: AggregateTableResponse }) {
-  const columns = result.recordColumns ?? [];
-  const rows = result.recordRows ?? [];
-  return (
-    <TableContainer component={Paper} variant="outlined">
-      <Table size="small" stickyHeader>
-        <TableHead>
-          <TableRow>
-            <TableCell>{uiText(UITextKey.TextPeriod)}</TableCell>
-            <TableCell>Người báo cáo</TableCell>
-            <TableCell>Đơn vị</TableCell>
-            {columns.map((column) => (
-              <TableCell key={column.key}>
-                {column.label || column.key}
-                {column.isCalculated ? " (tính toán)" : ""}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((row, index) => (
-            <TableRow key={`${row.reportId ?? ""}-${row.sourceRowKey ?? index}`} hover>
-              <TableCell>{formatDayKeyLabel(row.periodKey)}</TableCell>
-              <TableCell>{row.fullName || row.userName || row.userId || "-"}</TableCell>
-              <TableCell>{row.unitShortName || row.unitSymbol || "-"}</TableCell>
-              {columns.map((column) => (
-                <TableCell key={column.key}>
-                  {formatRecordAggregateValue(row.values?.[column.key])}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-          {rows.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={columns.length + 3}>
-                <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                  Chưa có dòng dữ liệu phát sinh phù hợp với bộ lọc hiện tại.
-                </Typography>
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-}
-
 function isTextFieldStatisticRow(row: FieldStatisticSummaryRow) {
-  return row.fieldType === "shortText" || row.fieldType === "longText";
+  const type = row.fieldType?.trim();
+  return type === "stringList" || type === "longText";
+}
+
+function isConcatFieldStatisticRow(row: FieldStatisticSummaryRow) {
+  const type = row.fieldType?.trim();
+  return type === "shortText" || type === "stringList" || type === "longText" || type === "singleSelect" || type === "multiSelect";
 }
 
 function getFieldTypeDisplayLabel(fieldType?: string | null) {
@@ -1186,7 +1309,6 @@ const WorkAggregationTab: React.FC<Props> = ({
     [dynamicFormQuery.data]
   );
   const resolvedSupportedDynamicFormExcelBlock =
-    !isRecordTableBlock(resolvedDynamicFormExcelBlock) &&
     isSupportedDynamicFormAggregateMode(resolvedDynamicFormExcelBlock?.tableMode)
       ? resolvedDynamicFormExcelBlock
       : null;
@@ -1261,8 +1383,6 @@ const WorkAggregationTab: React.FC<Props> = ({
     dynamicFormQuery.isFetching;
   const hasResolvedDynamicFormExcelBlock =
     hasDynamicFormSeed && Boolean(resolvedDynamicFormExcelBlock);
-  const supportsRecordTableAggregate =
-    hasDynamicFormSeed && isRecordTableBlock(resolvedDynamicFormExcelBlock);
   const supportsDynamicFormAggregate =
     hasDynamicFormSeed && Boolean(resolvedSupportedDynamicFormExcelBlock);
   const dynamicFormUnsupported =
@@ -1270,8 +1390,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     hasDynamicFormSeed &&
     !dynamicFormQuery.isFetching &&
     !dynamicFormQuery.error &&
-    !resolvedSupportedDynamicFormExcelBlock &&
-    !supportsRecordTableAggregate;
+    !resolvedSupportedDynamicFormExcelBlock;
   const dynamicFormUnsupportedMessage = formatUnsupportedDynamicFormBlockMessage(
     resolvedDynamicFormExcelBlock
   );
@@ -1374,6 +1493,14 @@ const WorkAggregationTab: React.FC<Props> = ({
     if (!seedDynamicFormTemplateId && !aggregateDynamicExcelId) {
       return "Bắt buộc chọn biểu mẫu.";
     }
+    if (
+      seedDynamicFormTemplateId &&
+      resolvedSupportedDynamicFormExcelBlock &&
+      resolvedSupportedDynamicFormExcelBlock.tableMode !== "SUMMARY_TEMPLATE" &&
+      resolvedSupportedDynamicFormExcelBlock.metricOptions.length === 0
+    ) {
+      return "Bảng Excel động chưa cấu hình chỉ tiêu thống kê. Hãy cấu hình rõ ô, dòng, cột hoặc vùng cần tổng hợp trong biểu mẫu động.";
+    }
     if (filter.periodScopeMode === "SINGLE_PERIOD" && !filter.periodDate) {
       return "Bắt buộc chọn ngày/kỳ.";
     }
@@ -1393,6 +1520,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     effectiveDynamicExcelId,
     effectiveParentAssignmentId,
     filter,
+    resolvedSupportedDynamicFormExcelBlock,
     seedDynamicFormTemplateId,
     selectedScopeIsRoot,
   ]);
@@ -1707,7 +1835,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           filter.periodScopeMode === "CUMULATIVE_TO_PERIOD"
             ? periodKeyTo
             : null,
-        reportStatus: 2,
+        reportStatus: WorkAssignmentReportStatus.Approved,
         page: 0,
         pageSize: 100,
       }).unwrap();
@@ -1753,6 +1881,7 @@ const WorkAggregationTab: React.FC<Props> = ({
       dynamicFormTemplateId,
       fieldId: row.fieldId,
       fieldKey: row.fieldKey,
+      bucketKey: row.bucketKey ?? null,
       periodKey:
         filter.periodScopeMode === "SINGLE_PERIOD"
           ? normalizeDayKeyInput(filter.periodDate)
@@ -1764,7 +1893,7 @@ const WorkAggregationTab: React.FC<Props> = ({
         filter.periodScopeMode === "CUMULATIVE_TO_PERIOD"
           ? periodKeyTo
           : null,
-      reportStatus: 2,
+      reportStatus: WorkAssignmentReportStatus.Approved,
       page: 0,
       pageSize: 50,
       maxChars: 10000,
@@ -1815,13 +1944,6 @@ const WorkAggregationTab: React.FC<Props> = ({
 
   const workbookPreview = React.useMemo(() => {
     if (!result) {
-      return {
-        workbook: [] as Sheet[],
-        previewRect: resultRect,
-      };
-    }
-
-    if (result.tableKind === "RECORD_TABLE") {
       return {
         workbook: [] as Sheet[],
         previewRect: resultRect,
@@ -1929,16 +2051,26 @@ const WorkAggregationTab: React.FC<Props> = ({
           </Alert>
         )}
 
-        {Boolean(effectiveParentAssignmentId) && supportsRecordTableAggregate && (
-          <Alert severity="success">
-            Đã xác định bảng dữ liệu phát sinh của biểu mẫu động.
-          </Alert>
-        )}
+        {Boolean(effectiveParentAssignmentId) &&
+          supportsDynamicFormAggregate &&
+          resolvedSupportedDynamicFormExcelBlock?.metricOptions.length === 0 &&
+          resolvedSupportedDynamicFormExcelBlock?.tableMode !== "SUMMARY_TEMPLATE" && (
+            <Alert severity="warning">
+              Bảng này chưa cấu hình chỉ tiêu thống kê. Hệ thống sẽ không tự sinh chỉ tiêu cho toàn bộ ô trong vùng dữ liệu.
+            </Alert>
+          )}
+
+        {Boolean(effectiveParentAssignmentId) &&
+          supportsDynamicFormAggregate &&
+          Boolean(resolvedSupportedDynamicFormExcelBlock?.metricOptions.length) && (
+            <Alert severity="info">
+              Đã có {resolvedSupportedDynamicFormExcelBlock?.metricOptions.length} chỉ tiêu thống kê được cấu hình trong biểu mẫu động.
+            </Alert>
+          )}
 
         {Boolean(effectiveParentAssignmentId) &&
           hasResolvedDynamicFormExcelBlock &&
-          !supportsDynamicFormAggregate &&
-          !supportsRecordTableAggregate && (
+          !supportsDynamicFormAggregate && (
           <Alert severity="warning">
             {dynamicFormUnsupportedMessage}
           </Alert>
@@ -2063,14 +2195,14 @@ const WorkAggregationTab: React.FC<Props> = ({
                             <TableCell align="right">{row.valueCount}</TableCell>
                             <TableCell align="right">{row.reportCount}</TableCell>
                             <TableCell align="right">
-                              {isTextFieldStatisticRow(row) ? (
+                              {isConcatFieldStatisticRow(row) ? (
                                 <Button
                                   size="small"
                                   variant="text"
                                   onClick={() => void handleRunFieldTextConcat(row)}
                                   disabled={fieldTextConcatState.isLoading}
                                 >
-                                  Xem text
+                                  {isTextFieldStatisticRow(row) ? "Xem text" : "Xem list"}
                                 </Button>
                               ) : (
                                 "-"
@@ -2439,28 +2571,20 @@ const WorkAggregationTab: React.FC<Props> = ({
 
             <Alert severity="info">
               Cách tổng hợp: <b>{formatAggregateModeLabel(result.aggregateMode || filter.aggregateMode)}</b>.
-              {result.tableKind === "RECORD_TABLE"
-                ? " Bảng dữ liệu phát sinh chỉ ghép các dòng đã duyệt; cột tính toán được tính tại cấp xem hiện tại."
-                : " Bản xem trước ghi dữ liệu tổng hợp trực tiếp vào biểu mẫu."}
+              {" Bản xem trước ghi dữ liệu tổng hợp trực tiếp vào biểu mẫu."}
             </Alert>
 
-            {result.tableKind === "RECORD_TABLE" ? (
-              <RecordAggregateResultTable result={result} />
-            ) : (
-              <>
-                <AggregateWorkbookPreview
-                  workbook={workbookPreview.workbook}
-                  previewRect={workbookPreview.previewRect}
-                  spec={templateSpec}
-                />
+            <AggregateWorkbookPreview
+              workbook={workbookPreview.workbook}
+              previewRect={workbookPreview.previewRect}
+              spec={templateSpec}
+            />
 
-                <AggregateResultTable
-                  result={result}
-                  aggregateMode={filter.aggregateMode}
-                  templateRect={resultRect}
-                />
-              </>
-            )}
+            <AggregateResultTable
+              result={result}
+              aggregateMode={filter.aggregateMode}
+              templateRect={resultRect}
+            />
 
             <AggregateSourceTable rows={result.sources ?? []} onPreviewReport={setPreviewReportId} />
           </>
@@ -2618,39 +2742,81 @@ const WorkAggregationTab: React.FC<Props> = ({
                 </Alert>
               )}
 
-              <TextField
-                value={fieldTextConcatResult.concatenatedText}
-                fullWidth
-                multiline
-                minRows={10}
-                InputProps={{ readOnly: true }}
-              />
+              {(fieldTextConcatResult.fieldType === "stringList" || fieldTextConcatResult.fieldType === "longText") && (
+                <TextField
+                  value={fieldTextConcatResult.concatenatedText}
+                  fullWidth
+                  multiline
+                  minRows={5}
+                  InputProps={{ readOnly: true }}
+                />
+              )}
 
-              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 320 }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{uiText(UITextKey.TextPeriod)}</TableCell>
-                      <TableCell>{uiText(UITextKey.TextAssignment)}</TableCell>
-                      <TableCell>{uiText(UITextKey.TextAssignee)}</TableCell>
-                      <TableCell align="right">{uiText(UITextKey.TextChars)}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {fieldTextConcatResult.rows.map((row) => (
-                      <TableRow key={row.workAssignmentReportId} hover>
-                        <TableCell>{formatDayKeyLabel(row.periodKey)}</TableCell>
-                        <TableCell>{row.assignmentCode || row.assignmentName || row.assignmentId}</TableCell>
-                        <TableCell>{row.assigneeFullName || row.assigneeUsername || row.assigneeUserId || "-"}</TableCell>
-                        <TableCell align="right">
-                          {row.charCount}
-                          {row.rowTruncated ? "+" : ""}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <Stack spacing={1}>
+                {fieldTextConcatResult.rows.map((row, index) => {
+                  const title =
+                    row.assigneeFullName ||
+                    row.assigneeUsername ||
+                    row.assigneeUserId ||
+                    `Nguồn ${index + 1}`;
+                  const unit = row.unitLabel || row.unitId || "-";
+                  const assignment = row.assignmentCode || row.assignmentName || row.assignmentId;
+                  const items = row.items ?? [];
+
+                  return (
+                    <Accordion key={row.workAssignmentReportId} defaultExpanded={index < 3} disableGutters>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />}>
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                          <Typography fontWeight={700}>{title}</Typography>
+                          <Chip size="small" variant="outlined" label={unit} />
+                          <Chip size="small" variant="outlined" label={formatDayKeyLabel(row.periodKey)} />
+                          {items.length > 0 && (
+                            <Chip size="small" color="primary" variant="outlined" label={`${items.length} mục`} />
+                          )}
+                        </Stack>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Stack spacing={1}>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            <Chip size="small" label={assignment} />
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={`${row.charCount}${row.rowTruncated ? "+" : ""} ký tự`}
+                            />
+                          </Stack>
+
+                          {items.length > 0 ? (
+                            <Stack spacing={0.75}>
+                              {items.map((item) => (
+                                <Paper key={`${row.workAssignmentReportId}_${item.value}`} variant="outlined" sx={{ p: 1, borderRadius: 1 }}>
+                                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                                    <Typography variant="body2" fontWeight={700}>
+                                      {item.label || item.value}
+                                    </Typography>
+                                    <Chip size="small" variant="outlined" label={item.value} />
+                                  </Stack>
+                                </Paper>
+                              ))}
+                            </Stack>
+                          ) : (
+                            <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 1 }}>
+                              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                                {row.text}
+                              </Typography>
+                            </Paper>
+                          )}
+                        </Stack>
+                      </AccordionDetails>
+                    </Accordion>
+                  );
+                })}
+                {fieldTextConcatResult.rows.length === 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    Không có dòng dữ liệu phù hợp.
+                  </Typography>
+                )}
+              </Stack>
             </Stack>
           )}
         </DialogContent>

@@ -2,10 +2,9 @@ import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Box, CircularProgress, Typography } from "@mui/material";
 
-import ExcelDesigner from "../../components/excel/fortune/ExcelDesigner";
 import { useGetDynamicExcelQuery } from "../../api/dynamicExcelApi";
-import { UITextKey, uiText } from '../../constants/uiText';
-import RecordTableTemplateEditor from "../../components/excel/recordTable/RecordTableTemplateEditor";
+import ExcelDesigner from "../../components/excel/fortune/ExcelDesigner";
+import { UITextKey, uiText } from "../../constants/uiText";
 
 export default function DynamicExcelViewPage() {
   const navigate = useNavigate();
@@ -64,23 +63,12 @@ export default function DynamicExcelViewPage() {
     );
   }
 
-  if (detail.tableKind === "RECORD_TABLE") {
-    return (
-      <RecordTableTemplateEditor
-        mode="view"
-        meta={{ code: detail.code, name: detail.name }}
-        initialSpecJson={detail.recordTableSpecJson}
-        onBack={() => navigate("/dynamic-excel")}
-        onSaved={() => {}}
-      />
-    );
-  }
-
   return (
     <ExcelDesigner
-      key={detail.id} 
+      key={detail.id}
       mode="view"
       meta={{ code: detail.code, name: detail.name }}
+      initialTableMode={detail.tableMode}
       initialSpec={parsed.spec}
       initialWorkbookData={parsed.workbook}
       onBack={() => navigate("/dynamic-excel")}

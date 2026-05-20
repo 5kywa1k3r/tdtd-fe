@@ -24,7 +24,9 @@ import WorkbookDataGrid from "../../../components/excel/fortune/WorkbookDataGrid
 import type { DynamicFormField, DynamicFormSection } from "../dynamicForm.types";
 import {
   buildEditorValue,
+  excelSpecKindLabels,
   fieldTypeLabels,
+  getExcelSpecKindFromBlockLike,
   getDynamicFormBlockJsonList,
   getDynamicFormFieldDisplayName,
   tableModeLabels,
@@ -42,13 +44,10 @@ type BlockPreview = {
   dynamicExcelTemplateId?: string | null;
   title: string;
   code?: string | null;
-  tableMode?: keyof typeof tableModeLabels;
+  excelSpecKind?: keyof typeof excelSpecKindLabels | null;
+  tableMode?: keyof typeof tableModeLabels | null;
   dataRect?: string | null;
   dataRectValue?: { r0: number; c0: number; r1: number; c1: number } | null;
-  rowLabelCount: number;
-  statisticColumnCount: number;
-  statisticLabelColumnCount: number;
-  metricRuleCount: number;
 };
 
 export default function DynamicFormPreview({ detail, dense = false }: DynamicFormPreviewProps) {
@@ -239,9 +238,20 @@ function FieldControlPreview({ field }: { field: DynamicFormField }) {
     return <FormControlLabel control={<Checkbox disabled />} label={displayName} />;
   }
 
-  if (field.type === "singleSelect") {
+  if (field.type === "shortText" || field.type === "singleSelect") {
     return (
-      <Select size="small" fullWidth value="" disabled displayEmpty>
+      <Select
+        size="small"
+        fullWidth
+        value=""
+        disabled
+        displayEmpty
+        renderValue={() => (
+          <Typography component="span" color="text.secondary">
+            Chưa chọn
+          </Typography>
+        )}
+      >
         <MenuItem value="">Chưa chọn</MenuItem>
         {(field.options ?? []).map((option) => (
           <MenuItem key={option.code} value={option.code}>
@@ -254,7 +264,19 @@ function FieldControlPreview({ field }: { field: DynamicFormField }) {
 
   if (field.type === "multiSelect") {
     return (
-      <Select size="small" fullWidth multiple value={[]} disabled displayEmpty>
+      <Select
+        size="small"
+        fullWidth
+        multiple
+        value={[]}
+        disabled
+        displayEmpty
+        renderValue={() => (
+          <Typography component="span" color="text.secondary">
+            Chưa chọn
+          </Typography>
+        )}
+      >
         {(field.options ?? []).map((option) => (
           <MenuItem key={option.code} value={option.code}>
             {option.label}
@@ -269,8 +291,8 @@ function FieldControlPreview({ field }: { field: DynamicFormField }) {
       fullWidth
       size="small"
       type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-      multiline={field.type === "longText"}
-      minRows={field.type === "longText" ? 3 : undefined}
+      multiline={field.type === "longText" || field.type === "stringList"}
+      minRows={field.type === "longText" || field.type === "stringList" ? 3 : undefined}
       label={displayName}
       disabled
       InputLabelProps={field.type === "date" ? { shrink: true } : undefined}
@@ -288,17 +310,15 @@ function TableBlockPreview({ block }: { block: BlockPreview }) {
             {block.title}
           </Typography>
           {block.code && <Chip size="small" label={block.code} variant="outlined" />}
-          {block.tableMode && (
-            <Chip size="small" label={tableModeLabels[block.tableMode]} color="primary" variant="outlined" />
+          {block.excelSpecKind && (
+            <Chip size="small" label={excelSpecKindLabels[block.excelSpecKind]} variant="outlined" />
           )}
+          {block.tableMode && <Chip size="small" label={tableModeLabels[block.tableMode]} variant="outlined" />}
         </Stack>
 
         <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
           {block.dataRect && <Chip size="small" label={`Vùng dữ liệu: ${block.dataRect}`} />}
-          <Chip size="small" label={`${block.rowLabelCount} nhãn dòng`} variant="outlined" />
-          <Chip size="small" label={`${block.statisticColumnCount} cột thống kê`} variant="outlined" />
-          <Chip size="small" label={`${block.statisticLabelColumnCount} cột nhãn thống kê`} variant="outlined" />
-          <Chip size="small" label={`${block.metricRuleCount} chỉ số`} variant="outlined" />
+          <Chip size="small" label="Cấu hình bảng Excel động" variant="outlined" />
         </Stack>
 
         <Box
@@ -363,7 +383,7 @@ function DynamicExcelBlockWorkbookPreview({ block }: { block: BlockPreview }) {
       <WorkbookDataGrid
         initialSpec={parsed.spec}
         initialWorkbookData={parsed.workbook}
-        dataRect={parsed.dataRect}
+        dataRect={parsed.dataRect ?? { r0: 0, c0: 0, r1: 0, c1: 0 }}
         mode="view"
         readOnly
         showActions={false}
@@ -374,7 +394,6 @@ function DynamicExcelBlockWorkbookPreview({ block }: { block: BlockPreview }) {
 
 function toBlockPreview(json: string, index: number): BlockPreview {
   const obj = parseObject(json);
-  const tableMode = normalizeTableModeValue(obj?.tableMode);
   const dynamicExcelTemplateId = readString(
     obj?.dynamicExcelTemplateId ??
       obj?.DynamicExcelTemplateId ??
@@ -383,6 +402,8 @@ function toBlockPreview(json: string, index: number): BlockPreview {
   );
   const dynamicExcelCode = readString(obj?.dynamicExcelCode ?? obj?.DynamicExcelCode ?? obj?.code);
   const dynamicExcelName = readString(obj?.dynamicExcelName ?? obj?.DynamicExcelName ?? obj?.name);
+  const excelSpecKind = getExcelSpecKindFromBlockLike(obj);
+  const tableMode = normalizeTableModeValue(obj?.tableMode ?? obj?.TableMode);
   const dataRectValue = normalizeDataRectValue(obj?.dataRect);
   const fallbackTitle = `Phần bảng ${index + 1}`;
 
@@ -393,15 +414,10 @@ function toBlockPreview(json: string, index: number): BlockPreview {
     dynamicExcelTemplateId,
     title: [dynamicExcelCode, dynamicExcelName].filter(Boolean).join(" - ") || fallbackTitle,
     code: dynamicExcelCode,
+    excelSpecKind,
     tableMode,
     dataRect: formatDataRect(dataRectValue),
     dataRectValue,
-    rowLabelCount: Array.isArray(obj?.rowLabelDefaults) ? obj.rowLabelDefaults.length : 0,
-    statisticColumnCount: Array.isArray(obj?.statisticColumns) ? obj.statisticColumns.length : 0,
-    statisticLabelColumnCount: Array.isArray(obj?.statisticColumnLabels)
-      ? obj.statisticColumnLabels.length
-      : 0,
-    metricRuleCount: Array.isArray(obj?.metricRules) ? obj.metricRules.length : 0,
   };
 }
 
@@ -428,11 +444,9 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function normalizeTableModeValue(value: unknown): keyof typeof tableModeLabels | undefined {
-  if (typeof value !== "string") return undefined;
-  return Object.prototype.hasOwnProperty.call(tableModeLabels, value)
-    ? (value as keyof typeof tableModeLabels)
-    : undefined;
+function normalizeTableModeValue(value: unknown): keyof typeof tableModeLabels | null {
+  const raw = readString(value)?.toUpperCase();
+  return raw && raw in tableModeLabels ? (raw as keyof typeof tableModeLabels) : null;
 }
 
 function normalizeDataRectValue(value: unknown): { r0: number; c0: number; r1: number; c1: number } | null {

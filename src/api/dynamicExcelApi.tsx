@@ -5,62 +5,22 @@ export type DynamicExcelRow = {
   id: string;
   code: string;
   name: string;
-  labels: string[];
+  headerKind?: DynamicExcelHeaderKind | null;
+  tableMode: DynamicExcelTableMode;
+  contractVersion: number;
   createdByUsername: string;
   createdAtUtc: string;
-  tableKind?: DynamicExcelTableKind;
 };
 
+export type DynamicExcelHeaderKind = "TOP" | "LEFT" | "MATRIX";
+export type DynamicExcelTableMode = "FIXED_GRID" | "APPEND_ROWS" | "APPEND_COLUMNS";
+
 export type DynamicExcelDetail = DynamicExcelRow & {
-  recordTableSpecJson?: string | null;
   rawWorkbookDataJson: string;
   specJson: string;
   dataRect: { r0: number; c0: number; r1: number; c1: number };
   w: number;
   h: number;
-};
-
-export type DynamicExcelTableKind = "NUMERIC_GRID" | "RECORD_TABLE";
-export type DynamicExcelRecordDataType = "text" | "number" | "date" | "boolean";
-export type DynamicExcelRecordOrientation = "ROWS" | "COLUMNS";
-
-export type DynamicExcelRecordExpression =
-  | { col: string }
-  | { input: string; dataType: DynamicExcelRecordDataType }
-  | { value: unknown; dataType?: DynamicExcelRecordDataType }
-  | { const: unknown; dataType?: DynamicExcelRecordDataType }
-  | { op: string; args?: DynamicExcelRecordExpression[]; left?: DynamicExcelRecordExpression; right?: DynamicExcelRecordExpression };
-
-export type DynamicExcelRecordColumn = {
-  key: string;
-  label: string;
-  dataType: DynamicExcelRecordDataType;
-  required?: boolean;
-};
-
-export type DynamicExcelRecordCalculatedOutput = {
-  key: string;
-  label: string;
-  dataType: DynamicExcelRecordDataType;
-  expression: DynamicExcelRecordExpression;
-  includeInUpstream?: false;
-};
-
-export type DynamicExcelRecordValidationRule = {
-  key: string;
-  message?: string;
-  condition: DynamicExcelRecordExpression;
-  when?: DynamicExcelRecordExpression;
-};
-
-export type DynamicExcelRecordTableSpec = {
-  orientation?: DynamicExcelRecordOrientation;
-  columns: DynamicExcelRecordColumn[];
-  calculatedColumns?: DynamicExcelRecordCalculatedOutput[];
-  calculatedRows?: DynamicExcelRecordCalculatedOutput[];
-  aggregateColumns?: DynamicExcelRecordCalculatedOutput[];
-  aggregateRows?: DynamicExcelRecordCalculatedOutput[];
-  validationRules?: DynamicExcelRecordValidationRule[];
 };
 
 export type DynamicExcelSearchReq = {
@@ -70,7 +30,6 @@ export type DynamicExcelSearchReq = {
   createdBy?: string;
   createdFromUtc?: string | null;
   createdToUtc?: string | null;
-  labels?: string[] | null;
 
   page: number;
   pageSize: number;
@@ -83,9 +42,8 @@ export type NextCodeResp = { prefix: string; year: number; nextSeq: number; next
 export type CreateDynamicExcelReq = {
   code?: string | null;
   name: string;
-  labels?: string[] | null;
-  tableKind?: DynamicExcelTableKind | null;
-  recordTableSpecJson?: string | null;
+  tableMode: DynamicExcelTableMode;
+  contractVersion?: number | null;
 
   rawWorkbookDataJson: string;
   specJson: string;
@@ -95,7 +53,9 @@ export type CreateDynamicExcelReq = {
   h: number;
 };
 
-export type UpdateDynamicExcelReq = Omit<CreateDynamicExcelReq, "code">;
+export type UpdateDynamicExcelReq = {
+  name: string;
+};
 
 export const dynamicExcelApi = baseApi.injectEndpoints({
   endpoints: (b) => ({

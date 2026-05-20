@@ -2,7 +2,8 @@ import { baseApi } from "./base/baseApi";
 import { type PagedResult } from "../types/pagedResult";
 
 export type LabelScopeType = "GLOBAL" | "LEVEL" | "UNIT";
-export type LabelDataType = "NUMBER" | "SHORT_TEXT" | "LONG_TEXT" | "DATE" | "BOOLEAN";
+export type LabelDataType = "NUMBER" | "SHORT_TEXT" | "STRING_LIST" | "LONG_TEXT" | "DATE" | "BOOLEAN";
+export type LabelUsage = "CLASSIFICATION" | "STATISTIC" | "TABLE_TARGET";
 
 export type LabelRow = {
   id: string;
@@ -11,6 +12,7 @@ export type LabelRow = {
   description?: string | null;
   color?: string | null;
   groupCode?: string | null;
+  usage: LabelUsage;
   dataType: LabelDataType;
   scopeType: LabelScopeType;
   scopeId?: string | null;
@@ -26,12 +28,13 @@ export type LabelSearchReq = {
   code?: string | null;
   name?: string | null;
   groupCode?: string | null;
+  usage?: LabelUsage | null;
   scopeType?: LabelScopeType | null;
   scopeId?: string | null;
   isActive?: boolean | null;
   page: number;
   pageSize: number;
-  sortField?: "code" | "name" | "groupCode" | "createdAtUtc" | "updatedAtUtc";
+  sortField?: "code" | "name" | "groupCode" | "usage" | "createdAtUtc" | "updatedAtUtc";
   sortDirection?: "asc" | "desc";
 };
 
@@ -41,6 +44,7 @@ export type CreateLabelReq = {
   description?: string | null;
   color?: string | null;
   groupCode?: string | null;
+  usage?: LabelUsage | null;
   dataType?: LabelDataType | null;
   scopeType?: LabelScopeType | null;
   scopeId?: string | null;
@@ -52,6 +56,7 @@ export type UpdateLabelReq = {
   description?: string | null;
   color?: string | null;
   groupCode?: string | null;
+  usage?: LabelUsage | null;
   dataType?: LabelDataType | null;
   isActive?: boolean;
 };
