@@ -16,6 +16,7 @@ export type WorkDocumentRow = {
   assignmentPath?: string | null;
   createdByUserId?: string | null;
   createdByName?: string | null;
+  canUpdate: boolean;
   canDelete: boolean;
 };
 
@@ -42,6 +43,12 @@ export type CreateWorkDocumentUploadSessionResp = {
   uploadToken: string;
   chunkSize: number;
   maxSize: number;
+};
+
+export type UpdateWorkDocumentReq = {
+  originalName?: string | null;
+  scope?: WorkDocumentScope | string | null;
+  assignmentId?: string | null;
 };
 
 export type ListWorkDocumentsArgs = {
@@ -103,6 +110,18 @@ export const workDocumentsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, arg) => [{ type: "WorkDocument" as const, id: arg.workId }],
     }),
+
+    updateWorkDocument: build.mutation<
+      WorkDocumentRow,
+      { workId: string; fileId: string; data: UpdateWorkDocumentReq }
+    >({
+      query: ({ workId, fileId, data }) => ({
+        url: `works/${workId}/documents/${fileId}`,
+        method: "PATCH",
+        data,
+      }),
+      invalidatesTags: (_result, _error, arg) => [{ type: "WorkDocument" as const, id: arg.workId }],
+    }),
   }),
   overrideExisting: false,
 });
@@ -113,4 +132,5 @@ export const {
   useCreateWorkDocumentUploadSessionMutation,
   useCreateAssignmentDocumentUploadSessionMutation,
   useDeleteWorkDocumentMutation,
+  useUpdateWorkDocumentMutation,
 } = workDocumentsApi;

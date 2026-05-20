@@ -1,7 +1,9 @@
 import { baseApi } from "./base/baseApi";
 import type {
+  CompleteWorkAssignmentRequest,
   HandoverWorkAssignmentRequest,
   SaveWorkAssignmentRequest,
+  UpdateWorkAssignmentAutoApproveConditionRequest,
   UpdateWorkAssignmentDataSourceRulesRequest,
   WorkAssignmentHandoverResponse,
   WorkAssignmentListResponse,
@@ -131,6 +133,42 @@ export const workAssignmentApi = baseApi.injectEndpoints({
       ],
     }),
 
+    updateWorkAssignmentAutoApproveCondition: build.mutation<
+      WorkAssignmentResponse,
+      { id: string; workId: string; body: UpdateWorkAssignmentAutoApproveConditionRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `work-assignments/${id}/auto-approve-condition`,
+        method: "PATCH",
+        data: body,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
+        { type: "WorkAssignment" as const, id: arg.id },
+        { type: "WorkAssignmentChildren" as const, id: arg.id },
+        { type: "WorkAssignment" as const, id: `MY_REPORT_${arg.workId}` },
+      ],
+    }),
+
+    completeWorkAssignment: build.mutation<
+      WorkAssignmentResponse,
+      { id: string; workId: string; body: CompleteWorkAssignmentRequest }
+    >({
+      query: ({ id, body }) => ({
+        url: `work-assignments/${id}/complete`,
+        method: "POST",
+        data: body,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
+        { type: "WorkAssignment" as const, id: arg.id },
+        { type: "WorkAssignmentChildren" as const, id: arg.id },
+        { type: "Work" as const, id: arg.workId },
+        { type: "WorkAssignmentReportList" as const, id: "LIST" },
+        { type: "ReviewReport" as const, id: "LIST" },
+      ],
+    }),
+
     deactivateWorkAssignment: build.mutation<void, { id: string; workId: string }>({
       query: ({ id }) => ({
         url: `work-assignments/${id}/deactivate`,
@@ -215,6 +253,8 @@ export const {
   useGetMyParentCandidatesQuery,
   useCreateWorkAssignmentMutation,
   useUpdateWorkAssignmentDataSourceRulesMutation,
+  useUpdateWorkAssignmentAutoApproveConditionMutation,
+  useCompleteWorkAssignmentMutation,
   useDeactivateWorkAssignmentMutation,
   useActivateWorkAssignmentMutation,
   useHandoverWorkAssignmentMutation,

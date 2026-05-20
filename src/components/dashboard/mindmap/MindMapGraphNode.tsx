@@ -227,10 +227,17 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
   };
 
   const updateReportDateFilter = (key: "fromDate" | "toDate", value: string) => {
+    const fromDate = key === "fromDate" ? value : data.reportFilters?.fromDate ?? "";
+    let toDate = key === "toDate" ? value : data.reportFilters?.toDate ?? "";
+
+    if (fromDate && toDate && toDate < fromDate) {
+      toDate = fromDate;
+    }
+
     data.onReportFiltersChange?.({
       statusBuckets: data.reportFilters?.statusBuckets ?? [],
-      fromDate: key === "fromDate" ? value : data.reportFilters?.fromDate ?? "",
-      toDate: key === "toDate" ? value : data.reportFilters?.toDate ?? "",
+      fromDate,
+      toDate,
     });
   };
 
@@ -524,6 +531,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => event.stopPropagation()}
                   InputLabelProps={{ shrink: true }}
+                  inputProps={{ max: data.reportFilters?.toDate || undefined }}
                   sx={{ flex: 1 }}
                 />
                 <TextField
@@ -537,6 +545,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => event.stopPropagation()}
                   InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: data.reportFilters?.fromDate || undefined }}
                   sx={{ flex: 1 }}
                 />
               </Stack>

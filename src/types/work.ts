@@ -48,6 +48,9 @@ export interface WorkListRow {
   worstEvaluationLabel?: string | null;
 
   dueDate?: string | null;
+  completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
   createdAtUtc: string;
   attachmentCount?: number;
 }
@@ -80,6 +83,9 @@ export interface WorkDetail {
   startDate?: string | null;
   endDate?: string | null;
   dueDate?: string | null;
+  completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
 
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -93,6 +99,11 @@ export interface WorkDetail {
 export interface ParentWork extends WorkListRow {
   parentId?: string | null;
 }
+
+export type CompleteWorkRequest = {
+  completedDate?: string | null;
+  note?: string | null;
+};
 
 export const WORK_TYPE_OPTIONS = [
   { value: WORK_TYPE.TASK, label: "Nhiệm vụ" },

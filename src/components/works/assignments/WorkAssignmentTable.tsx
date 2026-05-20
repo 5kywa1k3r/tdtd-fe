@@ -6,6 +6,8 @@ import TableViewOutlinedIcon from "@mui/icons-material/TableViewOutlined";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
+import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import CommonLabelText from "../../common/CommonLabelText";
@@ -23,6 +25,7 @@ export interface AssignmentTableRow {
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
   dynamicFormDataSourceRulesJson?: string | null;
+  autoApproveConditionJson?: string | null;
   assignmentType?: string | null;
   aggregationType?: string | null;
   assignees?:
@@ -47,7 +50,10 @@ export interface AssignmentTableRow {
   hasAnyDuePeriod?: boolean | null;
   hasOverduePeriod?: boolean | null;
   startDate?: string | null;
+  dueDate?: string | null;
   completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
   evaluationTemplateLabel?: string | null;
   evaluationTemplateCode?: string | null;
   evaluatedAssignmentCount?: number | null;
@@ -68,6 +74,8 @@ interface WorkAssignmentTableProps {
   onPreviewTemplate?: (row: AssignmentTableRow) => void;
   onOpenAggregate?: (row: AssignmentTableRow) => void;
   onConfigureSourceRules?: (row: AssignmentTableRow) => void;
+  onConfigureAutoApprove?: (row: AssignmentTableRow) => void;
+  onComplete?: (row: AssignmentTableRow) => void;
   onToggleActive?: (row: AssignmentTableRow) => void;
   onEvaluate?: (row: AssignmentTableRow) => void;
 }
@@ -117,6 +125,10 @@ function isRootAssignment(row: AssignmentTableRow) {
   return Boolean(row.rootAssignmentId && row.rootAssignmentId === row.id);
 }
 
+function isAssignmentCompleted(row: AssignmentTableRow) {
+  return Boolean(row.completedAtUtc || (row.progressStatus === 2 && row.completedDate));
+}
+
 const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
   rows,
   onViewDetail,
@@ -124,6 +136,8 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
   onEvaluate,
   onOpenAggregate,
   onConfigureSourceRules,
+  onConfigureAutoApprove,
+  onComplete,
   onToggleActive,
 }) => {
   const columns: AppTableColumn<AssignmentTableRow>[] = useMemo(
@@ -131,7 +145,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
       {
         field: "actions",
         header: "Thao tác",
-        width: 250,
+        width: 330,
         align: "center",
         sortable: false,
         render: (row) => (
@@ -232,6 +246,28 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               </span>
             </Tooltip>
 
+            <Tooltip
+              title={
+                row.dynamicFormTemplateId
+                  ? "Cấu hình tự duyệt"
+                  : "Công việc chưa có biểu mẫu động"
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!row.dynamicFormTemplateId}
+                  color={row.autoApproveConditionJson ? "success" : "default"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfigureAutoApprove?.(row);
+                  }}
+                >
+                  <RuleOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+
             <Tooltip title={row.isActive ? "Ngừng hiệu lực" : "Kích hoạt lại"}>
               <IconButton
                 size="small"
@@ -242,6 +278,22 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               >
                 <PowerSettingsNewIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+
+            <Tooltip title={isAssignmentCompleted(row) ? "Công việc đã hoàn thành" : "Xác nhận hoàn thành"}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={isAssignmentCompleted(row)}
+                  color={isAssignmentCompleted(row) ? "success" : "default"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onComplete?.(row);
+                  }}
+                >
+                  <TaskAltOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           </Stack>
         ),
@@ -340,16 +392,25 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
       },
       {
         field: "startDate",
-        header: "Thời gian thực hiện",
+        header: "Kế hoạch",
         sortable: true,
         width: 180,
         getSortValue: (row) => row.startDate || "",
         render: (row) => (
           <Stack spacing={0.25}>
             <CommonDateText value={row.startDate} />
-            <CommonDateText value={row.completedDate} />
+            <CommonDateText value={row.dueDate} />
           </Stack>
         ),
+      },
+      {
+        field: "completedDate",
+        header: "Hoàn thành",
+        sortable: true,
+        width: 130,
+        align: "center",
+        getSortValue: (row) => row.completedDate || "",
+        render: (row) => <CommonDateText value={row.completedDate} />,
       },
       {
         field: "isActive",
@@ -376,7 +437,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         render: (row) => <CommonDateText value={row.updatedAtUtc} withTime />,
       },
     ],
-    [onConfigureSourceRules, onEvaluate, onOpenAggregate, onPreviewTemplate, onToggleActive, onViewDetail]
+    [onComplete, onConfigureAutoApprove, onConfigureSourceRules, onEvaluate, onOpenAggregate, onPreviewTemplate, onToggleActive, onViewDetail]
   );
 
   return (

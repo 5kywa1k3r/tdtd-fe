@@ -23,15 +23,22 @@ import { LazyUnitMultiSelect } from "../../common/LazyUnitMultiSelect";
 import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
 import { DynamicFormPicker } from "./DynamicFormPicker";
 import { PeriodicScheduleEditor } from "./PeriodicScheduleEditor";
-import SingleDayKeyField, { dayKeyToIsoDate, isoDateToDayKey } from "../../common/SingleDayKeyField";
+import SingleDayKeyField, {
+  dayKeyToIsoDate,
+  isoDateToDayKey,
+  normalizeDayKey,
+} from "../../common/SingleDayKeyField";
 import { UITextKey, uiText } from '../../../constants/uiText';
 import { useGetDynamicFormQuery } from "../../../api/dynamicFormApi";
-import { buildEditorValue } from "../../../features/dynamicForms/dynamicFormSchema";
+import { buildEditorValue, fieldTypeLabels } from "../../../features/dynamicForms/dynamicFormSchema";
+import type { DynamicFormField } from "../../../features/dynamicForms/dynamicForm.types";
 import type { UserRefDTO } from "../../../types/userRefDto";
 import type {
   DynamicFormDataSourceRuleType,
   DynamicFormDataSourceRulesDocument,
   DynamicFormSectionDataSourceRule,
+  WorkAssignmentAutoApproveConditionDocument,
+  WorkAssignmentAutoApproveConditionOperator,
 } from "../../../types/workAssignment";
 
 export interface ParentCandidateOption {
@@ -53,13 +60,17 @@ export interface AssignmentCreateValue {
   dynamicFormTemplateCode?: string;
   dynamicFormTemplateName?: string;
   dynamicFormDataSourceRulesJson?: string | null;
+  autoApproveConditionJson?: string | null;
 
   assignmentType: "ONCE" | "PERIODIC_REPORT";
   aggregationType: "MATRIX" | "UNIT_ROW_COL";
   schedule: any | null;
 
   startDate?: string | null;
+  dueDate?: string | null;
   completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
 
   assigneeUserIds: string[];
   assigneeUserRefs?: UserRefDTO[];
@@ -84,12 +95,14 @@ export function defaultAssignmentCreateValue(): AssignmentCreateValue {
     dynamicFormTemplateCode: "",
     dynamicFormTemplateName: "",
     dynamicFormDataSourceRulesJson: null,
+    autoApproveConditionJson: null,
 
     assignmentType: "ONCE",
     aggregationType: "MATRIX",
     schedule: null,
 
     startDate: null,
+    dueDate: null,
     completedDate: null,
 
     assigneeUserIds: [],
@@ -151,6 +164,21 @@ function isoToDayKey(value?: string | null) {
 function dayKeyToApiDate(dayKey: string, endOfDay = false) {
   if (!dayKey) return null;
   return `${dayKeyToIsoDate(dayKey)}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
+}
+
+function maxDayKey(...values: Array<string | null | undefined>) {
+  return values
+    .map((value) => normalizeDayKey(value))
+    .filter((value) => value.length === 8)
+    .sort()
+    .at(-1) ?? "";
+}
+
+function minDayKey(...values: Array<string | null | undefined>) {
+  return values
+    .map((value) => normalizeDayKey(value))
+    .filter((value) => value.length === 8)
+    .sort()[0] ?? "";
 }
 
 const SOURCE_RULE_OPTIONS: Array<{ value: DynamicFormDataSourceRuleType; label: string; help: string }> = [
@@ -240,6 +268,270 @@ function sourceRuleLabel(value: DynamicFormDataSourceRuleType) {
   return SOURCE_RULE_OPTIONS.find((item) => item.value === value)?.label ?? value;
 }
 
+const AUTO_APPROVE_OPERATOR_LABELS: Record<WorkAssignmentAutoApproveConditionOperator, string> = {
+  eq: "Bằng",
+  neq: "Khác",
+  contains: "Có chứa",
+  gt: "Lớn hơn",
+  gte: "Lớn hơn hoặc bằng",
+  lt: "Nhỏ hơn",
+  lte: "Nhỏ hơn hoặc bằng",
+  notEmpty: "Có dữ liệu",
+};
+
+const AUTO_APPROVE_FIELD_TYPES = new Set(["number", "singleSelect", "multiSelect"]);
+
+function isAutoApproveConditionField(field: DynamicFormField | null | undefined): field is DynamicFormField {
+  return Boolean(field?.id && AUTO_APPROVE_FIELD_TYPES.has(field.type));
+}
+
+function parseAutoApproveCondition(json?: string | null): WorkAssignmentAutoApproveConditionDocument {
+  if (!json?.trim()) {
+    return { version: 1, enabled: false, operator: "eq", value: null };
+  }
+
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { version: 1, enabled: false, operator: "eq", value: null };
+    }
+
+    return {
+      version: 1,
+      enabled: parsed.enabled !== false,
+      fieldId: typeof parsed.fieldId === "string" ? parsed.fieldId : null,
+      fieldKey: typeof parsed.fieldKey === "string" ? parsed.fieldKey : null,
+      fieldType: typeof parsed.fieldType === "string" ? parsed.fieldType : null,
+      operator: normalizeAutoApproveOperator(parsed.operator),
+      value:
+        typeof parsed.value === "string" ||
+        typeof parsed.value === "number" ||
+        typeof parsed.value === "boolean"
+          ? parsed.value
+          : null,
+    };
+  } catch {
+    return { version: 1, enabled: false, operator: "eq", value: null };
+  }
+}
+
+function normalizeAutoApproveOperator(value: unknown): WorkAssignmentAutoApproveConditionOperator {
+  const raw = typeof value === "string" ? value : "";
+  if (raw === "neq" || raw === "contains" || raw === "gt" || raw === "gte" || raw === "lt" || raw === "lte" || raw === "notEmpty") {
+    return raw;
+  }
+  return "eq";
+}
+
+function getAutoApproveOperatorOptions(fieldType?: string | null): WorkAssignmentAutoApproveConditionOperator[] {
+  if (fieldType === "number") {
+    return ["eq", "neq", "gt", "gte", "lt", "lte", "notEmpty"];
+  }
+  if (fieldType === "singleSelect") return ["eq", "neq", "notEmpty"];
+  if (fieldType === "multiSelect") return ["contains", "eq", "neq", "notEmpty"];
+  return [];
+}
+
+function getFieldLabel(field: {
+  id: string;
+  key?: string | null;
+  name?: string | null;
+  type?: string | null;
+}) {
+  const name = field.name?.trim();
+  const key = field.key?.trim();
+  return [name || key || field.id, key && name ? key : null].filter(Boolean).join(" - ");
+}
+
+function buildAutoApproveConditionJson(
+  enabled: boolean,
+  field: DynamicFormField | null,
+  operator: WorkAssignmentAutoApproveConditionOperator,
+  value: string | number | boolean | null,
+) {
+  if (!enabled || !field?.id) return null;
+
+  return JSON.stringify({
+    version: 1,
+    enabled: true,
+    fieldId: field.id,
+    fieldKey: field.key ?? field.id,
+    fieldType: field.type ?? "shortText",
+    operator,
+    value: operator === "notEmpty" ? null : value,
+  } satisfies WorkAssignmentAutoApproveConditionDocument);
+}
+
+export function AutoApproveConditionEditor({
+  fields,
+  value,
+  disabled,
+  onChange,
+}: {
+  fields: DynamicFormField[];
+  value?: string | null;
+  disabled?: boolean;
+  onChange: (json: string | null) => void;
+}) {
+  const condition = React.useMemo(() => parseAutoApproveCondition(value), [value]);
+  const selectableFields = React.useMemo(
+    () => fields.filter(isAutoApproveConditionField),
+    [fields]
+  );
+  const selectedField = React.useMemo(
+    () =>
+      selectableFields.find((field) => field.id === condition.fieldId) ??
+      selectableFields.find((field) => field.key && field.key === condition.fieldKey) ??
+      null,
+    [condition.fieldId, condition.fieldKey, selectableFields]
+  );
+  const operatorOptions = getAutoApproveOperatorOptions(selectedField?.type);
+  const operator = operatorOptions.includes(condition.operator)
+    ? condition.operator
+    : operatorOptions[0] ?? "eq";
+
+  React.useEffect(() => {
+    if (!value?.trim() || !condition.enabled || fields.length === 0 || selectedField) return;
+    onChange(null);
+  }, [condition.enabled, fields.length, onChange, selectedField, value]);
+
+  const emit = React.useCallback(
+    (
+      patch: Partial<{
+        enabled: boolean;
+        field: DynamicFormField | null;
+        operator: WorkAssignmentAutoApproveConditionOperator;
+        value: string | number | boolean | null;
+      }>
+    ) => {
+      const nextEnabled = patch.enabled ?? condition.enabled;
+      const nextField = patch.field === undefined ? selectedField : patch.field;
+      const nextOperator = patch.operator ?? operator;
+      const nextValue = patch.value === undefined ? condition.value ?? "" : patch.value;
+      onChange(buildAutoApproveConditionJson(nextEnabled, nextField, nextOperator, nextValue));
+    },
+    [condition.enabled, condition.value, onChange, operator, selectedField]
+  );
+
+  const valueInput =
+    operator === "notEmpty" || !selectedField ? null : selectedField.type === "singleSelect" || selectedField.type === "multiSelect" ? (
+      <TextField
+        select
+        size="small"
+        label="Giá trị"
+        value={String(condition.value ?? "")}
+        disabled={disabled}
+        onChange={(event) => emit({ value: event.target.value })}
+        sx={{ minWidth: { md: 240 } }}
+      >
+        {(selectedField.options ?? []).map((option: any) => (
+          <MenuItem key={option.code} value={option.code}>
+            {option.label || option.code}
+          </MenuItem>
+        ))}
+      </TextField>
+    ) : (
+      <TextField
+        size="small"
+        type="number"
+        label="Giá trị"
+        value={condition.value ?? ""}
+        disabled={disabled}
+        onChange={(event) =>
+          emit({
+            value:
+              event.target.value !== ""
+                ? Number(event.target.value)
+                : event.target.value,
+          })
+        }
+        sx={{ minWidth: { md: 240 } }}
+      />
+    );
+
+  return (
+    <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+      <Stack spacing={1.25}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between">
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+              Tự duyệt báo cáo
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Khi reporter nộp báo cáo và field thỏa điều kiện, hệ thống tự chuyển sang đã duyệt.
+            </Typography>
+          </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={condition.enabled}
+                disabled={disabled || selectableFields.length === 0}
+                onChange={(event) => {
+                  const firstField = selectedField ?? selectableFields[0] ?? null;
+                  emit({
+                    enabled: event.target.checked,
+                    field: firstField,
+                    operator: getAutoApproveOperatorOptions(firstField?.type)[0] ?? "eq",
+                    value: firstField?.options?.[0]?.code ?? "",
+                  });
+                }}
+              />
+            }
+            label={condition.enabled ? "Đang bật" : "Tắt"}
+          />
+        </Stack>
+
+        {selectableFields.length === 0 ? (
+          <Alert severity="info">Biểu mẫu chưa có field phù hợp để cấu hình tự duyệt.</Alert>
+        ) : condition.enabled ? (
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} alignItems={{ xs: "stretch", md: "flex-start" }}>
+            <TextField
+              select
+              size="small"
+              label="Field điều kiện"
+              value={selectedField?.id ?? ""}
+              disabled={disabled}
+              onChange={(event) => {
+                const nextField = selectableFields.find((field) => field.id === event.target.value) ?? null;
+                emit({
+                  field: nextField,
+                  operator: getAutoApproveOperatorOptions(nextField?.type)[0] ?? "eq",
+                  value: nextField?.options?.[0]?.code ?? "",
+                });
+              }}
+              sx={{ minWidth: { md: 320 } }}
+            >
+              {selectableFields.map((field) => (
+                <MenuItem key={field.id} value={field.id}>
+                  {getFieldLabel(field)} ({fieldTypeLabels[field.type] ?? field.type})
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Điều kiện"
+              value={operator}
+              disabled={disabled || !selectedField}
+              onChange={(event) => emit({ operator: normalizeAutoApproveOperator(event.target.value) })}
+              sx={{ minWidth: { md: 220 } }}
+            >
+              {operatorOptions.map((item) => (
+                <MenuItem key={item} value={item}>
+                  {AUTO_APPROVE_OPERATOR_LABELS[item]}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            {valueInput}
+          </Stack>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+}
+
 const WorkAssignmentCreateDialog: React.FC<Props> = ({
   open,
   value,
@@ -285,6 +577,19 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   const selectedParent = React.useMemo(() => {
     return parentCandidates.find((x) => x.id === value.parentAssignmentId) ?? null;
   }, [parentCandidates, value.parentAssignmentId]);
+  const workStartDayKey = isoToDayKey(workStartDate);
+  const workEndDayKey = isoToDayKey(workEndDate);
+  const startDayKey = isoToDayKey(value.startDate);
+  const completedDayKey = isoToDayKey(value.completedDate);
+  const dueDayKey = isoToDayKey(value.dueAtUtc);
+  const startMaxDayKey = minDayKey(
+    workEndDayKey,
+    completedDayKey,
+    value.assignmentType === "ONCE" ? dueDayKey : ""
+  );
+  const completedMinDayKey = maxDayKey(workStartDayKey, startDayKey);
+  const dueMinDayKey = maxDayKey(workStartDayKey, startDayKey);
+  const dueMaxDayKey = minDayKey(workEndDayKey, completedDayKey);
 
   const emitChange = React.useCallback(
     (patch: Partial<AssignmentCreateValue>) => {
@@ -321,6 +626,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
         dynamicFormTemplateCode: item?.code ?? "",
         dynamicFormTemplateName: item?.name ?? "",
         dynamicFormDataSourceRulesJson: null,
+        autoApproveConditionJson: null,
         dynamicExcelId: "",
         dynamicExcelCode: "",
         dynamicExcelName: "",
@@ -581,7 +887,20 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             </Box>
           ) : null}
 
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          {value.dynamicFormTemplateId ? (
+            <AutoApproveConditionEditor
+              fields={selectedDynamicForm?.fields ?? []}
+              value={value.autoApproveConditionJson ?? null}
+              disabled={readonly || selectedDynamicFormQuery.isLoading || selectedDynamicFormQuery.isFetching || !selectedDynamicForm}
+              onChange={(autoApproveConditionJson) => emitChange({ autoApproveConditionJson })}
+            />
+          ) : null}
+
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={2}
+            alignItems={{ xs: "stretch", md: "flex-start" }}
+          >
             <TextField
               select={!isView}
               size="small"
@@ -589,7 +908,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               value={value.assignmentType}
               disabled={readonly}
               onChange={isView ? undefined : handleAssignmentTypeChange}
-              sx={{ minWidth: 220 }}
+              sx={{ minWidth: 220, flex: { md: "0 0 220px" } }}
               InputProps={isView ? { readOnly: true } : undefined}
             >
               {!isView && <MenuItem value="ONCE">{uiText(UITextKey.TextGiaoMotLan)}</MenuItem>}
@@ -601,6 +920,9 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
                 value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
                 disabled
                 fullWidth
+                minDayKey={dueMinDayKey}
+                maxDayKey={dueMaxDayKey}
+                sx={{ flex: { md: "1 1 180px" } }}
               />
             ) : (
               <SingleDayKeyField
@@ -608,6 +930,9 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
                 value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
                 disabled={readonly}
                 fullWidth
+                minDayKey={dueMinDayKey}
+                maxDayKey={dueMaxDayKey}
+                sx={{ flex: { md: "1 1 180px" } }}
                 onChange={(dayKey) =>
                   emitChange({
                     dueAtUtc: dayKey ? `${dayKeyToIsoDate(dayKey)}T23:59:59.999Z` : null,
@@ -621,30 +946,43 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               value={isoToDayKey(value.startDate)}
               disabled={readonly}
               fullWidth
-              minDayKey={workStartDate ? isoToDayKey(String(workStartDate).slice(0, 10)) : ""}
-              maxDayKey={workEndDate ? isoToDayKey(String(workEndDate).slice(0, 10)) : ""}
+              minDayKey={workStartDayKey}
+              maxDayKey={startMaxDayKey}
+              sx={{ flex: { md: "1 1 180px" } }}
               onChange={(dayKey) => emitChange({ startDate: dayKeyToApiDate(dayKey) })}
             />
 
             <SingleDayKeyField
-              label="Ngày hoàn thành"
+              label="Hạn nộp nhiệm vụ"
               value={isoToDayKey(value.completedDate)}
               disabled={readonly}
               fullWidth
-              minDayKey={
-                isoToDayKey(value.startDate) ||
-                (workStartDate ? isoToDayKey(String(workStartDate).slice(0, 10)) : "")
-              }
-              maxDayKey={workEndDate ? isoToDayKey(String(workEndDate).slice(0, 10)) : ""}
+              minDayKey={completedMinDayKey}
+              maxDayKey={workEndDayKey}
+              sx={{ flex: { md: "1 1 180px" } }}
               onChange={(dayKey) => emitChange({ completedDate: dayKeyToApiDate(dayKey, true) })}
             />
 
             <FormControlLabel
               control={<Switch checked={value.isActive} disabled />}
               label={value.isActive ? "Đang hiệu lực" : "Ngừng hiệu lực"}
+              sx={{
+                alignSelf: { md: "flex-start" },
+                minHeight: 40,
+                mt: { md: 0 },
+                mx: 0,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
             />
 
-            <Chip size="small" color="success" variant="outlined" label="Báo cáo chủ động luôn bật" />
+            <Chip
+              size="small"
+              color="success"
+              variant="outlined"
+              label="Báo cáo chủ động luôn bật"
+              sx={{ alignSelf: { xs: "flex-start", md: "center" }, mt: { md: 0.75 }, flexShrink: 0 }}
+            />
           </Stack>
 
           {isView ? (
@@ -679,7 +1017,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               />
 
               <Alert severity="info">
-                Chọn đơn vị cấp dưới để giao việc hoặc phối hợp. Nếu đơn vị đã ở cấp thấp nhất và cần giao cho người trong chính đơn vị, chọn trực tiếp tài khoản ở mục bên dưới.
+                Chọn đơn vị ngang cấp hoặc cấp dưới để giao việc/phối hợp. Nếu đơn vị đã ở cấp thấp nhất và cần giao cho cán bộ trong chính đơn vị, chọn trực tiếp tài khoản ở mục bên dưới.
               </Alert>
 
               <HybridUnitUserPicker
@@ -721,8 +1059,8 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             <PeriodicScheduleEditor
               value={value.schedule}
               disabled={readonly}
-              workStartDate={workStartDate}
-              workEndDate={workEndDate}
+              workStartDate={value.startDate ?? workStartDate}
+              workEndDate={value.completedDate ?? workEndDate}
               onChange={handleScheduleChange}
             />
           )}

@@ -33,6 +33,7 @@ import {
   type LabelRow,
   type LabelScopeType,
   type LabelSearchReq,
+  type LabelUsage,
   useCreateLabelMutation,
   useDeleteLabelMutation,
   useSearchLabelsMutation,
@@ -42,11 +43,14 @@ import { UITextKey, uiText } from '../../constants/uiText';
 import { getApiErrorMessage } from "../../utils/apiError";
 import {
   formatLabelDataType,
+  formatLabelUsage,
   isValidLabelColor,
   LABEL_DATA_TYPE_OPTIONS,
+  LABEL_USAGE_OPTIONS,
   LabelColorPalette,
   LabelColorPreview,
   LabelPreviewChip,
+  labelUsageUsesDataType,
 } from "../../components/labels/labelUi";
 
 type LabelFormState = {
@@ -56,6 +60,7 @@ type LabelFormState = {
   description: string;
   color: string;
   groupCode: string;
+  usage: LabelUsage;
   dataType: LabelRow["dataType"];
   scopeType: LabelScopeType;
   scopeId: string;
@@ -68,6 +73,7 @@ const defaultFormState = (): LabelFormState => ({
   description: "",
   color: "#2563EB",
   groupCode: "",
+  usage: "CLASSIFICATION",
   dataType: "NUMBER",
   scopeType: "GLOBAL",
   scopeId: "",
@@ -152,19 +158,74 @@ export default function LabelListPage() {
   const columns = useMemo<AppTableColumn<LabelRow>[]>(
     () => [
       {
+        field: "actions",
+        header: "Thao tác",
+        width: 120,
+        align: "left",
+        render: (row) => (
+          <Stack direction="row" spacing={0.25} justifyContent="flex-start">
+            <Tooltip title={uiText(UITextKey.TextTaoNhanMoi)}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openCreate();
+                  }}
+                >
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={uiText(UITextKey.TextSua)}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!row.canManage || row.isSystem}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEdit(row);
+                  }}
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={uiText(UITextKey.TextXoa)}>
+              <span>
+                <IconButton
+                  size="small"
+                  color="error"
+                  disabled={!row.canManage || row.isSystem}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDeleteTarget(row);
+                  }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Stack>
+        ),
+      },
+      {
         field: "name",
         header: "Tên nhãn",
         sortable: true,
+        width: "34%",
         render: (row) => (
-          <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
-            <Box sx={{ minWidth: 0 }}>
-              <LabelPreviewChip name={row.name} code={row.code} color={row.color} />
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {row.code}
-              </Typography>
-            </Box>
+          <Stack direction="row" alignItems="center" sx={{ minWidth: 0, maxWidth: "100%" }}>
+            <LabelPreviewChip name={row.name} code={row.code} color={row.color} />
           </Stack>
         ),
+      },
+      {
+        field: "usage",
+        header: "Mục đích",
+        sortable: true,
+        width: 150,
+        render: (row) => formatLabelUsage(row.usage),
       },
       {
         field: "groupCode",
@@ -174,8 +235,8 @@ export default function LabelListPage() {
       },
       {
         field: "dataType",
-        header: uiText(UITextKey.TextKieuDuLieuMacDinhThongKe),
-        render: (row) => formatLabelDataType(row.dataType),
+        header: "Kiểu thống kê",
+        render: (row) => labelUsageUsesDataType(row.usage) ? formatLabelDataType(row.dataType) : "Không áp dụng",
       },
       {
         field: "scopeType",
@@ -199,39 +260,6 @@ export default function LabelListPage() {
         header: "Cập nhật",
         sortable: true,
         render: (row) => formatDate(row.updatedAtUtc),
-      },
-      {
-        field: "actions",
-        header: "",
-        width: 110,
-        align: "right",
-        render: (row) => (
-          <Stack direction="row" justifyContent="flex-end">
-            <Tooltip title={uiText(UITextKey.TextSua)}>
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={!row.canManage || row.isSystem}
-                  onClick={() => openEdit(row)}
-                >
-                  <EditOutlinedIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Tooltip title={uiText(UITextKey.TextXoa)}>
-              <span>
-                <IconButton
-                  size="small"
-                  color="error"
-                  disabled={!row.canManage || row.isSystem}
-                  onClick={() => setDeleteTarget(row)}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Stack>
-        ),
       },
     ],
     [],
@@ -263,6 +291,7 @@ export default function LabelListPage() {
       description: row.description ?? "",
       color: row.color ?? "#2563EB",
       groupCode: row.groupCode ?? "",
+      usage: row.usage ?? "CLASSIFICATION",
       dataType: row.dataType ?? "NUMBER",
       scopeType: row.scopeType,
       scopeId: row.scopeId ?? "",
@@ -278,6 +307,7 @@ export default function LabelListPage() {
       description: form.description.trim() || null,
       color: form.color.trim() || null,
       groupCode: form.groupCode.trim() || null,
+      usage: form.usage,
       dataType: form.dataType,
       scopeType: isSystemAdmin ? form.scopeType : null,
       scopeId: isSystemAdmin ? form.scopeId.trim() || null : null,
@@ -293,6 +323,7 @@ export default function LabelListPage() {
             description: payload.description,
             color: payload.color,
             groupCode: payload.groupCode,
+            usage: payload.usage,
             dataType: payload.dataType,
             isActive: payload.isActive,
           },
@@ -415,7 +446,7 @@ export default function LabelListPage() {
             setPageSize(next);
             setPage(0);
           }}
-          onRowDoubleClick={openEdit}
+          onRowClick={openEdit}
         />
       </Stack>
 
@@ -430,6 +461,7 @@ export default function LabelListPage() {
               disabled={Boolean(form.id) || busy}
               onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))}
               helperText={uiText(UITextKey.TextChiDungChuThuongSoDauHoac)}
+              InputLabelProps={{ shrink: true }}
               required
             />
             <TextField
@@ -438,6 +470,7 @@ export default function LabelListPage() {
               value={form.name}
               disabled={busy}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              InputLabelProps={{ shrink: true }}
               required
             />
             <Stack direction="row" spacing={1}>
@@ -460,6 +493,24 @@ export default function LabelListPage() {
                 helperText={!isValidLabelColor(form.color) ? uiText(UITextKey.TextMauNhanKhongHopLe) : " "}
               />
             </Stack>
+            <TextField
+              select
+              size="small"
+              label="Mục đích sử dụng"
+              value={form.usage}
+              disabled={busy}
+              helperText={labelUsageUsesDataType(form.usage) ? "Kiểu dữ liệu bắt buộc và phải khớp với nơi gắn nhãn." : "Nhãn này chỉ dùng để phân loại, không tham gia thống kê."}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, usage: event.target.value as LabelUsage }))
+              }
+              InputLabelProps={{ shrink: true }}
+            >
+              {LABEL_USAGE_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
             <Stack spacing={1}>
               <Typography variant="caption" color="text.secondary">
                 {uiText(UITextKey.TextMauGoiY)}
@@ -477,27 +528,31 @@ export default function LabelListPage() {
                 name={form.name}
                 color={form.color}
                 groupCode={form.groupCode}
+                usage={form.usage}
                 dataType={form.dataType}
                 showDataType
               />
             </Stack>
-            <TextField
-              select
-              size="small"
-              label={uiText(UITextKey.TextKieuDuLieuMacDinhThongKe)}
-              value={form.dataType}
-              disabled={busy}
-              helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
-              }
-            >
-              {LABEL_DATA_TYPE_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
+            {labelUsageUsesDataType(form.usage) && (
+              <TextField
+                select
+                size="small"
+                label="Kiểu dữ liệu"
+                value={form.dataType}
+                disabled={busy}
+                helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
+                }
+                InputLabelProps={{ shrink: true }}
+              >
+                {LABEL_DATA_TYPE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             {isSystemAdmin && !form.id && (
               <Stack direction="row" spacing={1}>
                 <TextField

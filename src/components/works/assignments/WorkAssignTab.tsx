@@ -37,6 +37,7 @@ import { LazyUnitAccountSelect } from "../../common/LazyUnitAccountSelect";
 import { useGetDynamicFormQuery } from "../../../api/dynamicFormApi";
 import {
   useActivateWorkAssignmentMutation,
+  useCompleteWorkAssignmentMutation,
   useCreateWorkAssignmentMutation,
   useDeactivateWorkAssignmentMutation,
   useGetChildrenAssignmentsQuery,
@@ -45,6 +46,7 @@ import {
   useGetWorkAssignmentsByWorkQuery,
   useHandoverWorkAssignmentMutation,
   useSearchWorkAssignmentHandoverHistoryMutation,
+  useUpdateWorkAssignmentAutoApproveConditionMutation,
   useUpdateWorkAssignmentDataSourceRulesMutation,
   type WorkAssignmentHandoverHistoryRow,
 } from "../../../api/workAssignmentApi";
@@ -58,6 +60,7 @@ import WorkAssignmentCreateDialog, {
 import WorkAssignmentEvaluationDialog from "./WorkAssignmentEvaluationDialog";
 import WorkAssignmentNotificationTab from "./WorkAssignmentNotificationTab";
 import WorkAssignmentSourceRulesDialog from "./WorkAssignmentSourceRulesDialog";
+import WorkAssignmentAutoApproveConditionDialog from "./WorkAssignmentAutoApproveConditionDialog";
 import WorkTaskActionCenterPage from "../../../pages/works/actions/WorkTaskActionCenterPage";
 
 import type { WorkAssignmentListResponse, WorkAssignmentResponse } from "../../../types/workAssignment";
@@ -118,6 +121,28 @@ function getAssignmentLabel(row?: AssignmentTableRow | null) {
   return label || row.id;
 }
 
+function toDayKey(value?: string | null) {
+  const matched = String(value ?? "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return matched ? `${matched[1]}${matched[2]}${matched[3]}` : "";
+}
+
+function dayKeyToApiDate(dayKey?: string | null) {
+  const normalized = String(dayKey ?? "").replace(/\D/g, "").slice(0, 8);
+  if (normalized.length !== 8) return null;
+  return `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}T00:00:00.000Z`;
+}
+
+function dayKeyToInputDate(dayKey?: string | null) {
+  const normalized = String(dayKey ?? "").replace(/\D/g, "").slice(0, 8);
+  if (normalized.length !== 8) return "";
+  return `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}`;
+}
+
+function inputDateToDayKey(value?: string | null) {
+  const matched = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return matched ? `${matched[1]}${matched[2]}${matched[3]}` : "";
+}
+
 function getAssigneeLabel(item?: {
   userId?: string | null;
   username?: string | null;
@@ -164,6 +189,7 @@ function toAssignmentRow(x: WorkAssignmentListResponse): AssignmentTableRow {
     dynamicFormTemplateCode: x?.dynamicFormTemplateCode ?? null,
     dynamicFormTemplateName: x?.dynamicFormTemplateName ?? null,
     dynamicFormDataSourceRulesJson: x?.dynamicFormDataSourceRulesJson ?? null,
+    autoApproveConditionJson: x?.autoApproveConditionJson ?? null,
     assignmentType: x?.assignmentType ?? null,
     aggregationType: x?.aggregationType ?? null,
     assignees: x?.assignees ?? [],
@@ -177,7 +203,10 @@ function toAssignmentRow(x: WorkAssignmentListResponse): AssignmentTableRow {
     hasAnyDuePeriod: x?.hasAnyDuePeriod ?? false,
     hasOverduePeriod: x?.hasOverduePeriod ?? false,
     startDate: x?.startDate ?? null,
+    dueDate: x?.dueDate ?? null,
     completedDate: x?.completedDate ?? null,
+    completedAtUtc: x?.completedAtUtc ?? null,
+    completedByUserId: x?.completedByUserId ?? null,
     evaluationTemplateId: x?.evaluationTemplateId ?? null,
     evaluationTemplateCode: x?.evaluationTemplateCode ?? null,
     evaluationTemplateLabel: x?.evaluationTemplateLabel ?? null,
@@ -204,12 +233,16 @@ function toDetailDialogValue(x: WorkAssignmentResponse): AssignmentCreateValue {
     dynamicFormTemplateCode: draft.dynamicFormTemplateCode ?? "",
     dynamicFormTemplateName: draft.dynamicFormTemplateName ?? "",
     dynamicFormDataSourceRulesJson: draft.dynamicFormDataSourceRulesJson ?? null,
+    autoApproveConditionJson: draft.autoApproveConditionJson ?? null,
 
     assignmentType: draft.assignmentType,
     aggregationType: draft.aggregationType,
     schedule: draft.schedule ?? null,
     startDate: draft.startDate ?? null,
-    completedDate: draft.completedDate ?? null,
+    dueDate: draft.dueDate ?? null,
+    completedDate: draft.dueDate ?? draft.completedDate ?? null,
+    completedAtUtc: draft.completedAtUtc ?? null,
+    completedByUserId: draft.completedByUserId ?? null,
     dueAtUtc: draft.dueAtUtc ?? null,
 
     assigneeUserIds: draft.assigneeUserIds ?? [],
@@ -243,12 +276,15 @@ const WorkAssignTab: React.FC<Props> = ({
   );
 
   const [createWorkAssignment, createState] = useCreateWorkAssignmentMutation();
+  const [completeWorkAssignment, completeState] = useCompleteWorkAssignmentMutation();
   const [deactivateWorkAssignment, deactivateState] = useDeactivateWorkAssignmentMutation();
   const [activateWorkAssignment, activateState] = useActivateWorkAssignmentMutation();
   const [handoverWorkAssignment, handoverState] = useHandoverWorkAssignmentMutation();
   const [searchHistory, historyState] = useSearchWorkAssignmentHandoverHistoryMutation();
   const [updateDataSourceRules, updateDataSourceRulesState] =
     useUpdateWorkAssignmentDataSourceRulesMutation();
+  const [updateAutoApproveCondition, updateAutoApproveConditionState] =
+    useUpdateWorkAssignmentAutoApproveConditionMutation();
 
   const querySection = React.useMemo<AssignSection>(() => {
     const rawTab = (searchParams.get("tab") || "").trim().toUpperCase();
@@ -270,7 +306,11 @@ const WorkAssignTab: React.FC<Props> = ({
 
   const [detailId, setDetailId] = React.useState<string | null>(null);
   const [sourceRulesTargetId, setSourceRulesTargetId] = React.useState<string | null>(null);
+  const [autoApproveTargetId, setAutoApproveTargetId] = React.useState<string | null>(null);
   const [evaluateTarget, setEvaluateTarget] = React.useState<AssignmentTableRow | null>(null);
+  const [completeTarget, setCompleteTarget] = React.useState<AssignmentTableRow | null>(null);
+  const [completeDate, setCompleteDate] = React.useState(toDayKey(new Date().toISOString()));
+  const [completeNote, setCompleteNote] = React.useState("");
   const [previewDynamicFormId, setPreviewDynamicFormId] = React.useState<string | null>(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "" });
   const [filterValue, setFilterValue] = React.useState<WorkAssignmentFilterValue>(
@@ -419,6 +459,12 @@ const WorkAssignTab: React.FC<Props> = ({
       { skip: !sourceRulesTargetId }
     );
 
+  const { data: autoApproveAssignmentData, isFetching: autoApproveAssignmentLoading } =
+    useGetWorkAssignmentByIdQuery(
+      { id: autoApproveTargetId ?? "" },
+      { skip: !autoApproveTargetId }
+    );
+
   const { data: sourceRulesChildrenData, isFetching: sourceRulesChildrenLoading } =
     useGetChildrenAssignmentsQuery(
       { parentAssignmentId: sourceRulesTargetId ?? "" },
@@ -444,7 +490,8 @@ const WorkAssignTab: React.FC<Props> = ({
     deactivateState.isLoading ||
     activateState.isLoading ||
     handoverState.isLoading ||
-    updateDataSourceRulesState.isLoading;
+    updateDataSourceRulesState.isLoading ||
+    updateAutoApproveConditionState.isLoading;
 
   const runHistorySearch = React.useCallback(
     (page = historyPage, pageSize = historyPageSize) => {
@@ -493,8 +540,35 @@ const WorkAssignTab: React.FC<Props> = ({
       return;
     }
 
-    if (createValue.startDate && createValue.completedDate && createValue.completedDate < createValue.startDate) {
-      showMessage("Ngày hoàn thành không được trước ngày bắt đầu nhiệm vụ.");
+    const workStartDay = toDayKey(workStartDate);
+    const workEndDay = toDayKey(workEndDate);
+    const startDay = toDayKey(createValue.startDate);
+    const completedDay = toDayKey(createValue.completedDate);
+    const dueDay = toDayKey(createValue.dueAtUtc);
+    const scheduleStartDay = toDayKey(createValue.schedule?.startDate);
+
+    if (workStartDay && startDay && startDay < workStartDay) {
+      showMessage("Ngày bắt đầu nhiệm vụ không được trước ngày bắt đầu công việc.");
+      return;
+    }
+
+    if (workEndDay && startDay && startDay > workEndDay) {
+      showMessage("Ngày bắt đầu nhiệm vụ không được sau ngày kết thúc công việc.");
+      return;
+    }
+
+    if (workStartDay && completedDay && completedDay < workStartDay) {
+      showMessage("Hạn nộp nhiệm vụ không được trước ngày bắt đầu công việc.");
+      return;
+    }
+
+    if (workEndDay && completedDay && completedDay > workEndDay) {
+      showMessage("Hạn nộp nhiệm vụ không được sau ngày kết thúc công việc.");
+      return;
+    }
+
+    if (startDay && completedDay && completedDay < startDay) {
+      showMessage("Hạn nộp nhiệm vụ không được trước ngày bắt đầu nhiệm vụ.");
       return;
     }
 
@@ -508,9 +582,45 @@ const WorkAssignTab: React.FC<Props> = ({
       return;
     }
 
+    if (createValue.assignmentType === "ONCE") {
+      if (workStartDay && dueDay && dueDay < workStartDay) {
+        showMessage("Hạn nộp không được trước ngày bắt đầu công việc.");
+        return;
+      }
+
+      if (workEndDay && dueDay && dueDay > workEndDay) {
+        showMessage("Hạn nộp không được sau ngày kết thúc công việc.");
+        return;
+      }
+
+      if (startDay && dueDay && dueDay < startDay) {
+        showMessage("Hạn nộp không được trước ngày bắt đầu nhiệm vụ.");
+        return;
+      }
+
+      if (completedDay && dueDay && dueDay > completedDay) {
+        showMessage("Hạn nộp báo cáo không được sau hạn nộp nhiệm vụ.");
+        return;
+      }
+    }
+
     if (createValue.assignmentType === "PERIODIC_REPORT" && !createValue.schedule) {
       showMessage("Công việc giao định kỳ bắt buộc phải có cấu hình lịch.");
       return;
+    }
+
+    if (createValue.assignmentType === "PERIODIC_REPORT" && scheduleStartDay) {
+      const minScheduleStartDay = startDay || workStartDay;
+      const maxScheduleStartDay = completedDay || workEndDay;
+      if (minScheduleStartDay && scheduleStartDay < minScheduleStartDay) {
+        showMessage("Ngày bắt đầu áp dụng lịch không được trước ngày bắt đầu nhiệm vụ.");
+        return;
+      }
+
+      if (maxScheduleStartDay && scheduleStartDay > maxScheduleStartDay) {
+        showMessage("Ngày bắt đầu áp dụng lịch không được sau hạn nộp nhiệm vụ.");
+        return;
+      }
     }
 
     try {
@@ -523,10 +633,12 @@ const WorkAssignTab: React.FC<Props> = ({
               : createValue.parentAssignmentId,
           dynamicFormTemplateId: createValue.dynamicFormTemplateId,
           dynamicFormDataSourceRulesJson: createValue.dynamicFormDataSourceRulesJson ?? null,
+          autoApproveConditionJson: createValue.autoApproveConditionJson ?? null,
           assignmentType: createValue.assignmentType,
           aggregationType: createValue.aggregationType,
           startDate: createValue.startDate ?? null,
-          completedDate: createValue.completedDate ?? null,
+          dueDate: createValue.completedDate ?? null,
+          completedDate: null,
           assigneeUserIds: createValue.assigneeUserIds ?? [],
           assigneeUnitIds: createValue.assigneeUnitIds,
           leaderWatcherUserIds: createValue.leaderWatcherUserIds,
@@ -563,6 +675,38 @@ const WorkAssignTab: React.FC<Props> = ({
       showMessage(
         err?.data?.message || err?.message || "Cập nhật trạng thái công việc thất bại."
       );
+    }
+  };
+
+  const handleOpenComplete = React.useCallback((row: AssignmentTableRow) => {
+    setCompleteTarget(row);
+    setCompleteDate(toDayKey(row.completedDate) || toDayKey(new Date().toISOString()));
+    setCompleteNote("");
+  }, []);
+
+  const handleSubmitComplete = async () => {
+    if (!completeTarget) return;
+    if (!completeDate) {
+      showMessage("Bắt buộc nhập ngày hoàn thành.");
+      return;
+    }
+
+    try {
+      await completeWorkAssignment({
+        id: completeTarget.id,
+        workId,
+        body: {
+          completedDate: dayKeyToApiDate(completeDate),
+          note: completeNote.trim() || null,
+        },
+      }).unwrap();
+
+      setCompleteTarget(null);
+      setCompleteNote("");
+      showMessage("Đã xác nhận hoàn thành nhiệm vụ.");
+      await refetch();
+    } catch (err: any) {
+      showMessage(err?.data?.message || err?.message || "Xác nhận hoàn thành thất bại.");
     }
   };
 
@@ -611,6 +755,41 @@ const WorkAssignTab: React.FC<Props> = ({
       }
     },
     [refetch, showMessage, sourceRulesTargetId, updateDataSourceRules, workId]
+  );
+
+  const handleOpenAutoApprove = React.useCallback(
+    (row: AssignmentTableRow) => {
+      if (!row.dynamicFormTemplateId) {
+        showMessage("Công việc chưa có biểu mẫu động để cấu hình tự duyệt.");
+        return;
+      }
+
+      setAutoApproveTargetId(row.id);
+    },
+    [showMessage]
+  );
+
+  const handleSaveAutoApprove = React.useCallback(
+    async (autoApproveConditionJson: string | null) => {
+      if (!autoApproveTargetId) return;
+
+      try {
+        await updateAutoApproveCondition({
+          id: autoApproveTargetId,
+          workId,
+          body: { autoApproveConditionJson },
+        }).unwrap();
+
+        setAutoApproveTargetId(null);
+        showMessage("Đã lưu điều kiện tự duyệt.");
+        await refetch();
+      } catch (err: any) {
+        showMessage(
+          err?.data?.message || err?.message || "Lưu điều kiện tự duyệt thất bại."
+        );
+      }
+    },
+    [autoApproveTargetId, refetch, showMessage, updateAutoApproveCondition, workId]
   );
 
   const handleOpenEvaluate = React.useCallback(
@@ -923,6 +1102,8 @@ const WorkAssignTab: React.FC<Props> = ({
                   onEvaluate={handleOpenEvaluate}
                   onOpenAggregate={handleOpenAggregate}
                   onConfigureSourceRules={handleOpenSourceRules}
+                  onConfigureAutoApprove={handleOpenAutoApprove}
+                  onComplete={handleOpenComplete}
                   onToggleActive={handleToggleActive}
                 />
               )}
@@ -1166,6 +1347,61 @@ const WorkAssignTab: React.FC<Props> = ({
         }
       />
 
+      <Dialog
+        open={!!completeTarget}
+        onClose={() => {
+          if (completeState.isLoading) return;
+          setCompleteTarget(null);
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Xác nhận hoàn thành nhiệm vụ</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Alert severity="warning">
+              Sau khi xác nhận hoàn thành, các báo cáo và luồng chỉnh sửa bên trong nhiệm vụ này sẽ bị khóa.
+            </Alert>
+            <TextField
+              size="small"
+              label="Công việc"
+              value={getAssignmentLabel(completeTarget)}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+            <TextField
+              size="small"
+              type="date"
+              label="Ngày hoàn thành"
+              value={dayKeyToInputDate(completeDate)}
+              onChange={(e) => setCompleteDate(inputDateToDayKey(e.target.value))}
+              disabled={completeState.isLoading}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              required
+            />
+            <TextField
+              size="small"
+              label="Ghi chú"
+              value={completeNote}
+              onChange={(e) => setCompleteNote(e.target.value)}
+              disabled={completeState.isLoading}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompleteTarget(null)} disabled={completeState.isLoading}>
+            Hủy
+          </Button>
+          <Button variant="contained" onClick={handleSubmitComplete} disabled={completeState.isLoading}>
+            Xác nhận
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <WorkAssignmentSourceRulesDialog
         open={!!sourceRulesTargetId}
         assignment={(sourceRulesAssignmentData as WorkAssignmentResponse) ?? null}
@@ -1177,6 +1413,17 @@ const WorkAssignTab: React.FC<Props> = ({
           setSourceRulesTargetId(null);
         }}
         onSubmit={handleSaveSourceRules}
+      />
+
+      <WorkAssignmentAutoApproveConditionDialog
+        open={!!autoApproveTargetId}
+        assignment={(autoApproveAssignmentData as WorkAssignmentResponse) ?? null}
+        saving={updateAutoApproveConditionState.isLoading || autoApproveAssignmentLoading}
+        onClose={() => {
+          if (updateAutoApproveConditionState.isLoading) return;
+          setAutoApproveTargetId(null);
+        }}
+        onSubmit={handleSaveAutoApprove}
       />
 
       <WorkAssignmentEvaluationDialog

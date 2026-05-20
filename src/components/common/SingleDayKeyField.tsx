@@ -23,6 +23,8 @@ type Props = {
   onEnterPress?: () => void;
   minDayKey?: string;
   maxDayKey?: string;
+  error?: boolean;
+  helperText?: React.ReactNode;
 };
 
 export function normalizeDayKey(value?: string | null) {
@@ -111,6 +113,22 @@ function isValidDayKey(dayKey?: string | null) {
   );
 }
 
+function getRangeError(dayKey: string, minDayKey?: string, maxDayKey?: string) {
+  if (!isValidDayKey(dayKey)) return "";
+
+  const min = normalizeDayKey(minDayKey);
+  if (isValidDayKey(min) && dayKey < min) {
+    return `Không được trước ${dayKeyToDisplay(min)}.`;
+  }
+
+  const max = normalizeDayKey(maxDayKey);
+  if (isValidDayKey(max) && dayKey > max) {
+    return `Không được sau ${dayKeyToDisplay(max)}.`;
+  }
+
+  return "";
+}
+
 const SingleDayKeyField: React.FC<Props> = ({
   label,
   value,
@@ -124,14 +142,18 @@ const SingleDayKeyField: React.FC<Props> = ({
   onEnterPress,
   minDayKey,
   maxDayKey,
+  error,
+  helperText,
 }) => {
   const [displayValue, setDisplayValue] = React.useState(dayKeyToDisplay(value));
+  const [rangeError, setRangeError] = React.useState("");
   const [pickerOpened, setPickerOpened] = React.useState(false);
   const generatedId = React.useId();
   const inputId = id ?? name ?? `single-day-${generatedId}`;
 
   React.useEffect(() => {
     setDisplayValue(dayKeyToDisplay(value));
+    setRangeError("");
   }, [value]);
 
   return (
@@ -145,16 +167,41 @@ const SingleDayKeyField: React.FC<Props> = ({
         disabled={disabled}
         placeholder={placeholder}
         inputProps={{ inputMode: "numeric", maxLength: 10, lang: "vi" }}
+        InputLabelProps={disabled ? undefined : { shrink: true }}
         fullWidth={fullWidth}
+        error={Boolean(rangeError) || Boolean(error)}
+        helperText={rangeError || helperText}
         onChange={(e) => {
           const nextDisplay = digitsToDisplay(e.target.value);
           const nextDigits = nextDisplay.replace(/\D/g, "");
           const nextDayKey = normalizeDayKey(displayDigitsToDayKey(nextDigits));
 
           setDisplayValue(nextDisplay);
+
+          if (!nextDisplay) {
+            setRangeError("");
+            onChange?.("");
+            return;
+          }
+
+          if (nextDigits.length !== 8) {
+            setRangeError("");
+            return;
+          }
+
+          if (!isValidDayKey(nextDayKey)) {
+            setRangeError("Ngày không hợp lệ.");
+            return;
+          }
+
+          const nextRangeError = getRangeError(nextDayKey, minDayKey, maxDayKey);
+          setRangeError(nextRangeError);
+          if (nextRangeError) return;
+
           onChange?.(nextDayKey);
         }}
         onBlur={() => {
+          setRangeError("");
           const normalized = normalizeDayKey(value);
           if (!normalized) {
             setDisplayValue("");
@@ -173,7 +220,7 @@ const SingleDayKeyField: React.FC<Props> = ({
         }}
         InputProps={{
           endAdornment: disabled ? undefined : (
-            <InputAdornment position="end">
+            <InputAdornment position="end" sx={{ ml: 0.5, flexShrink: 0 }}>
               <Popover
                 opened={pickerOpened}
                 onChange={setPickerOpened}
@@ -184,7 +231,7 @@ const SingleDayKeyField: React.FC<Props> = ({
               >
                 <Popover.Target>
                   <IconButton
-                    edge="end"
+                    size="small"
                     title={uiText(UITextKey.TextChonNgay)}
                     aria-label={uiText(UITextKey.TextChonNgay)}
                     onClick={() => setPickerOpened((opened) => !opened)}

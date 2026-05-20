@@ -78,6 +78,7 @@ export interface AppTableProps<T, F extends string = string> {
   onPageSizeChange?: (size: number) => void;
 
   // events
+  onRowClick?: (row: T) => void;
   onRowDoubleClick?: (row: T) => void;
 }
 
@@ -136,6 +137,7 @@ export function AppTable<T, F extends string = string>(props: AppTableProps<T, F
     onPageSizeChange,
 
     // events
+    onRowClick,
     onRowDoubleClick,
   } = props;
 
@@ -425,9 +427,10 @@ export function AppTable<T, F extends string = string>(props: AppTableProps<T, F
                 key={id}
                 hover
                 selected={isSelected}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
                 onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
                 className={
-                  'app-table-row' + (onRowDoubleClick ? ' app-table-row--clickable' : '')
+                  'app-table-row' + (onRowClick || onRowDoubleClick ? ' app-table-row--clickable' : '')
                 }
               >
                 {selectable && (

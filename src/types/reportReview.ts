@@ -4,6 +4,7 @@ export type ReviewStatusBucket =
   | "ALL"
   | "PENDING"
   | "SUBMITTED"
+  | "APPROVED"
   | "OVERDUE"
   | "RETURNED";
 
@@ -111,6 +112,12 @@ export interface ReviewReportFlatRowDto {
   reportDeactivationReason?: string | null;
   submittedAtUtc?: string | null;
   approvedAtUtc?: string | null;
+  autoApproved?: boolean | null;
+  autoApprovedAtUtc?: string | null;
+  autoApprovedByUserId?: string | null;
+  autoApprovalLocked?: boolean | null;
+  autoApprovalConfirmedAtUtc?: string | null;
+  autoApprovalConfirmedByUserId?: string | null;
   returnedAtUtc?: string | null;
   returnReason?: string | null;
   reviewerComment?: string | null;

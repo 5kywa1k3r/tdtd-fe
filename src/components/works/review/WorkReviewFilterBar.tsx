@@ -45,6 +45,7 @@ type Props = {
 const STATUS_OPTIONS: Array<{ value: ReviewStatusBucket; label: string }> = [
   { value: "PENDING", label: "Chưa làm" },
   { value: "SUBMITTED", label: "Đã nộp" },
+  { value: "APPROVED", label: "Đã duyệt" },
   { value: "OVERDUE", label: "Quá hạn" },
   { value: "RETURNED", label: "Bị từ chối" },
   { value: "ALL", label: "Tất cả" },

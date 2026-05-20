@@ -77,9 +77,11 @@ function getFieldTypeLabel(fieldType?: string | null): string {
     case "boolean":
       return "Có/không";
     case "shortText":
-      return "Văn bản ngắn";
+      return "Nội dung cố định";
+    case "stringList":
+      return "Nội dung";
     case "longText":
-      return "Văn bản dài";
+      return "Nội dung";
     case "singleSelect":
       return "Chọn một";
     case "multiSelect":

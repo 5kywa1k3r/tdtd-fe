@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
-  Chip,
   CircularProgress,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
@@ -18,16 +18,19 @@ import {
 } from "@mui/material";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 
 import {
+  type WorkDocumentScope,
   type WorkDocumentRow,
   useCreateAssignmentDocumentUploadSessionMutation,
   useCreateWorkDocumentUploadSessionMutation,
   useDeleteWorkDocumentMutation,
   useGetWorkDocumentUploadOptionsQuery,
   useListWorkDocumentsQuery,
+  useUpdateWorkDocumentMutation,
 } from "../../../api/workDocumentsApi";
 import { useLazyPresignDownloadQuery, useLazyVerifyUploadQuery } from "../../../api/uploadApi";
 import { useTusUpload } from "../../../features/uploads/useTusUpload";
@@ -67,19 +70,25 @@ function formatDate(value?: string | null) {
   return dateFormatter.format(date);
 }
 
-function scopeLabel(row: WorkDocumentRow) {
-  return row.scope === "ASSIGNMENT_BRANCH" ? "Nhánh công việc" : "Toàn bộ công việc";
-}
-
 function assignmentLabel(row: WorkDocumentRow) {
   if (row.scope !== "ASSIGNMENT_BRANCH") return "";
   return row.assignmentCode || row.assignmentId || "Nhánh công việc";
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const anyError = error as any;
+  return anyError?.data?.message || anyError?.data?.title || anyError?.message || fallback;
 }
 
 export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId }) => {
   const [scope, setScope] = useState<"ALL" | "WORK" | "ASSIGNMENT_BRANCH">("ALL");
   const [keyword, setKeyword] = useState("");
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+  const [editTarget, setEditTarget] = useState<WorkDocumentRow | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editScope, setEditScope] = useState<WorkDocumentScope>("WORK");
+  const [editAssignmentId, setEditAssignmentId] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadContextRef = useRef<UploadContext | null>(null);
   const pendingRef = useRef<{ fileName: string } | null>(null);
@@ -106,10 +115,27 @@ export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId
   const [createAssignmentSession, { isLoading: creatingAssignmentSession }] =
     useCreateAssignmentDocumentUploadSessionMutation();
   const [deleteDocument, { isLoading: deletingDocument }] = useDeleteWorkDocumentMutation();
+  const [updateDocument, { isLoading: updatingDocument }] = useUpdateWorkDocumentMutation();
   const [triggerVerify] = useLazyVerifyUploadQuery();
   const [triggerPresign] = useLazyPresignDownloadQuery();
 
   const assignmentTargets = uploadOptions?.assignmentTargets ?? [];
+  const editAssignmentOptions = useMemo(() => {
+    const options = [...assignmentTargets];
+    if (
+      editTarget?.scope === "ASSIGNMENT_BRANCH" &&
+      editTarget.assignmentId &&
+      !options.some((item) => item.assignmentId === editTarget.assignmentId)
+    ) {
+      options.unshift({
+        assignmentId: editTarget.assignmentId,
+        code: editTarget.assignmentCode || editTarget.assignmentId,
+        path: editTarget.assignmentPath || "",
+        label: assignmentLabel(editTarget),
+      });
+    }
+    return options;
+  }, [assignmentTargets, editTarget]);
 
   useEffect(() => {
     if (!selectedAssignmentId && assignmentTargets.length > 0) {
@@ -122,12 +148,13 @@ export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId
     creatingWorkSession ||
     creatingAssignmentSession;
   const openProgress = busyUpload || !!pendingRef.current;
-  const canPickWork = Boolean(uploadOptions?.canUploadWork) && !busyUpload && !deletingDocument;
+  const canPickWork = Boolean(uploadOptions?.canUploadWork) && !busyUpload && !deletingDocument && !updatingDocument;
   const canPickAssignment =
     assignmentTargets.length > 0 &&
     Boolean(selectedAssignmentId) &&
     !busyUpload &&
-    !deletingDocument;
+    !deletingDocument &&
+    !updatingDocument;
 
   const progressText = useMemo(() => {
     if (tus.state.status !== "uploading") return "";
@@ -240,6 +267,54 @@ export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId
     } catch (err: any) {
       console.error(err);
       alert(err?.message || "Xóa tài liệu thất bại.");
+    }
+  };
+
+  const handleOpenEdit = (row: WorkDocumentRow) => {
+    if (!row.canUpdate || updatingDocument) return;
+    const nextScope: WorkDocumentScope = row.scope === "ASSIGNMENT_BRANCH" ? "ASSIGNMENT_BRANCH" : "WORK";
+    setEditTarget(row);
+    setEditName(row.originalName || "");
+    setEditScope(nextScope);
+    setEditAssignmentId(row.assignmentId || selectedAssignmentId || assignmentTargets[0]?.assignmentId || "");
+    setEditError(null);
+  };
+
+  const handleCloseEdit = () => {
+    if (updatingDocument) return;
+    setEditTarget(null);
+    setEditError(null);
+  };
+
+  const handleSubmitEdit = async () => {
+    if (!editTarget) return;
+
+    const name = editName.trim();
+    if (!name) {
+      setEditError("Bắt buộc nhập tên tài liệu.");
+      return;
+    }
+
+    if (editScope === "ASSIGNMENT_BRANCH" && !editAssignmentId) {
+      setEditError("Chọn nhánh công việc cho tài liệu.");
+      return;
+    }
+
+    try {
+      setEditError(null);
+      await updateDocument({
+        workId,
+        fileId: editTarget.id,
+        data: {
+          originalName: name,
+          scope: editScope,
+          assignmentId: editScope === "ASSIGNMENT_BRANCH" ? editAssignmentId : null,
+        },
+      }).unwrap();
+      setEditTarget(null);
+      await refetchDocuments();
+    } catch (err: unknown) {
+      setEditError(getErrorMessage(err, "Không sửa được tài liệu."));
     }
   };
 
@@ -376,16 +451,6 @@ export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId
                     <Typography variant="caption" color="text.secondary">
                       {prettyBytes(row.size)} · {row.mimeType || "application/octet-stream"}
                     </Typography>
-                    <Chip
-                      size="small"
-                      label={scopeLabel(row)}
-                      sx={{ height: 22, borderRadius: "6px", fontWeight: 700 }}
-                      color={row.scope === "ASSIGNMENT_BRANCH" ? "primary" : "default"}
-                      variant={row.scope === "ASSIGNMENT_BRANCH" ? "outlined" : "filled"}
-                    />
-                    {assignmentLabel(row) ? (
-                      <Chip size="small" label={assignmentLabel(row)} sx={{ height: 22, borderRadius: "6px" }} />
-                    ) : null}
                   </Stack>
                 </Stack>
 
@@ -407,6 +472,15 @@ export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId
                       <DownloadOutlinedIcon />
                     </IconButton>
                   </Tooltip>
+                  {row.canUpdate ? (
+                    <Tooltip title="Sửa">
+                      <span>
+                        <IconButton onClick={() => handleOpenEdit(row)} disabled={updatingDocument}>
+                          <EditOutlinedIcon />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  ) : null}
                   {row.canDelete ? (
                     <Tooltip title="Xóa">
                       <span>
@@ -422,6 +496,78 @@ export const WorkDocumentLibrary: React.FC<WorkDocumentLibraryProps> = ({ workId
           </Stack>
         )}
       </Box>
+
+      <Dialog open={Boolean(editTarget)} onClose={handleCloseEdit} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>Sửa tài liệu</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <TextField
+              size="small"
+              label="Tên tài liệu"
+              value={editName}
+              onChange={(event) => setEditName(event.target.value)}
+              disabled={updatingDocument}
+              fullWidth
+              autoFocus
+            />
+            <TextField
+              select
+              size="small"
+              label="Phạm vi"
+              value={editScope}
+              onChange={(event) => {
+                const next = event.target.value as WorkDocumentScope;
+                setEditScope(next);
+                if (next === "ASSIGNMENT_BRANCH" && !editAssignmentId) {
+                  setEditAssignmentId(editAssignmentOptions[0]?.assignmentId || "");
+                }
+              }}
+              disabled={updatingDocument}
+              fullWidth
+            >
+              <MenuItem value="WORK" disabled={!uploadOptions?.canUploadWork && editTarget?.scope !== "WORK"}>
+                Toàn bộ công việc
+              </MenuItem>
+              <MenuItem
+                value="ASSIGNMENT_BRANCH"
+                disabled={editAssignmentOptions.length === 0 && editTarget?.scope !== "ASSIGNMENT_BRANCH"}
+              >
+                Nhánh công việc
+              </MenuItem>
+            </TextField>
+            {editScope === "ASSIGNMENT_BRANCH" ? (
+              <TextField
+                select
+                size="small"
+                label="Nhánh công việc"
+                value={editAssignmentId}
+                onChange={(event) => setEditAssignmentId(event.target.value)}
+                disabled={updatingDocument}
+                fullWidth
+              >
+                {editAssignmentOptions.map((target) => (
+                  <MenuItem key={target.assignmentId} value={target.assignmentId}>
+                    {target.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
+            {editError ? (
+              <Typography variant="body2" color="error">
+                {editError}
+              </Typography>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseEdit} disabled={updatingDocument}>
+            Hủy
+          </Button>
+          <Button variant="contained" onClick={() => void handleSubmitEdit()} disabled={updatingDocument}>
+            {updatingDocument ? "Đang lưu..." : "Lưu"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={openProgress} onClose={() => {}} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>Đang tải lên</DialogTitle>

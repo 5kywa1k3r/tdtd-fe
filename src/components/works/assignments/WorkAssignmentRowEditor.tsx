@@ -107,13 +107,6 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
 
               <Chip
                 size="small"
-                label={draft.aggregationType}
-                color="secondary"
-                variant="outlined"
-              />
-
-              <Chip
-                size="small"
                 color={draft.isActive ? "success" : "default"}
                 label={draft.isActive ? "Đang hiệu lực" : "Ngừng hiệu lực"}
               />
@@ -206,25 +199,6 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               >
                 <MenuItem value="ONCE">{uiText(UITextKey.TextGiaoMotLan)}</MenuItem>
                 <MenuItem value="PERIODIC_REPORT">{uiText(UITextKey.TextDinhKyBaoCao)}</MenuItem>
-              </TextField>
-
-              <TextField
-                select
-                size="small"
-                label={uiText(UITextKey.TextKieuTinhToanTongHop)}
-                value={draft.aggregationType}
-                disabled={rowDisabled}
-                onChange={(e) =>
-                  onChange({
-                    ...draft,
-                    aggregationType: e.target.value as AssignmentDraft["aggregationType"],
-                    isDirty: true,
-                  })
-                }
-                sx={{ minWidth: 220 }}
-              >
-                <MenuItem value="MATRIX">{uiText(UITextKey.TextMATRIX)}</MenuItem>
-                <MenuItem value="UNIT_ROW_COL">{uiText(UITextKey.TextUNITROWCOL)}</MenuItem>
               </TextField>
 
               <FormControlLabel

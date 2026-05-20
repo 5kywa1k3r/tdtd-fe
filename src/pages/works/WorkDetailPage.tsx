@@ -9,7 +9,12 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
@@ -17,6 +22,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
 import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import ChevronRightOutlinedIcon from "@mui/icons-material/ChevronRightOutlined";
 import DashboardCustomizeOutlinedIcon from "@mui/icons-material/DashboardCustomizeOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -32,7 +38,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { WorkForm } from "../../components/works/workform/WorkForm";
 import WorkAssignTab from "../../components/works/assignments/WorkAssignTab";
 import type { AssignmentTableRow } from "../../components/works/assignments/WorkAssignmentTable";
-import { useGetWorkQuery } from "../../api/workApi";
+import { useCompleteWorkMutation, useGetWorkQuery } from "../../api/workApi";
 import { useGetMyReportAssignmentsByWorkQuery } from "../../api/workAssignmentApi";
 
 import WorkReportTemplateGroupsPage from "./report/WorkReportTemplateGroupsPage";
@@ -77,6 +83,28 @@ function formatCompactDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return compactDateFormatter.format(date);
+}
+
+function toDayKey(value?: string | null) {
+  const matched = String(value ?? "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return matched ? `${matched[1]}${matched[2]}${matched[3]}` : "";
+}
+
+function dayKeyToInputDate(dayKey?: string | null) {
+  const normalized = String(dayKey ?? "").replace(/\D/g, "").slice(0, 8);
+  if (normalized.length !== 8) return "";
+  return `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}`;
+}
+
+function inputDateToDayKey(value?: string | null) {
+  const matched = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return matched ? `${matched[1]}${matched[2]}${matched[3]}` : "";
+}
+
+function dayKeyToApiDate(dayKey?: string | null) {
+  const normalized = String(dayKey ?? "").replace(/\D/g, "").slice(0, 8);
+  if (normalized.length !== 8) return null;
+  return `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}T00:00:00.000Z`;
 }
 
 function getStatusColor(status?: number | null) {
@@ -128,6 +156,11 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   );
 
   const workId = id ?? "";
+  const [completeWork, completeWorkState] = useCompleteWorkMutation();
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [completeDate, setCompleteDate] = useState(toDayKey(new Date().toISOString()));
+  const [completeNote, setCompleteNote] = useState("");
+  const [completeError, setCompleteError] = useState<string | null>(null);
 
   const {
     data: detail,
@@ -220,7 +253,9 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   );
 
   const detailCanEdit = detail?.canEdit === true;
-  const canEditCommon = Boolean(isWorkOwner || detailCanEdit);
+  const isWorkCompleted = detail?.status === WORK_STATUS.S3 || Boolean(detail?.completedAtUtc);
+  const canEditCommon = Boolean((isWorkOwner || detailCanEdit) && !isWorkCompleted);
+  const canCompleteWork = Boolean(canEditCommon && detail && !isWorkCompleted);
   const reportAssignmentsLoaded = Array.isArray(myReportAssignments);
   const hasMyReportAssignments = (myReportAssignments ?? []).length > 0;
   const statusLabel = getWorkStatusLabel(detail?.status ?? null);
@@ -230,6 +265,38 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
     canEditCommon && commonMode === "edit" ? "edit" : "view";
 
   const isEdit = effectiveCommonMode === "edit";
+
+  const handleOpenCompleteWork = () => {
+    setCompleteDate(toDayKey(detail?.completedDate) || toDayKey(new Date().toISOString()));
+    setCompleteNote("");
+    setCompleteError(null);
+    setCompleteOpen(true);
+  };
+
+  const handleSubmitCompleteWork = async () => {
+    if (!detail) return;
+    if (!completeDate) {
+      setCompleteError("Bắt buộc nhập ngày hoàn thành.");
+      return;
+    }
+
+    try {
+      setCompleteError(null);
+      await completeWork({
+        id: detail.id,
+        data: {
+          completedDate: dayKeyToApiDate(completeDate),
+          note: completeNote.trim() || null,
+        },
+      }).unwrap();
+
+      setCompleteOpen(false);
+      setCommonMode("view");
+      await refetch();
+    } catch (err: any) {
+      setCompleteError(err?.data?.message || err?.message || "Xác nhận hoàn thành thất bại.");
+    }
+  };
 
   useEffect(() => {
     setSelectedReportTemplateGroup(null);
@@ -528,6 +595,18 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                       Chỉnh sửa
                     </Button>
                   )
+                )}
+
+                {canCompleteWork && (
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={<CheckCircleOutlineOutlinedIcon />}
+                    onClick={handleOpenCompleteWork}
+                    sx={{ borderRadius: "8px", bgcolor: "#fff", borderColor: "#bbf7d0" }}
+                  >
+                    Xác nhận hoàn thành
+                  </Button>
                 )}
 
                 {tab && (
@@ -992,6 +1071,67 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           </Box>
         )}
       </Box>
+
+      <Dialog
+        open={completeOpen}
+        onClose={() => {
+          if (completeWorkState.isLoading) return;
+          setCompleteOpen(false);
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Xác nhận hoàn thành đầu việc</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Alert severity="warning">
+              Đây là thao tác duy nhất đưa đầu việc về trạng thái đã hoàn thành. Các assignment và report bên trong sẽ bị khóa chỉnh sửa.
+            </Alert>
+            {completeError && <Alert severity="error">{completeError}</Alert>}
+            <TextField
+              size="small"
+              label="Đầu việc"
+              value={subtitle}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+            <TextField
+              size="small"
+              type="date"
+              label="Ngày hoàn thành"
+              value={dayKeyToInputDate(completeDate)}
+              onChange={(e) => setCompleteDate(inputDateToDayKey(e.target.value))}
+              disabled={completeWorkState.isLoading}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              required
+            />
+            <TextField
+              size="small"
+              label="Ghi chú"
+              value={completeNote}
+              onChange={(e) => setCompleteNote(e.target.value)}
+              disabled={completeWorkState.isLoading}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompleteOpen(false)} disabled={completeWorkState.isLoading}>
+            Hủy
+          </Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleSubmitCompleteWork}
+            disabled={completeWorkState.isLoading}
+          >
+            Xác nhận
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

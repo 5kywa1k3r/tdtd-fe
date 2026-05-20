@@ -54,6 +54,7 @@ export default function EvaluationTemplateSelector({
           disabled={disabled}
           onChange={(_, next) => onChange(next?.id ?? "")}
           getOptionLabel={(option) => `${option.representativeLabel} (${option.representativeCode})`}
+          noOptionsText="Không có bộ mã đánh giá"
           renderInput={(params) => (
             <TextField
               {...params}

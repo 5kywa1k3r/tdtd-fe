@@ -17,7 +17,6 @@ import {
   Typography,
   Snackbar,
 } from "@mui/material";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
@@ -183,15 +182,23 @@ function getWorstOverdueLabel(row: {
 }
 
 function canApprove(row?: ReviewReportFlatRowDto | null) {
-  return !!row?.reportId && row.reportStatus === WorkAssignmentReportStatus.Submitted;
+  if (!row?.reportId) return false;
+  if (row.reportStatus === WorkAssignmentReportStatus.Submitted) return true;
+  return (
+    row.reportStatus === WorkAssignmentReportStatus.Approved &&
+    row.autoApproved === true &&
+    row.autoApprovalLocked !== true
+  );
 }
 
 function canReturn(row?: ReviewReportFlatRowDto | null) {
-  return canApprove(row);
+  return !!row?.reportId && row.reportStatus === WorkAssignmentReportStatus.Submitted;
 }
 
 function canRecallApproved(row?: ReviewReportFlatRowDto | null) {
-  return !!row?.reportId && row.reportStatus === WorkAssignmentReportStatus.Approved;
+  return !!row?.reportId &&
+    row.reportStatus === WorkAssignmentReportStatus.Approved &&
+    !(row.autoApproved === true && row.autoApprovalLocked !== true);
 }
 
 function canDeactivate(row?: ReviewReportFlatRowDto | null) {
@@ -384,6 +391,7 @@ function aggregateSummaryRows(rows: ReviewSummaryRowDto[]): SummaryViewRow[] {
 const DETAIL_STATUS_OPTIONS: Array<{ value: ReviewStatusBucket; label: string }> = [
   { value: "PENDING", label: "Chưa làm" },
   { value: "SUBMITTED", label: "Đã nộp" },
+  { value: "APPROVED", label: "Đã duyệt" },
   { value: "OVERDUE", label: "Quá hạn" },
   { value: "RETURNED", label: "Bị từ chối" },
   { value: "ALL", label: "Tất cả" },
@@ -1031,14 +1039,6 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
       <Stack spacing={2} sx={{ height: "100%", minHeight: 0 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">{uiText(UITextKey.TextDuyetBaoCao)}</Typography>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={() => void loadSummary()}
-            disabled={!workId || summaryLoading}
-          >
-            Làm mới
-          </Button>
         </Stack>
 
         <WorkReviewFilterBar

@@ -27,6 +27,26 @@ export type DynamicFormDataSourceRulesDocument = {
   blockRules?: unknown[];
 };
 
+export type WorkAssignmentAutoApproveConditionOperator =
+  | "eq"
+  | "neq"
+  | "contains"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "notEmpty";
+
+export type WorkAssignmentAutoApproveConditionDocument = {
+  version: number;
+  enabled: boolean;
+  fieldId?: string | null;
+  fieldKey?: string | null;
+  fieldType?: string | null;
+  operator: WorkAssignmentAutoApproveConditionOperator;
+  value?: string | number | boolean | null;
+};
+
 export type QuarterDayRuleDto = { quarter: number; days: number[] };
 export type SemiAnnualDayRuleDto = { half: number; days: number[] };
 
@@ -83,12 +103,16 @@ export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
   dynamicFormDataSourceRulesJson?: string | null;
+  autoApproveConditionJson?: string | null;
 
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
 
   startDate?: string | null;
+  dueDate?: string | null;
   completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
   dueAtUtc?: string | null;
 
   assignees: WorkAssignmentAssigneeRef[];
@@ -123,12 +147,16 @@ export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
   dynamicFormDataSourceRulesJson?: string | null;
+  autoApproveConditionJson?: string | null;
 
   workType: string;
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
   startDate?: string | null;
+  dueDate?: string | null;
   completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
   dueAtUtc?: string | null;
 
   schedule?: AssignmentScheduleDto | null;
@@ -165,9 +193,11 @@ export type SaveWorkAssignmentRequest = {
   parentAssignmentId?: string | null;
   dynamicFormTemplateId?: string | null;
   dynamicFormDataSourceRulesJson?: string | null;
+  autoApproveConditionJson?: string | null;
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
   startDate?: string | null;
+  dueDate?: string | null;
   completedDate?: string | null;
   dueAtUtc?: string | null;
   schedule?: AssignmentScheduleDto | null;
@@ -181,6 +211,10 @@ export type SaveWorkAssignmentRequest = {
 
 export type UpdateWorkAssignmentDataSourceRulesRequest = {
   dynamicFormDataSourceRulesJson?: string | null;
+};
+
+export type UpdateWorkAssignmentAutoApproveConditionRequest = {
+  autoApproveConditionJson?: string | null;
 };
 
 export type HandoverWorkAssignmentRequest = {
@@ -214,11 +248,15 @@ export type AssignmentDraft = {
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
   dynamicFormDataSourceRulesJson?: string | null;
+  autoApproveConditionJson?: string | null;
 
   assignmentType: AssignmentType;
   aggregationType: AggregationType;
   startDate?: string | null;
+  dueDate?: string | null;
   completedDate?: string | null;
+  completedAtUtc?: string | null;
+  completedByUserId?: string | null;
   dueAtUtc?: string | null;
   schedule: AssignmentScheduleDto | null;
 
@@ -268,9 +306,11 @@ export function emptyAssignmentDraft(): AssignmentDraft {
     dynamicFormTemplateCode: "",
     dynamicFormTemplateName: "",
     dynamicFormDataSourceRulesJson: null,
+    autoApproveConditionJson: null,
     assignmentType: "ONCE",
     aggregationType: "MATRIX",
     startDate: null,
+    dueDate: null,
     completedDate: null,
     schedule: null,
     assigneeUserIds: [],
@@ -317,10 +357,14 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     dynamicFormTemplateCode: x.dynamicFormTemplateCode ?? null,
     dynamicFormTemplateName: x.dynamicFormTemplateName ?? null,
     dynamicFormDataSourceRulesJson: x.dynamicFormDataSourceRulesJson ?? null,
+    autoApproveConditionJson: x.autoApproveConditionJson ?? null,
     assignmentType: x.assignmentType,
     aggregationType: x.aggregationType,
     startDate: x.startDate ?? null,
+    dueDate: x.dueDate ?? null,
     completedDate: x.completedDate ?? null,
+    completedAtUtc: x.completedAtUtc ?? null,
+    completedByUserId: x.completedByUserId ?? null,
     schedule: x.schedule ?? null,
     assigneeUserIds: Array.isArray(x.assignees) ? x.assignees.map((a) => a.userId).filter(Boolean) : [],
     assigneeRefs: x.assignees ?? [],
@@ -353,3 +397,8 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     dueAtUtc: x.dueAtUtc
   };
 }
+
+export type CompleteWorkAssignmentRequest = {
+  completedDate?: string | null;
+  note?: string | null;
+};

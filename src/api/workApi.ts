@@ -1,6 +1,7 @@
 import { baseApi } from "./base/baseApi";
 import type { SortDirection } from "../components/common/AppTable";
 import type {
+  CompleteWorkRequest,
   WorkDetail,
   WorkListRow,
   WorkPriorityCore,
@@ -99,6 +100,21 @@ export const workApi = baseApi.injectEndpoints({
       ],
     }),
 
+    completeWork: build.mutation<WorkDetail, { id: string; data: CompleteWorkRequest }>({
+      query: ({ id, data }) => ({
+        url: `works/${id}/complete`,
+        method: "POST",
+        data,
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        { type: "Work" as const, id: "LIST" },
+        { type: "Work" as const, id: arg.id },
+        { type: "WorkAssignment" as const, id: `WORK_${arg.id}` },
+        { type: "WorkAssignmentReportList" as const, id: "LIST" },
+        { type: "ReviewReport" as const, id: "LIST" },
+      ],
+    }),
+
     deleteWork: build.mutation<void, string>({
       query: (id) => ({ url: `works/${id}`, method: "DELETE" }),
       invalidatesTags: (_r, _e, id) => [
@@ -115,5 +131,6 @@ export const {
   useGetWorkQuery,
   useCreateWorkMutation,
   useUpdateWorkMutation,
+  useCompleteWorkMutation,
   useDeleteWorkMutation,
 } = workApi;

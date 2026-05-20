@@ -10,9 +10,13 @@ import {
   Link,
   InputAdornment,
   Alert,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import LockIcon from '@mui/icons-material/Lock';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { useNavigate } from 'react-router-dom';
 
 import { useLoginMutation } from '../../api/auth/authApi';
@@ -34,6 +38,7 @@ function extractErrorMessage(err: unknown): string {
 export const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRememberLocal] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -154,7 +159,7 @@ export const LoginPage = () => {
 
             <TextField
               label={uiText(UITextKey.TextMatKhau)}
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               fullWidth
               margin="normal"
               value={password}
@@ -163,11 +168,36 @@ export const LoginPage = () => {
                 if (errorMessage) setErrorMessage(null);
               }}
               autoComplete="current-password"
+              sx={{
+                '& input::-ms-reveal, & input::-ms-clear': {
+                  display: 'none',
+                },
+              }}
               slotProps={{
                 input: {
                   startAdornment: (
                     <InputAdornment position="start">
                       <LockIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
+                        <IconButton
+                          aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                          aria-pressed={showPassword}
+                          edge="end"
+                          size="small"
+                          onClick={() => setShowPassword((value) => !value)}
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          {showPassword ? (
+                            <VisibilityOffOutlinedIcon fontSize="small" />
+                          ) : (
+                            <VisibilityOutlinedIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
                     </InputAdornment>
                   ),
                 },
