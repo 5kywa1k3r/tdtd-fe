@@ -22,6 +22,8 @@ export type NotificationRealtimeConnection = {
   stop: () => void;
 };
 
+export const NOTIFICATION_REALTIME_EVENT = "tdtd:notification-realtime";
+
 function getHubRootUrl() {
   const apiBase = import.meta.env.VITE_API_URL ?? "https://localhost:7232/api";
   return apiBase.replace(/\/api\/?$/i, "").replace(/\/$/, "");
@@ -52,6 +54,22 @@ function isRealtimeMessage(value: unknown): value is NotificationRealtimeMessage
   if (!value || typeof value !== "object") return false;
   const obj = value as Record<string, unknown>;
   return typeof obj.notificationId === "string" && typeof obj.type === "string";
+}
+
+function publishRealtimeMessage(message: NotificationRealtimeMessage) {
+  window.dispatchEvent(new CustomEvent<NotificationRealtimeMessage>(NOTIFICATION_REALTIME_EVENT, { detail: message }));
+}
+
+export function subscribeNotificationRealtime(
+  onChanged: (message: NotificationRealtimeMessage) => void,
+): () => void {
+  const handler = (event: Event) => {
+    const message = (event as CustomEvent<NotificationRealtimeMessage>).detail;
+    if (isRealtimeMessage(message)) onChanged(message);
+  };
+
+  window.addEventListener(NOTIFICATION_REALTIME_EVENT, handler);
+  return () => window.removeEventListener(NOTIFICATION_REALTIME_EVENT, handler);
 }
 
 export function connectNotificationRealtime(
@@ -107,6 +125,7 @@ export function connectNotificationRealtime(
             message.target === "notificationChanged" &&
             isRealtimeMessage(message.arguments?.[0])
           ) {
+            publishRealtimeMessage(message.arguments[0]);
             options.onChanged(message.arguments[0]);
           }
         }

@@ -25,6 +25,7 @@ import {
   useSearchNotificationsMutation,
 } from "../../../api/notificationApi";
 import type { NotificationRow, NotificationSearchResponse } from "../../../types/notification";
+import { subscribeNotificationRealtime } from "../../../services/notificationRealtime";
 import {
   getNotificationActionStateLabel,
   getNotificationPrimaryTagLabel,
@@ -133,6 +134,23 @@ export default function WorkAssignmentNotificationTab({
   React.useEffect(() => {
     setCursor(null);
     void loadFirst();
+  }, [loadFirst]);
+
+  React.useEffect(() => {
+    let timer: ReturnType<typeof window.setTimeout> | null = null;
+
+    const unsubscribe = subscribeNotificationRealtime(() => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        void loadFirst();
+      }, 300);
+    });
+
+    return () => {
+      unsubscribe();
+      if (timer) window.clearTimeout(timer);
+    };
   }, [loadFirst]);
 
   const markRowRead = React.useCallback(

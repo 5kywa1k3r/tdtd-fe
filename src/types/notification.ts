@@ -82,4 +82,5 @@ export type NotificationRealtimeMessage = {
   notificationId: string;
   type: NotificationType;
   occurredAtUtc: string;
+  changeKind?: "CREATED" | "READ" | "READ_MANY" | "READ_ALL" | string;
 };
