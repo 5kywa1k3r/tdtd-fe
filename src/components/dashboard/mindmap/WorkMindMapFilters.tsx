@@ -28,7 +28,7 @@ export default function WorkMindMapFilters(props: WorkMindMapFiltersProps) {
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 4 }}>
       <Stack spacing={1.5}>
         <Typography variant="subtitle1" fontWeight={800}>
-          Scope filter
+          Bộ lọc phạm vi
         </Typography>
 
         <Stack
@@ -77,11 +77,11 @@ export default function WorkMindMapFilters(props: WorkMindMapFiltersProps) {
               onClick={onApply}
               disabled={loading}
             >
-              Ap dung
+              Áp dụng
             </Button>
 
             <Button variant="text" onClick={onReset} disabled={loading}>
-              Dat lai
+              Đặt lại
             </Button>
           </Stack>
         </Stack>

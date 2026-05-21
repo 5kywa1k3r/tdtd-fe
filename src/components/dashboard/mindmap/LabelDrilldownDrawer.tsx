@@ -184,7 +184,7 @@ export default function LabelDrilldownDrawer(props: LabelDrilldownDrawerProps) {
 
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Chip label={`${data?.totalRows ?? 0} báo cáo`} />
-          <Chip color="primary" variant="outlined" label={label?.labelCode || "LABEL"} />
+          <Chip color="primary" variant="outlined" label={label?.labelCode || "NHÃN"} />
           <Chip variant="outlined" label={`${label?.rowCount ?? 0} dòng gắn nhãn`} />
         </Stack>
 

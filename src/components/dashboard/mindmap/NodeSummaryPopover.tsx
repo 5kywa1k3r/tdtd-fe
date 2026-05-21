@@ -20,6 +20,7 @@ import type {
 import type { SummaryAnchorPosition } from "./AssignmentMindNode";
 import StatusStackedBar from "./StatusStackedBar";
 import { UITextKey, uiText } from '../../../constants/uiText';
+import { getDashboardTableModeLabel } from "../../../utils/dashboardUi";
 
 type NodeSummaryPopoverProps = {
   open: boolean;
@@ -70,31 +71,14 @@ function getTableMetricLabel(item: DashboardMindMapTableSummaryDto): string {
           ? `${item.rowKey}/${item.columnKey}`
           : item.metricKey;
 
-  const blockLabel = item.dynamicFormTemplateName || item.blockId || item.tableMode;
+  const blockLabel = item.dynamicFormTemplateName || item.blockId || getDashboardTableModeLabel(item.tableMode);
   return `${blockLabel}: ${axisLabel || item.metricKey}`;
-}
-
-function getTableModeLabel(tableMode?: string | null): string {
-  switch (tableMode) {
-    case "FIXED_GRID":
-      return "Bảng cố định";
-    case "APPEND_ROWS":
-      return "Thêm theo dòng";
-    case "APPEND_COLUMNS":
-      return "Thêm theo cột";
-    case "MATRIX":
-      return "Bảng ma trận";
-    case "SUMMARY_TEMPLATE":
-      return "Mẫu tổng hợp";
-    default:
-      return "Bảng";
-  }
 }
 
 function getTableMetricTitle(item: DashboardMindMapTableSummaryDto): string {
   return [
     item.metricKey,
-    `kiểu bảng=${getTableModeLabel(item.tableMode)}`,
+    `kiểu bảng=${getDashboardTableModeLabel(item.tableMode)}`,
     `tổng=${formatMetricNumber(item.sum)}`,
     `trung bình=${formatMetricNumber(item.average)}`,
     `giá trị=${item.valueCount}`,

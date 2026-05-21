@@ -151,7 +151,7 @@ export default function WorkDashboardDetailPage() {
       } catch (err) {
         if (requestId !== requestIdRef.current) return;
         setError(
-          getErrorMessage(err, "Không tải được chi tiết dashboard nhiệm vụ.")
+          getErrorMessage(err, "Không tải được chi tiết bảng thống kê nhiệm vụ.")
         );
       } finally {
         if (requestId === requestIdRef.current) {
@@ -205,11 +205,10 @@ export default function WorkDashboardDetailPage() {
 
           <Box>
             <Typography variant="h5" fontWeight={700}>
-              Chi tiết dashboard nhiệm vụ / chỉ tiêu
+              Chi tiết bảng thống kê nhiệm vụ / chỉ tiêu
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Khoảng ngày lọc ở đây chỉ dùng để tính dashboard, không phải period
-              key / day key của báo cáo.
+              Khoảng ngày lọc ở đây chỉ dùng để tính bảng thống kê, không phải mã kỳ hoặc mã ngày của báo cáo.
             </Typography>
           </Box>
         </Stack>

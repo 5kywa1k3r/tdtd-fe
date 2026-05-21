@@ -31,6 +31,7 @@ import type {
 } from "../../../types/dashboardMindMap";
 import type { SummaryAnchorPosition } from "./AssignmentMindNode";
 import { UITextKey, uiText } from '../../../constants/uiText';
+import { getDashboardMindMapBucketLabel } from "../../../utils/dashboardUi";
 
 export type MindMapNodeKind = "work" | "assignment" | "template" | "user" | "report" | "loadMore" | "empty";
 export type AssignmentBranchKind = "assignments" | "reports";
@@ -90,11 +91,11 @@ export type MindMapGraphNodeData = {
 const ALL_VALUE = "__ALL__";
 
 const DEFAULT_REPORT_STATUS_OPTIONS: Array<{ value: DashboardMindMapBucket; label: string }> = [
-  { value: "PENDING", label: "Chưa bắt đầu" },
-  { value: "DRAFT", label: "Bản nháp" },
-  { value: "SUBMITTED", label: "Đã gửi" },
-  { value: "APPROVED", label: "Đã duyệt" },
-  { value: "OVERDUE", label: "Quá hạn" },
+  { value: "PENDING", label: getDashboardMindMapBucketLabel("PENDING") },
+  { value: "DRAFT", label: getDashboardMindMapBucketLabel("DRAFT") },
+  { value: "SUBMITTED", label: getDashboardMindMapBucketLabel("SUBMITTED") },
+  { value: "APPROVED", label: getDashboardMindMapBucketLabel("APPROVED") },
+  { value: "OVERDUE", label: getDashboardMindMapBucketLabel("OVERDUE") },
 ];
 
 function getNodeMinHeight(kind: MindMapNodeKind): number {
@@ -163,6 +164,9 @@ function CompactStackedBar(props: {
       >
         {bar.segments.map((segment) => {
           const bucket = normalizeBucket(segment.key);
+          const segmentLabel = bucket
+            ? getDashboardMindMapBucketLabel(bucket)
+            : segment.label || "Không xác định";
           const widthPercent = total > 0 ? (segment.value / total) * 100 : 0;
           const clickable = Boolean(bucket && segment.value > 0 && onSegmentClick);
 
@@ -170,7 +174,7 @@ function CompactStackedBar(props: {
             <Box
               key={segment.key}
               component={clickable ? "button" : "div"}
-              title={`${segment.label}: ${segment.value}`}
+              title={`${segmentLabel}: ${segment.value}`}
               onClick={clickable ? (event: MouseEvent<HTMLElement>) => {
                 event.stopPropagation();
                 onSegmentClick?.(bucket!);

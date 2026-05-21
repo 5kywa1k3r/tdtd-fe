@@ -11,46 +11,75 @@ import { WorkReportPeriodStatus } from "../../types/reportStatus";
 
 type Props = {
   rows: WorkReportPeriodRow[];
+  showAssignment?: boolean;
+  getAssignmentLabel?: (row: WorkReportPeriodRow) => string;
   onOpen?: (row: WorkReportPeriodRow) => void;
   onRowDoubleClick?: (row: WorkReportPeriodRow) => void;
 };
 
 export default function WorkReportPeriodTable({
   rows,
+  showAssignment = false,
+  getAssignmentLabel,
   onOpen,
   onRowDoubleClick,
 }: Props) {
   const columns = useMemo<AppTableColumn<WorkReportPeriodRow>[]>(
-    () => [
-      {
-        field: "actions",
-        header: "Thao tác",
-        width: 110,
-        sortable: false,
-        render: (row) => (
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpen?.(row);
-              }}
-              disabled={!onOpen}
-            >
-              Mở
-            </Button>
-          </Stack>
-        ),
-      },
-      {
-        field: "periodKey",
-        header: "Kỳ",
-        width: 120,
-        sortable: true,
-        getSortValue: (row) => row.periodKey || "",
-        render: (row) => <CommonLabelText text={row.periodKey || "-"} />,
-      },
+    () => {
+      const result: AppTableColumn<WorkReportPeriodRow>[] = [
+        {
+          field: "actions",
+          header: "Thao tác",
+          width: 110,
+          sortable: false,
+          render: (row) => (
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen?.(row);
+                }}
+                disabled={!onOpen}
+              >
+                Mở
+              </Button>
+            </Stack>
+          ),
+        },
+        ...(showAssignment
+          ? [
+              {
+                field: "workAssignmentId",
+                header: "Phân công",
+                width: 180,
+                sortable: true,
+                getSortValue: (row) => getAssignmentLabel?.(row) || row.workAssignmentId || "",
+                render: (row) => (
+                  <CommonLabelText text={getAssignmentLabel?.(row) || row.workAssignmentId || "-"} />
+                ),
+              } satisfies AppTableColumn<WorkReportPeriodRow>,
+            ]
+          : []),
+        {
+          field: "periodKind",
+          header: "Loại",
+          width: 110,
+          align: "center",
+          sortable: true,
+          getSortValue: (row) => row.periodKind || "",
+          render: (row) =>
+            row.periodKind === "USER_CREATED" ? "Chủ động" : "Định kỳ",
+        },
+        {
+          field: "periodKey",
+          header: "Kỳ",
+          width: 120,
+          sortable: true,
+          getSortValue: (row) => row.periodKey || "",
+          render: (row) => <CommonLabelText text={row.periodKey || "-"} />,
+        },
       {
         field: "status",
         header: "Trạng thái kỳ",
@@ -158,8 +187,11 @@ export default function WorkReportPeriodTable({
         getSortValue: (row) => row.lastReviewedAtUtc || "",
         render: (row) => <CommonDateText value={row.lastReviewedAtUtc} withTime />,
       },
-    ],
-    [onOpen]
+    ];
+
+      return result;
+    },
+    [getAssignmentLabel, onOpen, showAssignment]
   );
 
   return (

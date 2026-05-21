@@ -1291,7 +1291,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         <DialogContent dividers>
           <Stack spacing={1.5} sx={{ pt: 0.5 }}>
             <Alert severity="warning">
-              Báo cáo này được đánh dấu là dữ liệu từ quá khứ. Khi duyệt, hệ thống ghi nhận reviewer đã xác nhận nghiệp vụ và không tính báo cáo này là chậm muộn do các kỳ quá khứ.
+              Báo cáo này được đánh dấu là dữ liệu từ quá khứ. Khi duyệt, hệ thống ghi nhận reviewer đã xác nhận nghiệp vụ; trạng thái đúng hạn hoặc quá hạn được tính theo ngày hoàn thành so với hạn hoàn thành của kỳ.
             </Alert>
             <Typography variant="body2">
               Kỳ báo cáo: <b>{formatDayKey(historicalApproveTarget?.periodKey)}</b>

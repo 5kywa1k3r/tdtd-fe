@@ -16,7 +16,7 @@ import type {
   DashboardMindMapScopeRequest,
   DashboardMindMapUnitRowDto,
 } from "../../../types/dashboardMindMap";
-import { formatDateTime } from "../../../utils/dashboardUi";
+import { formatDateTime, getDashboardMindMapBucketLabel } from "../../../utils/dashboardUi";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
@@ -26,13 +26,6 @@ type UnitDrilldownDrawerProps = {
   bucket: DashboardMindMapBucket;
   scope: DashboardMindMapScopeRequest;
   onClose: () => void;
-};
-
-const BUCKET_LABELS: Partial<Record<DashboardMindMapBucket, string>> = {
-  ALL: "Tất cả",
-  TODO: "Chưa làm",
-  DONE: "Đã làm",
-  OVERDUE: "Chậm muộn",
 };
 
 function getErrorMessage(error: unknown): string {
@@ -60,6 +53,7 @@ function renderTextBlock(title: string, value?: string | null) {
 
 export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
   const { open, nodeId, bucket, scope, onClose } = props;
+  const bucketLabel = getDashboardMindMapBucketLabel(bucket);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [keyword, setKeyword] = useState("");
@@ -173,7 +167,7 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
             Chi tiết theo đơn vị
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            Nhóm hiện tại: {BUCKET_LABELS[bucket] ?? bucket}. Bộ lọc phạm vi của trang đang được áp dụng.
+            Nhóm hiện tại: {bucketLabel}. Bộ lọc phạm vi của trang đang được áp dụng.
           </Typography>
         </Box>
 
@@ -190,7 +184,7 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
           />
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Chip label={`${data?.totalRows ?? 0} dòng`} />
-            <Chip color="primary" variant="outlined" label={BUCKET_LABELS[bucket] ?? bucket} />
+            <Chip color="primary" variant="outlined" label={bucketLabel} />
           </Stack>
         </Stack>
 

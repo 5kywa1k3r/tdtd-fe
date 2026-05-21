@@ -107,6 +107,19 @@ export interface WorkReportPeriodRow {
   returnReason?: string | null;
 }
 
+export interface MyReportTemplateAssignmentOption {
+  workAssignmentId: string;
+  workTemplateAssigneeId: string;
+  assignmentCode?: string | null;
+  assignmentType?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  completedDate?: string | null;
+  dueAtUtc?: string | null;
+  isActive?: boolean | null;
+  allowUserCreatedReports?: boolean | null;
+}
+
 export interface MyReportTemplateDetailResponse {
   workId: string;
   dynamicFormTemplateId: string;
@@ -121,7 +134,9 @@ export interface MyReportTemplateDetailResponse {
 
   specJson: string;
   templateWorkbookJson: string;
+  templateSnapshotJson?: string | null;
 
+  assignmentOptions?: MyReportTemplateAssignmentOption[] | null;
   periods: WorkReportPeriodRow[];
 }
 

@@ -3,6 +3,7 @@ import type {
   DashboardMindMapBucket,
   DashboardStackedBarDto,
 } from "../../../types/dashboardMindMap";
+import { getDashboardMindMapBucketLabel } from "../../../utils/dashboardUi";
 
 type StatusStackedBarProps = {
   title: string;
@@ -66,6 +67,9 @@ export default function StatusStackedBar(props: StatusStackedBarProps) {
       >
         {(bar?.segments ?? []).map((segment) => {
           const bucket = normalizeBucket(segment.key);
+          const segmentLabel = bucket
+            ? getDashboardMindMapBucketLabel(bucket)
+            : segment.label || "Không xác định";
           const widthPercent = total > 0 ? (segment.value / total) * 100 : 0;
           const isActive = bucket != null && activeBucket === bucket;
           const isClickable = bucket != null && segment.value > 0;
@@ -93,7 +97,7 @@ export default function StatusStackedBar(props: StatusStackedBarProps) {
                     }
                   : undefined,
               }}
-              title={`${segment.label}: ${segment.value}`}
+              title={`${segmentLabel}: ${segment.value}`}
             />
           );
         })}
@@ -102,6 +106,9 @@ export default function StatusStackedBar(props: StatusStackedBarProps) {
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         {(bar?.segments ?? []).map((segment) => {
           const bucket = normalizeBucket(segment.key);
+          const segmentLabel = bucket
+            ? getDashboardMindMapBucketLabel(bucket)
+            : segment.label || "Không xác định";
           const isActive = bucket != null && activeBucket === bucket;
           const isClickable = bucket != null && segment.value > 0;
 
@@ -138,7 +145,7 @@ export default function StatusStackedBar(props: StatusStackedBarProps) {
                 }}
               />
               <Typography variant="caption" fontWeight={700}>
-                {segment.label}
+                {segmentLabel}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {segment.value}

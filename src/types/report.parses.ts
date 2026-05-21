@@ -21,10 +21,18 @@ export function safeParseJson<T>(input?: string | null, fallback?: T): T | undef
 export function parseMyReportTemplateDetail(
   detail: MyReportTemplateDetailResponse
 ): ParsedMyReportTemplateDetail {
+  const hasTemplateSnapshot = Boolean(detail.templateSnapshotJson);
+  const templateWorkbookData = hasTemplateSnapshot
+    ? extractTemplateWorkbookFromSnapshot(detail.templateSnapshotJson)
+    : safeParseJson<any[]>(detail.templateWorkbookJson, []) ?? [];
+  const spec = hasTemplateSnapshot
+    ? extractSpecFromSnapshot(detail.templateSnapshotJson)
+    : safeParseJson<any>(detail.specJson, null);
+
   return {
     ...detail,
-    spec: safeParseJson<any>(detail.specJson, null),
-    templateWorkbookData: safeParseJson<any[]>(detail.templateWorkbookJson, []) ?? [],
+    spec,
+    templateWorkbookData,
   };
 }
 

@@ -57,7 +57,7 @@ export default function MindMapLegend(props: MindMapLegendProps) {
     >
       <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
         <Typography variant="caption" fontWeight={900} sx={{ letterSpacing: 0.4 }}>
-          LEGEND
+          Chú giải
         </Typography>
         <FormControlLabel
           label={uiText(UITextKey.TextMauTrangThai)}

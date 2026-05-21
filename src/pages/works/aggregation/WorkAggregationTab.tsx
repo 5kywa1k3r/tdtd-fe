@@ -1643,6 +1643,10 @@ const WorkAggregationTab: React.FC<Props> = ({
       new Date().toISOString().slice(0, 10);
     const periodDate = dayKeyToDateInput(periodKey) || periodKey;
     const periodDateUtc = `${periodDate}T00:00:00.000Z`;
+    const periodDueAtUtc = `${periodDate}T23:59:59.999Z`;
+    const normalizedPeriodDay = normalizeDayKeyInput(periodKey) || normalizeDayKeyInput(periodDate);
+    const todayDay = normalizeDayKeyInput(new Date().toISOString().slice(0, 10));
+    const isHistoricalPeriod = Boolean(normalizedPeriodDay && todayDay && normalizedPeriodDay < todayDay);
 
     try {
       const created = await createUserCreatedReport({
@@ -1651,9 +1655,10 @@ const WorkAggregationTab: React.FC<Props> = ({
           periodKey,
           reportDate: periodDateUtc,
           startedDate: periodDateUtc,
-          completedDate: periodDateUtc,
+          completedDate: isHistoricalPeriod ? periodDateUtc : null,
           periodStart: periodDateUtc,
           periodEnd: periodDateUtc,
+          dueAtUtc: periodDueAtUtc,
           reportTitle: `Báo cáo tổng hợp ${periodKey}`,
         },
       }).unwrap();

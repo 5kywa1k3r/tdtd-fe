@@ -177,7 +177,7 @@ export default function DashboardPage() {
         setSelectedPieKey(result.pie[0]?.key ?? null);
       } catch (err) {
         if (requestId !== requestIdRef.current) return;
-        setError(getErrorMessage(err, "Không tải được dashboard."));
+        setError(getErrorMessage(err, "Không tải được bảng thống kê."));
       } finally {
         if (requestId === requestIdRef.current) {
           setLoading(false);

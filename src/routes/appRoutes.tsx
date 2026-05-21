@@ -55,6 +55,20 @@ export const appRoutes: RouteObject[] = [
       { index: true, element: <Navigate to="dashboard" replace /> },
       { path: "dashboard", element: withSuspense(<DashboardPage />) },
       {
+        path: "works",
+        element: withSuspense(
+          <WorkLayout
+            type="TASK"
+            title="Nhiệm vụ / Chỉ tiêu"
+            description="Theo dõi, tạo mới và cập nhật tiến độ nhiệm vụ, chỉ tiêu."
+          />,
+        ),
+        children: [
+          { index: true, element: withSuspense(<WorkListPage />) },
+          { path: ":id", element: withSuspense(<WorkDetailPage />) },
+        ],
+      },
+      {
         path: "tasks",
         element: withSuspense(
           <WorkLayout

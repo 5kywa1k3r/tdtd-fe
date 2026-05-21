@@ -225,6 +225,12 @@ function isHistoricalReportDetail(detail?: ParsedReportDetail | null) {
   return Boolean(anchor && anchor < todayDayKey());
 }
 
+function isCompletedAfterDue(completedDate?: string | null, dueAtUtc?: string | null) {
+  const completedDay = toDayKey(completedDate);
+  const dueDay = toDayKey(dueAtUtc);
+  return Boolean(completedDay && dueDay && completedDay > dueDay);
+}
+
 function resolveInitialStartedDayKey(detail: ParsedReportDetail) {
   return (
     toDayKey(detail.startedDate) ||
@@ -2177,7 +2183,9 @@ export default function WorkReportEditorPage(
     : false;
   const isHistoricalData = isHistoricalReportDetail(detail);
   const overdue = isOverdue(detail?.dueAtUtc);
-  const requiresLateReason = overdue && !isHistoricalData;
+  const requiresLateReason = isHistoricalData
+    ? isCompletedAfterDue(detail?.completedDate, detail?.dueAtUtc)
+    : overdue;
   const canEditCompletedDate = Boolean(detail?.canEditCompletedDate);
   const requiresCompletedDate = Boolean(detail?.requiresCompletedDate);
   const completedDateMin = toDayKey(detail?.completedDateMin);

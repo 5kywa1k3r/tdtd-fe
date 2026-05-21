@@ -76,6 +76,7 @@ type Props = {
   workStartDate: string | null;
   workEndDate: string | null;
   isWorkOwner?: boolean;
+  workType?: "TASK" | "INDICATOR";
   onOpenAggregation?: (row: AssignmentTableRow) => void;
   onOpenReports?: () => void;
   onOpenReview?: () => void;
@@ -119,6 +120,23 @@ function getAssignmentLabel(row?: AssignmentTableRow | null) {
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
   const label = [code, name].filter(Boolean).join(" - ");
   return label || row.id;
+}
+
+function getCompletionCopy(isWorkOwner: boolean, workType: "TASK" | "INDICATOR") {
+  const ownerSubject = workType === "INDICATOR" ? "chỉ tiêu" : "nhiệm vụ";
+  const ownerSubjectTitle = workType === "INDICATOR" ? "Chỉ tiêu" : "Nhiệm vụ";
+  const subject = isWorkOwner ? ownerSubject : "công việc được giao";
+  const subjectTitle = isWorkOwner ? ownerSubjectTitle : "Công việc được giao";
+
+  return {
+    actionLabel: `Xác nhận hoàn thành ${subject}`,
+    completedLabel: `${subjectTitle} đã hoàn thành`,
+    dialogTitle: `Xác nhận hoàn thành ${subject}`,
+    fieldLabel: subjectTitle,
+    alert:
+      `Sau khi xác nhận hoàn thành, các báo cáo và luồng chỉnh sửa bên trong ${subject} này sẽ bị khóa.`,
+    successMessage: `Đã xác nhận hoàn thành ${subject}.`,
+  };
 }
 
 function toDayKey(value?: string | null) {
@@ -265,6 +283,7 @@ const WorkAssignTab: React.FC<Props> = ({
   workStartDate,
   workEndDate,
   isWorkOwner = false,
+  workType = "TASK",
   onOpenAggregation,
   onOpenReports,
   onOpenReview,
@@ -325,6 +344,10 @@ const WorkAssignTab: React.FC<Props> = ({
   const [confirmHandoverOpen, setConfirmHandoverOpen] = React.useState(false);
   const [historyPage, setHistoryPage] = React.useState(0);
   const [historyPageSize, setHistoryPageSize] = React.useState(10);
+  const completionCopy = React.useMemo(
+    () => getCompletionCopy(isWorkOwner, workType),
+    [isWorkOwner, workType]
+  );
 
   const rows = React.useMemo(
     () => ((data ?? []) as WorkAssignmentListResponse[]).map(toAssignmentRow),
@@ -703,7 +726,7 @@ const WorkAssignTab: React.FC<Props> = ({
 
       setCompleteTarget(null);
       setCompleteNote("");
-      showMessage("Đã xác nhận hoàn thành nhiệm vụ.");
+      showMessage(completionCopy.successMessage);
       await refetch();
     } catch (err: any) {
       showMessage(err?.data?.message || err?.message || "Xác nhận hoàn thành thất bại.");
@@ -1104,6 +1127,8 @@ const WorkAssignTab: React.FC<Props> = ({
                   onConfigureSourceRules={handleOpenSourceRules}
                   onConfigureAutoApprove={handleOpenAutoApprove}
                   onComplete={handleOpenComplete}
+                  completeActionLabel={completionCopy.actionLabel}
+                  completedActionLabel={completionCopy.completedLabel}
                   onToggleActive={handleToggleActive}
                 />
               )}
@@ -1356,15 +1381,15 @@ const WorkAssignTab: React.FC<Props> = ({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Xác nhận hoàn thành nhiệm vụ</DialogTitle>
+        <DialogTitle>{completionCopy.dialogTitle}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Alert severity="warning">
-              Sau khi xác nhận hoàn thành, các báo cáo và luồng chỉnh sửa bên trong nhiệm vụ này sẽ bị khóa.
+              {completionCopy.alert}
             </Alert>
             <TextField
               size="small"
-              label="Công việc"
+              label={completionCopy.fieldLabel}
               value={getAssignmentLabel(completeTarget)}
               fullWidth
               InputProps={{ readOnly: true }}

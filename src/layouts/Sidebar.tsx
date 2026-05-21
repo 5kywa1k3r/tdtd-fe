@@ -11,7 +11,6 @@ import {
 } from "@mui/material";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AssignmentIcon from "@mui/icons-material/Assignment";
-import FlagIcon from "@mui/icons-material/Flag";
 import DynamicFormIcon from "@mui/icons-material/DynamicForm";
 import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
 import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
@@ -60,38 +59,18 @@ export const Sidebar = () => {
       <List
         subheader={(
           <ListSubheader component="div">
-            Nhiệm vụ
+            Nhiệm vụ / Chỉ tiêu
           </ListSubheader>
         )}
       >
         <ListItemButton
-          selected={isActive("/tasks") && !isActive("/tasks/create")}
-          onClick={() => navigate("/tasks")}
+          selected={isActive("/works") || isActive("/tasks") || isActive("/indicators")}
+          onClick={() => navigate("/works")}
         >
           <ListItemIcon>
             <AssignmentIcon />
           </ListItemIcon>
-          <ListItemText primary="Danh sách nhiệm vụ" />
-        </ListItemButton>
-      </List>
-
-      <Divider />
-
-      <List
-        subheader={(
-          <ListSubheader component="div">
-            Chỉ tiêu
-          </ListSubheader>
-        )}
-      >
-        <ListItemButton
-          selected={isActive("/indicators") && !isActive("/indicators/create")}
-          onClick={() => navigate("/indicators")}
-        >
-          <ListItemIcon>
-            <FlagIcon />
-          </ListItemIcon>
-          <ListItemText primary="Danh sách chỉ tiêu" />
+          <ListItemText primary="Danh sách nhiệm vụ/chỉ tiêu" />
         </ListItemButton>
       </List>
 

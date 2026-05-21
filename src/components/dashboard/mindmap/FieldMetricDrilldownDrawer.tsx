@@ -95,8 +95,8 @@ function getRowMetricValue(row: DashboardMindMapFieldMetricReportRowDto): string
   if (row.fieldType === "number") return formatMetricNumber(row.sum);
   if (row.fieldType === "date") return formatMetricDate(row.latestDateUtc);
   if (row.fieldType === "boolean") {
-    if (row.trueCount > 0 && row.falseCount === 0) return "True";
-    if (row.falseCount > 0 && row.trueCount === 0) return "False";
+    if (row.trueCount > 0 && row.falseCount === 0) return "Có";
+    if (row.falseCount > 0 && row.trueCount === 0) return "Không";
   }
 
   return formatMetricNumber(row.valueCount);

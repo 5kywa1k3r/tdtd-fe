@@ -142,7 +142,7 @@ export default function WorkMindMapToolbar(props: WorkMindMapToolbarProps) {
 
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button variant="outlined" startIcon={<CenterFocusStrongRoundedIcon />} onClick={onFitView}>
-              Fit view
+              Căn giữa sơ đồ
             </Button>
             <Button variant="outlined" startIcon={<UnfoldLessRoundedIcon />} onClick={onCollapseAll}>
               Thu gọn

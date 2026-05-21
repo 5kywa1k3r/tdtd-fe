@@ -16,7 +16,7 @@ import type {
   DashboardMindMapTableSummaryDto,
 } from "../../../types/dashboardMindMap";
 import { getWorkAssignmentReportStatusLabel } from "../../../types/reportStatus";
-import { formatDateTime } from "../../../utils/dashboardUi";
+import { formatDateTime, getDashboardTableModeLabel } from "../../../utils/dashboardUi";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 
 type TableMetricDrilldownDrawerProps = {
@@ -58,24 +58,7 @@ function getMetricLabel(metric: DashboardMindMapTableSummaryDto | null): string 
           ? `${metric.rowKey}/${metric.columnKey}`
           : metric.metricKey;
 
-  return `${metric.dynamicFormTemplateName || metric.blockId || metric.tableMode}: ${axisLabel || metric.metricKey}`;
-}
-
-function getTableModeLabel(tableMode?: string | null): string {
-  switch (tableMode) {
-    case "FIXED_GRID":
-      return "Bảng cố định";
-    case "APPEND_ROWS":
-      return "Thêm theo dòng";
-    case "APPEND_COLUMNS":
-      return "Thêm theo cột";
-    case "MATRIX":
-      return "Bảng ma trận";
-    case "SUMMARY_TEMPLATE":
-      return "Mẫu tổng hợp";
-    default:
-      return "Bảng";
-  }
+  return `${metric.dynamicFormTemplateName || metric.blockId || getDashboardTableModeLabel(metric.tableMode)}: ${axisLabel || metric.metricKey}`;
 }
 
 function noteBlock(label: string, value?: string | null) {
@@ -226,7 +209,7 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
 
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           <Chip label={`${data?.totalRows ?? 0} báo cáo`} />
-          <Chip color="primary" variant="outlined" label={getTableModeLabel(metric?.tableMode)} />
+          <Chip color="primary" variant="outlined" label={getDashboardTableModeLabel(metric?.tableMode)} />
           <Chip variant="outlined" label={`Tổng: ${formatMetricNumber(metric?.sum)}`} />
         </Stack>
 

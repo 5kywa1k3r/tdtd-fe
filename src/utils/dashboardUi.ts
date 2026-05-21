@@ -8,6 +8,7 @@ import type {
   MyWorkSummaryRowDto,
   WorkDashboardRootAssignmentRowDto,
 } from "../types/dashboard";
+import type { DashboardMindMapBucket } from "../types/dashboardMindMap";
 
 const PROGRESS_COLORS = {
   notStarted: "#90A4AE",
@@ -27,6 +28,46 @@ const REPORT_COLORS = {
   overdueSubmittedCount: "#E53935",
   overdueApprovedCount: "#8D6E63",
 } as const;
+
+export function getDashboardMindMapBucketLabel(bucket?: string | null): string {
+  switch ((bucket ?? "").toUpperCase() as DashboardMindMapBucket | "") {
+    case "ALL":
+      return "Tất cả";
+    case "TODO":
+      return "Chưa làm";
+    case "DONE":
+      return "Đã làm";
+    case "PENDING":
+      return "Chưa bắt đầu";
+    case "DRAFT":
+      return "Bản nháp";
+    case "SUBMITTED":
+      return "Đã gửi";
+    case "APPROVED":
+      return "Đã duyệt";
+    case "OVERDUE":
+      return "Quá hạn";
+    default:
+      return "Không xác định";
+  }
+}
+
+export function getDashboardTableModeLabel(tableMode?: string | null): string {
+  switch (tableMode) {
+    case "FIXED_GRID":
+      return "Bảng cố định";
+    case "APPEND_ROWS":
+      return "Thêm theo dòng";
+    case "APPEND_COLUMNS":
+      return "Thêm theo cột";
+    case "MATRIX":
+      return "Bảng ma trận";
+    case "SUMMARY_TEMPLATE":
+      return "Mẫu tổng hợp";
+    default:
+      return "Bảng";
+  }
+}
 
 export function dateInputToUtcStart(dateValue: string): string | null {
   if (!dateValue) return null;

@@ -62,6 +62,7 @@ import {
   dateInputToUtcEnd,
   dateInputToUtcStart,
   formatDateOnly,
+  getDashboardMindMapBucketLabel,
 } from "../../../utils/dashboardUi";
 
 type CursorMeta = {
@@ -78,11 +79,11 @@ const EMPTY_SCOPE: DashboardMindMapScopeRequest = {
 };
 
 const REPORT_STATUS_OPTIONS = [
-  { value: "PENDING" as const, label: "Chưa bắt đầu" },
-  { value: "DRAFT" as const, label: "Bản nháp" },
-  { value: "SUBMITTED" as const, label: "Đã gửi" },
-  { value: "APPROVED" as const, label: "Đã duyệt" },
-  { value: "OVERDUE" as const, label: "Quá hạn" },
+  { value: "PENDING" as const, label: getDashboardMindMapBucketLabel("PENDING") },
+  { value: "DRAFT" as const, label: getDashboardMindMapBucketLabel("DRAFT") },
+  { value: "SUBMITTED" as const, label: getDashboardMindMapBucketLabel("SUBMITTED") },
+  { value: "APPROVED" as const, label: getDashboardMindMapBucketLabel("APPROVED") },
+  { value: "OVERDUE" as const, label: getDashboardMindMapBucketLabel("OVERDUE") },
 ];
 
 const DEFAULT_REPORT_FILTERS: UserReportFilters = {
@@ -1057,7 +1058,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
     return {
       kind: "loadMore",
       title: "Tải thêm mục",
-      subtitle: remain > 0 ? `Còn khoảng ${remain} item chưa hiển thị` : undefined,
+      subtitle: remain > 0 ? `Còn khoảng ${remain} mục chưa hiển thị` : undefined,
       loadMoreLabel: "Tải thêm",
       loading: Boolean(loadingByNodeId[parentId]),
       onLoadMore: () => void handleLoadMore(parentId),
@@ -1085,13 +1086,13 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       },
       "user-reports": {
         title: "Không có báo cáo phù hợp",
-        subtitle: "Thử đổi trạng thái, khoảng ngày hoặc chờ job materialize period chạy xong.",
+        subtitle: "Thử đổi trạng thái, khoảng ngày hoặc chờ job tạo kỳ báo cáo chạy xong.",
       },
     };
 
     return {
       kind: "empty",
-      eyebrow: "EMPTY",
+      eyebrow: "CHƯA CÓ DỮ LIỆU",
       title: content[reason].title,
       subtitle: content[reason].subtitle,
       chips: [{ label: "Không có dữ liệu", color: "default" }],
@@ -1105,7 +1106,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       const workStatusColor = getMindMapWorkStatusChipColor(workTreeData.work);
       next[currentWorkNodeId] = {
         kind: "work",
-        eyebrow: "WORK",
+        eyebrow: "ĐẦU VIỆC",
         title: `${workTreeData.work.code} - ${workTreeData.work.name}`,
         subtitle: `Công việc đầu vào: ${rootAssignmentIds.length}/${workTreeData.rootAssignments.totalRows}. Màn hình tối đa ${MAX_VISIBLE_NODE_COUNT} mục.`,
         chips: [
@@ -1160,7 +1161,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         chips: [
           { label: `${group.userCount} người dùng`, color: "primary" },
           { label: `${group.reportCount} báo cáo`, color: "info" },
-          ...(group.overdueCount > 0 ? [{ label: `${group.overdueCount} cham`, color: "error" as const }] : []),
+          ...(group.overdueCount > 0 ? [{ label: `${group.overdueCount} chậm`, color: "error" as const }] : []),
         ],
         stackedBar: group.reportBar,
         expanded: expandedNodeIds.includes(id),
@@ -1458,7 +1459,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
           ) : (
             <Box>
               <Typography variant="h6" fontWeight={800}>
-                Che do xem cay theo tung cap
+                Chế độ xem cây theo từng cấp
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
                 Chọn một công việc ở phía trên để bắt đầu từ mục gốc, sau đó mở công việc đầu vào,

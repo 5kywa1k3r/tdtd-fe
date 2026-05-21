@@ -76,6 +76,8 @@ interface WorkAssignmentTableProps {
   onConfigureSourceRules?: (row: AssignmentTableRow) => void;
   onConfigureAutoApprove?: (row: AssignmentTableRow) => void;
   onComplete?: (row: AssignmentTableRow) => void;
+  completeActionLabel?: string;
+  completedActionLabel?: string;
   onToggleActive?: (row: AssignmentTableRow) => void;
   onEvaluate?: (row: AssignmentTableRow) => void;
 }
@@ -138,6 +140,8 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
   onConfigureSourceRules,
   onConfigureAutoApprove,
   onComplete,
+  completeActionLabel = "Xác nhận hoàn thành",
+  completedActionLabel = "Công việc đã hoàn thành",
   onToggleActive,
 }) => {
   const columns: AppTableColumn<AssignmentTableRow>[] = useMemo(
@@ -280,7 +284,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               </IconButton>
             </Tooltip>
 
-            <Tooltip title={isAssignmentCompleted(row) ? "Công việc đã hoàn thành" : "Xác nhận hoàn thành"}>
+            <Tooltip title={isAssignmentCompleted(row) ? completedActionLabel : completeActionLabel}>
               <span>
                 <IconButton
                   size="small"
@@ -437,7 +441,18 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         render: (row) => <CommonDateText value={row.updatedAtUtc} withTime />,
       },
     ],
-    [onComplete, onConfigureAutoApprove, onConfigureSourceRules, onEvaluate, onOpenAggregate, onPreviewTemplate, onToggleActive, onViewDetail]
+    [
+      completeActionLabel,
+      completedActionLabel,
+      onComplete,
+      onConfigureAutoApprove,
+      onConfigureSourceRules,
+      onEvaluate,
+      onOpenAggregate,
+      onPreviewTemplate,
+      onToggleActive,
+      onViewDetail,
+    ]
   );
 
   return (

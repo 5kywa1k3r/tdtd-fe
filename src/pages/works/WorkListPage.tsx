@@ -1,7 +1,17 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Box, Button, Dialog, DialogContent } from '@mui/material';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogContent,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+} from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import FlagIcon from '@mui/icons-material/Flag';
 
 import { WorkListTable, type WorkSortField } from '../../components/works/WorkListTable';
 import type { SortDirection } from '../../components/common/AppTable';
@@ -17,16 +27,25 @@ import { useSearchWorksQuery, useDeleteWorkMutation } from '../../api/workApi';
 import { WORK_TYPE, WORK_STATUS_OPTIONS } from '../../types/work';
 import { UITextKey, uiText } from '../../constants/uiText';
 
+type WorkType = 'TASK' | 'INDICATOR';
+
 interface WorkListPageProps {
-  type: 'TASK' | 'INDICATOR';
+  type?: WorkType;
 }
 
 const DEFAULT_PAGE_SIZE = 10;
 
-const WorkListPage = ({ type }: WorkListPageProps) => {
-  const navigate = useNavigate();
+function normalizeWorkType(value?: string | null): WorkType {
+  return value?.trim().toUpperCase() === 'INDICATOR' ? 'INDICATOR' : 'TASK';
+}
 
-  const basePath = type === 'TASK' ? '/tasks' : '/indicators';
+const WorkListPage = ({ type: fixedType }: WorkListPageProps) => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const type = fixedType ?? normalizeWorkType(searchParams.get('type'));
+  const combinedMode = !fixedType;
+
+  const basePath = combinedMode ? '/works' : type === 'TASK' ? '/tasks' : '/indicators';
   const nameColumnHeader = type === 'TASK' ? 'Tên nhiệm vụ' : 'Tên chỉ tiêu';
 
   const [openCreate, setOpenCreate] = useState(false);
@@ -45,6 +64,22 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
   });
 
   const STATUS_OPTIONS = useMemo(() => WORK_STATUS_OPTIONS, []);
+
+  useEffect(() => {
+    setPage(0);
+  }, [type]);
+
+  const handleTypeChange = (_event: MouseEvent<HTMLElement>, nextType: WorkType | null) => {
+    if (!combinedMode || !nextType || nextType === type) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextType === 'TASK') {
+      nextParams.delete('type');
+    } else {
+      nextParams.set('type', nextType);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const { data, isFetching } = useSearchWorksQuery({
     q: filter.q || undefined,
@@ -115,6 +150,40 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
 
   return (
     <Box sx={{ flex: 1, p: 2, pt: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {combinedMode && (
+        <Stack direction="row" justifyContent="flex-end" sx={{ flexShrink: 0 }}>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={type}
+            onChange={handleTypeChange}
+            sx={{
+              '& .MuiToggleButton-root': {
+                minHeight: 36,
+                px: 1.5,
+                gap: 0.75,
+                textTransform: 'none',
+                fontWeight: 800,
+                borderColor: '#dbe3ef',
+              },
+              '& .Mui-selected': {
+                bgcolor: '#eef5ff',
+                color: '#0f5bd8',
+              },
+            }}
+          >
+            <ToggleButton value="TASK" aria-label="Nhiệm vụ">
+              <AssignmentIcon fontSize="small" />
+              Nhiệm vụ
+            </ToggleButton>
+            <ToggleButton value="INDICATOR" aria-label="Chỉ tiêu">
+              <FlagIcon fontSize="small" />
+              Chỉ tiêu
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
+      )}
+
       <Box>
         <WorkFilter
           value={filter}
@@ -148,7 +217,7 @@ const WorkListPage = ({ type }: WorkListPageProps) => {
         onSortChange={handleSortChange}
         onRowDoubleClick={(row) => navigate(`${basePath}/${row.id}`)}
         nameColumnHeader={nameColumnHeader}
-        onEdit={(row) => navigate(`${basePath}/${row.id}/edit`)}
+        onEdit={(row) => navigate(combinedMode ? `${basePath}/${row.id}?tab=COMMON` : `${basePath}/${row.id}/edit`)}
         onDelete={(row) => openDelete(row)}
       />
 

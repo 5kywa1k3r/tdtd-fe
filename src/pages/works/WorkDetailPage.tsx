@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Alert,
@@ -35,26 +35,29 @@ import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import UpdateOutlinedIcon from "@mui/icons-material/UpdateOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 
-import { WorkForm } from "../../components/works/workform/WorkForm";
-import WorkAssignTab from "../../components/works/assignments/WorkAssignTab";
 import type { AssignmentTableRow } from "../../components/works/assignments/WorkAssignmentTable";
 import { useCompleteWorkMutation, useGetWorkQuery } from "../../api/workApi";
 import { useGetMyReportAssignmentsByWorkQuery } from "../../api/workAssignmentApi";
 
-import WorkReportTemplateGroupsPage from "./report/WorkReportTemplateGroupsPage";
-import WorkReportTemplateDetailPage from "./report/WorkReportTemplateDetailPage";
-import WorkAggregationTab from "./aggregation/WorkAggregationTab";
 import type { MyReportTemplateRow } from "../../types/report";
-import WorkReviewTab from "../../components/works/review/WorkReviewTab";
-import WorkDocumentLibrary from "../../components/works/documents/WorkDocumentLibrary";
 import { getMeSnapshot } from "../../stores/authStorage";
 import { UITextKey, uiText } from "../../constants/uiText";
-import { getWorkStatusLabel, WORK_STATUS } from "../../types/work";
+import { getWorkStatusLabel, WORK_STATUS, WORK_TYPE } from "../../types/work";
+
+const WorkForm = lazy(() =>
+  import("../../components/works/workform/WorkForm").then((module) => ({ default: module.WorkForm })),
+);
+const WorkAssignTab = lazy(() => import("../../components/works/assignments/WorkAssignTab"));
+const WorkReportTemplateGroupsPage = lazy(() => import("./report/WorkReportTemplateGroupsPage"));
+const WorkReportTemplateDetailPage = lazy(() => import("./report/WorkReportTemplateDetailPage"));
+const WorkAggregationTab = lazy(() => import("./aggregation/WorkAggregationTab"));
+const WorkReviewTab = lazy(() => import("../../components/works/review/WorkReviewTab"));
+const WorkDocumentLibrary = lazy(() => import("../../components/works/documents/WorkDocumentLibrary"));
 
 type WorkType = "TASK" | "INDICATOR";
 
 interface WorkDetailPageProps {
-  type: WorkType;
+  type?: WorkType;
 }
 
 type DetailTab = "COMMON" | "DOCUMENT" | "ASSIGN" | "REPORT" | "AGGREGATION" | "REVIEW";
@@ -137,6 +140,14 @@ function normalizeOptionalText(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+function DetailTabFallback() {
+  return (
+    <Box sx={{ py: 6, display: "flex", justifyContent: "center" }}>
+      <CircularProgress size={24} />
+    </Box>
+  );
+}
+
 const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -171,10 +182,20 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
 
   const { data: myReportAssignments } = useGetMyReportAssignmentsByWorkQuery(
     { workId },
-    { skip: !workId }
+    { skip: !workId || !detail }
   );
 
-  const title = type === "TASK" ? "Chi tiết nhiệm vụ" : "Chi tiết chỉ tiêu";
+  const effectiveType: WorkType =
+    type ?? (detail?.type === WORK_TYPE.INDICATOR ? "INDICATOR" : "TASK");
+  const workTypeLabel = effectiveType === "TASK" ? "Nhiệm vụ" : "Chỉ tiêu";
+  const workTypeSubject = effectiveType === "TASK" ? "nhiệm vụ" : "chỉ tiêu";
+  const completeWorkActionLabel = `Xác nhận hoàn thành ${workTypeSubject}`;
+  const title =
+    type || detail
+      ? effectiveType === "TASK"
+        ? "Chi tiết nhiệm vụ"
+        : "Chi tiết chỉ tiêu"
+      : "Chi tiết nhiệm vụ/chỉ tiêu";
 
   const subtitle = useMemo(() => {
     if (!detail) return "";
@@ -402,7 +423,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const pageDescription = tab
     ? activeMeta?.description ?? subtitle
     : subtitle;
-  const listBackLabel = type === "TASK" ? "Danh sách nhiệm vụ" : "Danh sách chỉ tiêu";
+  const listBackLabel = "Danh sách nhiệm vụ/chỉ tiêu";
   const ownerLabel =
     detail?.owner?.fullName?.trim() ||
     detail?.owner?.username?.trim() ||
@@ -538,7 +559,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
               >
                 <HomeOutlinedIcon sx={{ fontSize: 18, flexShrink: 0 }} />
                 <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                  {type === "TASK" ? "Nhiệm vụ" : "Chỉ tiêu"}
+                  {workTypeLabel}
                 </Typography>
                 <ChevronRightOutlinedIcon sx={{ fontSize: 18, flexShrink: 0 }} />
                 <Typography
@@ -605,7 +626,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                     onClick={handleOpenCompleteWork}
                     sx={{ borderRadius: "8px", bgcolor: "#fff", borderColor: "#bbf7d0" }}
                   >
-                    Xác nhận hoàn thành
+                    {completeWorkActionLabel}
                   </Button>
                 )}
 
@@ -983,91 +1004,94 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
               overflow: tab === "COMMON" ? "auto" : "hidden",
             }}
           >
-            {tab === "COMMON" && (
-              <WorkForm
-                type={type}
-                mode={effectiveCommonMode}
-                initialData={detail}
-                onCancel={() => {
-                  if (isEdit) setCommonMode("view");
-                  else handleBackToLauncher();
-                }}
-                onSaved={async () => {
-                  setCommonMode("view");
-                  await refetch();
-                }}
-              />
-            )}
-
-            {tab === "DOCUMENT" && (
-              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <WorkDocumentLibrary workId={workId} />
-              </Box>
-            )}
-
-            {tab === "ASSIGN" && (
-              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <WorkAssignTab
-                  workId={workId}
-                  workStartDate={detail.startDate ?? null}
-                  workEndDate={detail.endDate ?? null}
-                  isWorkOwner={isWorkOwner}
-                  onOpenAggregation={handleOpenAggregation}
-                  onOpenReports={() => handleOpenFunction("REPORT")}
-                  onOpenReview={() => handleOpenFunction("REVIEW")}
+            <Suspense fallback={<DetailTabFallback />}>
+              {tab === "COMMON" && (
+                <WorkForm
+                  type={effectiveType}
+                  mode={effectiveCommonMode}
+                  initialData={detail}
+                  onCancel={() => {
+                    if (isEdit) setCommonMode("view");
+                    else handleBackToLauncher();
+                  }}
+                  onSaved={async () => {
+                    setCommonMode("view");
+                    await refetch();
+                  }}
                 />
-              </Box>
-            )}
+              )}
 
-            {tab === "REPORT" && !reportAssignmentsLoaded && (
-              <Box sx={{ py: 4, display: "flex", justifyContent: "center" }}>
-                <CircularProgress size={24} />
-              </Box>
-            )}
+              {tab === "DOCUMENT" && (
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <WorkDocumentLibrary workId={workId} />
+                </Box>
+              )}
 
-            {tab === "REPORT" && reportAssignmentsLoaded && !hasMyReportAssignments && (
-              <Alert severity="info">Không có báo cáo được giao cho tài khoản hiện tại.</Alert>
-            )}
+              {tab === "ASSIGN" && (
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <WorkAssignTab
+                    workId={workId}
+                    workStartDate={detail.startDate ?? null}
+                    workEndDate={detail.endDate ?? null}
+                    isWorkOwner={isWorkOwner}
+                    workType={effectiveType}
+                    onOpenAggregation={handleOpenAggregation}
+                    onOpenReports={() => handleOpenFunction("REPORT")}
+                    onOpenReview={() => handleOpenFunction("REVIEW")}
+                  />
+                </Box>
+              )}
 
-            {tab === "REPORT" && workId && reportAssignmentsLoaded && hasMyReportAssignments && !selectedReportTemplateGroup && (
-              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <WorkReportTemplateGroupsPage
-                  workId={workId}
-                  onOpenGroup={(row: MyReportTemplateRow) => setSelectedReportTemplateGroup(row)}
-                />
-              </Box>
-            )}
+              {tab === "REPORT" && !reportAssignmentsLoaded && (
+                <Box sx={{ py: 4, display: "flex", justifyContent: "center" }}>
+                  <CircularProgress size={24} />
+                </Box>
+              )}
 
-            {tab === "REPORT" && workId && reportAssignmentsLoaded && hasMyReportAssignments && selectedReportTemplateGroup && (
-              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <WorkReportTemplateDetailPage
-                  workId={workId}
-                  group={selectedReportTemplateGroup}
-                  onBack={() => setSelectedReportTemplateGroup(null)}
-                />
-              </Box>
-            )}
+              {tab === "REPORT" && reportAssignmentsLoaded && !hasMyReportAssignments && (
+                <Alert severity="info">Không có báo cáo được giao cho tài khoản hiện tại.</Alert>
+              )}
 
-            {tab === "AGGREGATION" && (
-              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <WorkAggregationTab
-                  workId={workId}
-                  parentAssignmentId={aggregationSeed?.parentAssignmentId ?? null}
-                  defaultDynamicExcelId={aggregationSeed?.dynamicExcelId ?? null}
-                  defaultDynamicExcelCode={aggregationSeed?.dynamicExcelCode ?? null}
-                  defaultDynamicExcelName={aggregationSeed?.dynamicExcelName ?? null}
-                  defaultDynamicFormTemplateId={aggregationSeed?.dynamicFormTemplateId ?? null}
-                  defaultDynamicFormTemplateCode={aggregationSeed?.dynamicFormTemplateCode ?? null}
-                  defaultDynamicFormTemplateName={aggregationSeed?.dynamicFormTemplateName ?? null}
-                />
-              </Box>
-            )}
+              {tab === "REPORT" && workId && reportAssignmentsLoaded && hasMyReportAssignments && !selectedReportTemplateGroup && (
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <WorkReportTemplateGroupsPage
+                    workId={workId}
+                    onOpenGroup={(row: MyReportTemplateRow) => setSelectedReportTemplateGroup(row)}
+                  />
+                </Box>
+              )}
 
-            {tab === "REVIEW" && (
-              <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <WorkReviewTab workId={workId} />
-              </Box>
-            )}
+              {tab === "REPORT" && workId && reportAssignmentsLoaded && hasMyReportAssignments && selectedReportTemplateGroup && (
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <WorkReportTemplateDetailPage
+                    workId={workId}
+                    group={selectedReportTemplateGroup}
+                    onBack={() => setSelectedReportTemplateGroup(null)}
+                  />
+                </Box>
+              )}
+
+              {tab === "AGGREGATION" && (
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <WorkAggregationTab
+                    workId={workId}
+                    parentAssignmentId={aggregationSeed?.parentAssignmentId ?? null}
+                    defaultDynamicExcelId={aggregationSeed?.dynamicExcelId ?? null}
+                    defaultDynamicExcelCode={aggregationSeed?.dynamicExcelCode ?? null}
+                    defaultDynamicExcelName={aggregationSeed?.dynamicExcelName ?? null}
+                    defaultDynamicFormTemplateId={aggregationSeed?.dynamicFormTemplateId ?? null}
+                    defaultDynamicFormTemplateCode={aggregationSeed?.dynamicFormTemplateCode ?? null}
+                    defaultDynamicFormTemplateName={aggregationSeed?.dynamicFormTemplateName ?? null}
+                  />
+                </Box>
+              )}
+
+              {tab === "REVIEW" && (
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                  <WorkReviewTab workId={workId} />
+                </Box>
+              )}
+            </Suspense>
           </Box>
         )}
       </Box>
@@ -1081,16 +1105,16 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Xác nhận hoàn thành đầu việc</DialogTitle>
+        <DialogTitle>{completeWorkActionLabel}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Alert severity="warning">
-              Đây là thao tác duy nhất đưa đầu việc về trạng thái đã hoàn thành. Các assignment và report bên trong sẽ bị khóa chỉnh sửa.
+              Đây là thao tác duy nhất đưa {workTypeSubject} về trạng thái đã hoàn thành. Các công việc được giao và báo cáo bên trong sẽ bị khóa chỉnh sửa.
             </Alert>
             {completeError && <Alert severity="error">{completeError}</Alert>}
             <TextField
               size="small"
-              label="Đầu việc"
+              label={workTypeLabel}
               value={subtitle}
               fullWidth
               InputProps={{ readOnly: true }}

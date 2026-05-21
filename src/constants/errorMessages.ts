@@ -79,6 +79,7 @@ export const API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   [ApiErrorCode.WorkAssignmentDataSourceRulesLocked]: 'Công việc đã có báo cáo nên không thể đổi cấu hình nguồn dữ liệu.',
   [ApiErrorCode.WorkAssignmentCompletedLocked]: 'Nhiệm vụ đã được xác nhận hoàn thành nên không thể chỉnh sửa.',
   [ApiErrorCode.WorkAssignmentCompletionForbidden]: 'Bạn không có quyền xác nhận hoàn thành nhiệm vụ này.',
+  [ApiErrorCode.WorkAssignmentCompletionPendingReports]: 'Còn kỳ báo cáo chưa hoàn tất nên chưa thể xác nhận hoàn thành nhiệm vụ.',
   [ApiErrorCode.WorkAssignmentHandoverFromRequired]: 'Thiếu người bàn giao.',
   [ApiErrorCode.WorkAssignmentHandoverToRequired]: 'Thiếu người nhận bàn giao.',
   [ApiErrorCode.WorkAssignmentHandoverActorMismatch]: 'Người thực hiện phải là người đang phụ trách hiện tại.',
@@ -131,6 +132,8 @@ export const API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   [ApiErrorCode.WorkAssignmentReportAssignmentInactive]: 'Công việc báo cáo không còn hiệu lực.',
   [ApiErrorCode.WorkAssignmentReportUserCreatedNotAllowed]: 'Công việc này chưa cho phép tạo báo cáo chủ động.',
   [ApiErrorCode.WorkAssignmentReportLinkedPeriodNotFound]: 'Không tìm thấy kỳ định kỳ được liên kết.',
+  [ApiErrorCode.WorkAssignmentReportDueRequired]: 'Báo cáo chủ động phải có hạn hoàn thành.',
+  [ApiErrorCode.WorkAssignmentReportDueAfterAssignmentDue]: 'Hạn hoàn thành của báo cáo chủ động không được sau hạn chung của công việc.',
   [ApiErrorCode.WorkAssignmentReportDeleteForbidden]: 'Bạn không có quyền xóa báo cáo này.',
   [ApiErrorCode.WorkAssignmentReportDeleteApprovedForbidden]: 'Báo cáo đã được duyệt nên không thể xóa.',
   [ApiErrorCode.WorkAssignmentReportDeleteUserCreatedOnly]: 'Chỉ được xóa báo cáo chủ động.',
@@ -355,4 +358,6 @@ export const API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   [ApiErrorCode.UploadTokenInvalid]: 'Thông tin xác nhận tải lên không hợp lệ.',
   [ApiErrorCode.UploadSourceIdMissing]: 'Thiếu mã nguồn của tệp tải lên.',
   [ApiErrorCode.UploadSizeCommittedInvalid]: 'Dung lượng tệp tải lên không hợp lệ.',
+  [ApiErrorCode.WorkAssignmentReportLinkedPeriodInvalid]: 'Kỳ liên kết không phải kỳ định kỳ hợp lệ.',
+  [ApiErrorCode.WorkAssignmentReportUserCreatedDuplicate]: 'Đã tồn tại báo cáo chủ động trùng kỳ.',
 };
