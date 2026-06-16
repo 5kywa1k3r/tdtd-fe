@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Box, Button, Card, CardContent, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { Box, CircularProgress, Typography } from "@mui/material";
 
 import { useGetDynamicExcelQuery, useUpdateDynamicExcelMutation } from "../../api/dynamicExcelApi";
 import ExcelDesigner from "../../components/excel/fortune/ExcelDesigner";
@@ -71,43 +71,26 @@ export default function DynamicExcelEditPage() {
   }
 
   return (
-    <Stack spacing={1.5} sx={{ height: "100%" }}>
-      <Card variant="outlined">
-        <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }}>
-            <TextField
-              label="Tên bảng"
-              size="small"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              sx={{ flex: 1 }}
-            />
-            <Button
-              variant="contained"
-              onClick={async () => {
-                await update({ id, body: { name } }).unwrap();
-                navigate("/dynamic-excel");
-              }}
-              sx={{ minHeight: 40 }}
-            >
-              Lưu
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Box sx={{ flex: 1, minHeight: 0 }}>
-        <ExcelDesigner
-          mode="view"
-          readOnly
-          meta={{ code: detail.code, name }}
-          initialTableMode={detail.tableMode}
-          initialSpec={parsed.spec}
-          initialWorkbookData={parsed.workbook}
-          onBack={() => navigate("/dynamic-excel")}
-          onSaved={() => {}}
-        />
-      </Box>
-    </Stack>
+    <Box sx={{ height: "100%", minHeight: 0 }}>
+      <ExcelDesigner
+        mode="edit"
+        meta={{ code: detail.code, name }}
+        onMetaChange={(next) => setName(next.name ?? "")}
+        initialTableMode={detail.tableMode}
+        initialSpec={parsed.spec}
+        initialWorkbookData={parsed.workbook}
+        onBack={() => navigate("/dynamic-excel")}
+        onSaved={async (p) => {
+          await update({
+            id,
+            body: {
+              name: p.name,
+              rawWorkbookDataJson: JSON.stringify(p.rawWorkbookData),
+              specJson: JSON.stringify(p.spec),
+            },
+          }).unwrap();
+        }}
+      />
+    </Box>
   );
 }

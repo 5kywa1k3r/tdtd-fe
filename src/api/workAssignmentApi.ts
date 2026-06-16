@@ -113,6 +113,9 @@ export const workAssignmentApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, arg) => [
         { type: "WorkAssignment" as const, id: `WORK_${arg.workId}` },
         { type: "WorkAssignment" as const, id: `PARENT_CANDIDATES_${arg.workId}` },
+        ...(arg.body.parentAssignmentId
+          ? [{ type: "WorkAssignmentChildren" as const, id: arg.body.parentAssignmentId }]
+          : []),
       ],
     }),
 

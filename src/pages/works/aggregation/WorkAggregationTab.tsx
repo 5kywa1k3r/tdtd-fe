@@ -4,6 +4,7 @@ import {
   AccordionDetails,
   AccordionSummary,
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -12,7 +13,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -22,11 +22,18 @@ import {
   Paper,
   Snackbar,
   Stack,
+  Tab,
+  Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import type { Sheet } from "@fortune-sheet/core";
 import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import {
@@ -34,13 +41,14 @@ import {
   type DynamicFormDetail,
 } from "../../../api/dynamicFormApi";
 import {
-  useApplyDynamicFormAggregateDraftMutation,
-  useCreateUserCreatedReportMutation,
   useGetAggregateTableMutation,
   useGetDynamicFormAggregateTableMutation,
-  useGetReportsByAssignmentQuery,
-  usePreviewDynamicFormAggregateDraftMutation,
-} from "../../../api/reportApi";
+  useGetWorkAssignmentAggregateConfigQuery,
+  useGetWorkAssignmentBasicSummaryConfigQuery,
+  useGetWorkAssignmentBasicSummaryMutation,
+  useSaveWorkAssignmentAggregateConfigMutation,
+  useSaveWorkAssignmentBasicSummaryConfigMutation,
+} from "../../../api/aggregateDataApi";
 import {
   useGetWorkAssignmentByIdQuery,
   useGetWorkAssignmentsByWorkQuery,
@@ -58,31 +66,52 @@ import type {
   AggregateTableResponse,
   DynamicFormAggregateRequest,
   DynamicFormAggregateResponse,
+  DynamicFormStackedTableDto,
+  WorkAssignmentBasicSummaryDefaultMethodsDto,
+  WorkAssignmentBasicSummaryRuleDto,
+  WorkAssignmentBasicSummaryResponse,
 } from "../../../types/reportAggregate";
-import type {
-  WorkAssignmentReportListRow,
-  WorkAssignmentReportResponse,
-  WorkReportDataOrigin,
-} from "../../../types/report";
 import { WorkAssignmentReportStatus } from "../../../types/reportStatus";
 import type { WorkAssignmentListResponse } from "../../../types/workAssignment";
-import AggregateFilterBar from "../../../components/works/aggregate/AggregateFilterBar";
+import AggregateFilterBar, {
+  type AggregateUnitOption,
+  resolveMetricDisplayLabel,
+} from "../../../components/works/aggregate/AggregateFilterBar";
 import AggregateResultTable from "../../../components/works/aggregate/AggregateResultTable";
 import AggregateSourceTable from "../../../components/works/aggregate/AggregateSourceTable";
+import BasicSummaryPanel from "../../../components/works/aggregate/BasicSummaryPanel";
 import AggregateWorkbookPreview from "../../../components/works/aggregate/AggregateWorkbookPreview";
+import type { WorkbookPreviewHighlight } from "../../../components/excel/fortune/WorkbookDataGrid";
+import { MARK_COLORS } from "../../../components/excel/fortune/designerMarking";
+import {
+  dataTypeLabel,
+  getCellDataType,
+  getMatrixDataTypeRanges,
+  normalizeSpecDataTypeMetadata,
+} from "../../../components/excel/fortune/dataTypes";
+import { buildInputCellRefs } from "../../../components/excel/fortune/specialRanges";
+import type {
+  DynamicExcelDataType,
+  HeaderSpec as FortuneHeaderSpec,
+} from "../../../components/excel/fortune/types";
+import type { DynamicFormField } from "../../../features/dynamicForms/dynamicForm.types";
+import { DESIGNER_LIMITS } from "../../../components/excel/fortune/validate";
 import type {
   AggregateFilterState,
   AggregateMetricOption,
 } from "../../../types/aggregateTypes";
 import {
+  buildEditorValue,
   fieldTypeLabels,
-  getPrimaryDynamicFormBlockJson,
+  getDynamicFormBlockJsonList,
+  getDynamicFormFieldDisplayName,
   tableModeLabels,
 } from "../../../features/dynamicForms/dynamicFormSchema";
 import {
   buildWorkbookForCellSum,
   buildWorkbookHorizontalByUser,
   buildWorkbookVerticalByUser,
+  cloneDeepJson,
   dayKeyToDateInput,
   formatDayKeyLabel,
   formatPeriodRangeLabel,
@@ -90,13 +119,13 @@ import {
   parseJsonSafe,
   resolveResultRect,
   resolveTemplateRect,
+  setCellValue,
 } from "../../../components/works/aggregate/aggregateUtils";
 import type {
   DynamicExcelSpecLike,
   ReportRect,
 } from "../../../types/aggregateTypes";
 import { UITextKey, uiText } from '../../../constants/uiText';
-import { getMeSnapshot } from "../../../stores/authStorage";
 import WorkReportEditorPage from "../report/WorkReportEditorPage";
 
 type Props = {
@@ -135,6 +164,26 @@ type DynamicFormExcelBlockLike = {
   W?: number | string | null;
   h?: number | string | null;
   H?: number | string | null;
+  excelSpecKind?: string | null;
+  ExcelSpecKind?: string | null;
+  kind?: string | null;
+  Kind?: string | null;
+  defaultDataType?: string | null;
+  DefaultDataType?: string | null;
+  defaultOptions?: unknown[] | null;
+  DefaultOptions?: unknown[] | null;
+  dataTypeOverrides?: unknown[] | null;
+  DataTypeOverrides?: unknown[] | null;
+  specialRanges?: unknown[] | null;
+  SpecialRanges?: unknown[] | null;
+  statisticsDisabled?: boolean | string | null;
+  StatisticsDisabled?: boolean | string | null;
+  statisticsInputCellCount?: number | string | null;
+  StatisticsInputCellCount?: number | string | null;
+  statisticsInputCellLimit?: number | string | null;
+  StatisticsInputCellLimit?: number | string | null;
+  statisticsDisabledReason?: string | null;
+  StatisticsDisabledReason?: string | null;
 };
 
 type DynamicFormMetricMapLike = {
@@ -142,6 +191,8 @@ type DynamicFormMetricMapLike = {
   rowKey?: string | null;
   columnKey?: string | null;
   metricKey?: string | null;
+  label?: string | null;
+  excelRef?: string | null;
 };
 
 type DynamicFormMetricRuleLike = {
@@ -158,6 +209,13 @@ type DynamicFormMetricRangeLike = {
   C0?: number | string | null;
   R1?: number | string | null;
   C1?: number | string | null;
+};
+
+type NormalizedMetricRange = {
+  r0: number;
+  c0: number;
+  r1: number;
+  c1: number;
 };
 
 type DynamicFormMetricLabelTargetLike = {
@@ -188,21 +246,255 @@ type DynamicFormTableMode =
   | "MATRIX"
   | "SUMMARY_TEMPLATE";
 
-type AggregateDraftValueSelector = "SUM" | "AVERAGE" | "MIN" | "MAX" | "COUNT";
-
-const AGGREGATE_DRAFT_DATA_ORIGINS: Array<{ value: WorkReportDataOrigin; label: string }> = [
-  { value: "PARTIAL_MAPPING", label: "Gán một phần từ tổng hợp" },
-  { value: "AUTO_SUMMARY", label: "Tự tổng hợp" },
-  { value: "COPIED_SUMMARY", label: "Sao chép tổng hợp" },
+const STACK_IDENTITY_COLUMN_OPTIONS: Array<{ value: string; label: string; description: string }> = [
+  { value: "periodKey", label: "Kỳ", description: "Kỳ báo cáo của dòng nguồn, ví dụ 22/05/2026." },
+  { value: "periodInstanceKey", label: "Lần báo cáo", description: "Mã lần báo cáo nếu cùng một kỳ có nhiều lần gửi." },
+  { value: "unitSymbol", label: "Mã đơn vị", description: "Ký hiệu đơn vị gửi báo cáo, dùng để lọc và đối chiếu." },
+  { value: "unitShortName", label: "Đơn vị", description: "Tên ngắn của đơn vị gửi báo cáo." },
+  { value: "fullName", label: "Người báo cáo", description: "Họ tên người lập hoặc gửi báo cáo." },
+  { value: "userName", label: "Tài khoản", description: "Tài khoản người báo cáo, dùng khi cần truy vết." },
+  { value: "workAssignmentId", label: "Công việc con", description: "Id công việc con chứa báo cáo đã duyệt." },
+  { value: "reportId", label: "Báo cáo", description: "Id báo cáo để mở và kiểm chứng dữ liệu." },
+  { value: "approvedAtUtc", label: "Thời điểm duyệt", description: "Thời điểm báo cáo được duyệt." },
+  { value: "sourceReportCount", label: "Số báo cáo", description: "Số báo cáo đã được gom vào dòng này khi chọn khoảng kỳ, lũy kế hoặc toàn bộ kỳ." },
 ];
 
-const AGGREGATE_DRAFT_VALUE_SELECTORS: Array<{ value: AggregateDraftValueSelector; label: string }> = [
-  { value: "SUM", label: "Tổng" },
-  { value: "AVERAGE", label: "Trung bình" },
-  { value: "MIN", label: "Nhỏ nhất" },
-  { value: "MAX", label: "Lớn nhất" },
-  { value: "COUNT", label: "Số lượng" },
-];
+type SummaryMethod =
+  | "SUM"
+  | "COUNT"
+  | "MEAN"
+  | "MIN"
+  | "MAX"
+  | "MIN_DATE"
+  | "MAX_DATE"
+  | "TRUE_COUNT"
+  | "FALSE_COUNT"
+  | "BUCKET_COUNT"
+  | "JOIN";
+
+type SummaryMethodOption = {
+  value: SummaryMethod;
+  label: string;
+};
+
+type TemplateDataTypeMethodRow = {
+  id: string;
+  rect: ReportRect;
+  rectLabel: string;
+  inputIndexes: number[];
+  dataType: DynamicExcelDataType;
+  dataTypeLabel: string;
+  cellCount: number;
+  defaultMethod: SummaryMethod;
+  selectedMethod: SummaryMethod;
+  methodOptions: SummaryMethodOption[];
+};
+
+const SUMMARY_METHOD_LABELS: Record<SummaryMethod, string> = {
+  SUM: "Tổng",
+  COUNT: "Đếm có dữ liệu",
+  MEAN: "Trung bình",
+  MIN: "Nhỏ nhất",
+  MAX: "Lớn nhất",
+  MIN_DATE: "Ngày sớm nhất",
+  MAX_DATE: "Ngày mới nhất",
+  TRUE_COUNT: "Đếm đúng",
+  FALSE_COUNT: "Đếm sai",
+  BUCKET_COUNT: "Nhóm giá trị",
+  JOIN: "Ghép nội dung",
+};
+
+const SUMMARY_METHOD_OPTIONS: SummaryMethodOption[] = [
+  "SUM",
+  "COUNT",
+  "MEAN",
+  "MIN",
+  "MAX",
+  "MIN_DATE",
+  "MAX_DATE",
+  "TRUE_COUNT",
+  "FALSE_COUNT",
+  "BUCKET_COUNT",
+  "JOIN",
+].map((value) => ({ value: value as SummaryMethod, label: SUMMARY_METHOD_LABELS[value as SummaryMethod] }));
+
+const DEFAULT_BASIC_SUMMARY_METHODS: Required<WorkAssignmentBasicSummaryDefaultMethodsDto> = {
+  number: "SUM",
+  date: "MAX_DATE",
+  boolean: "TRUE_COUNT",
+  text: "JOIN",
+  selection: "BUCKET_COUNT",
+};
+
+const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
+  q: "",
+  periodKey: "",
+  unitId: "",
+  assigneeUserId: "",
+  page: 0,
+  pageSize: 10,
+};
+
+function methodOptionsForDataType(dataType: DynamicExcelDataType): SummaryMethodOption[] {
+  const allowed: SummaryMethod[] =
+    dataType === "NUMBER"
+      ? ["SUM", "COUNT", "MEAN", "MIN", "MAX"]
+      : dataType === "DATE" || dataType === "FULL_DATE"
+        ? ["MAX_DATE", "MIN_DATE", "COUNT"]
+        : dataType === "BOOLEAN"
+          ? ["TRUE_COUNT", "FALSE_COUNT", "COUNT"]
+          : dataType === "SHORT_TEXT" || dataType === "MULTI_SELECT"
+            ? ["BUCKET_COUNT", "COUNT", "JOIN"]
+            : ["COUNT"];
+
+  return SUMMARY_METHOD_OPTIONS.filter((option) => allowed.includes(option.value));
+}
+
+function defaultSummaryMethodForDataType(
+  dataType: DynamicExcelDataType,
+  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto = DEFAULT_BASIC_SUMMARY_METHODS,
+): SummaryMethod {
+  if (dataType === "NUMBER") return normalizeSummaryMethod(defaultMethods.number, "SUM");
+  if (dataType === "DATE" || dataType === "FULL_DATE") return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
+  if (dataType === "BOOLEAN") return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
+  if (dataType === "SHORT_TEXT" || dataType === "MULTI_SELECT") {
+    return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
+  }
+  return normalizeSummaryMethod(defaultMethods.text, "JOIN");
+}
+
+function formatRectLabel(rect: ReportRect) {
+  const start = formatExcelCellRef(rect.r0, rect.c0);
+  const end = formatExcelCellRef(rect.r1, rect.c1);
+  return start === end ? start : `${start}:${end}`;
+}
+
+function buildTemplateDataTypeMethodRows(
+  block: DynamicFormExcelBlockResolution | null | undefined,
+  templateRect: ReportRect,
+  templateSpec: DynamicExcelSpecLike,
+  selectedMethods: Record<string, SummaryMethod>,
+  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto,
+): TemplateDataTypeMethodRow[] {
+  if (!block || block.tableMode !== "MATRIX") return [];
+
+  const normalizedSpec = normalizeSpecDataTypeMetadata(templateSpec as unknown as FortuneHeaderSpec);
+  if (normalizedSpec.kind !== "MATRIX") return [];
+  const inputRefs = buildInputCellRefs(templateRect, normalizedSpec);
+
+  return getMatrixDataTypeRanges(normalizedSpec, templateRect)
+    .map((range, index) => {
+      const id = range.id || `range_${index + 1}`;
+      const inputIndexes = inputRefs.flatMap((ref, inputIndex) =>
+        containsRect(range, { r0: ref.r, c0: ref.c, r1: ref.r, c1: ref.c }) ? [inputIndex] : [],
+      );
+      const defaultMethod = defaultSummaryMethodForDataType(range.dataType, defaultMethods);
+      const methodOptions = methodOptionsForDataType(range.dataType);
+      const configuredMethod = selectedMethods[id];
+      const selectedMethod = configuredMethod && methodOptions.some((option) => option.value === configuredMethod)
+        ? configuredMethod
+        : defaultMethod;
+
+      return {
+        id,
+        rect: range,
+        rectLabel: formatRectLabel(range),
+        inputIndexes,
+        dataType: range.dataType,
+        dataTypeLabel: dataTypeLabel(range.dataType),
+        cellCount: inputIndexes.length,
+        defaultMethod,
+        selectedMethod,
+        methodOptions,
+      };
+    })
+    .filter((row) => row.cellCount > 0)
+    .sort((a, b) => a.rectLabel.localeCompare(b.rectLabel, "vi"));
+}
+
+function normalizeSummaryMethod(value: unknown, fallback: SummaryMethod): SummaryMethod {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return raw in SUMMARY_METHOD_LABELS ? (raw as SummaryMethod) : fallback;
+}
+
+function methodOptionsForFieldType(fieldType: DynamicFormField["type"]): SummaryMethodOption[] {
+  const allowed: SummaryMethod[] =
+    fieldType === "number"
+      ? ["SUM", "COUNT", "MEAN", "MIN", "MAX"]
+      : fieldType === "date" || fieldType === "fullDate"
+        ? ["MAX_DATE", "MIN_DATE", "COUNT"]
+        : fieldType === "boolean"
+          ? ["TRUE_COUNT", "FALSE_COUNT", "COUNT"]
+          : fieldType === "shortText" || fieldType === "singleSelect" || fieldType === "multiSelect"
+            ? ["BUCKET_COUNT", "COUNT", "JOIN"]
+            : ["JOIN", "COUNT", "BUCKET_COUNT"];
+
+  return SUMMARY_METHOD_OPTIONS.filter((option) => allowed.includes(option.value));
+}
+
+function defaultSummaryMethodForFieldType(
+  fieldType: DynamicFormField["type"],
+  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto,
+): SummaryMethod {
+  if (fieldType === "number") return normalizeSummaryMethod(defaultMethods.number, "SUM");
+  if (fieldType === "date" || fieldType === "fullDate") return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
+  if (fieldType === "boolean") return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
+  if (fieldType === "shortText" || fieldType === "singleSelect" || fieldType === "multiSelect") {
+    return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
+  }
+  return normalizeSummaryMethod(defaultMethods.text, "JOIN");
+}
+
+function buildBasicSummaryFieldMethodRows(
+  detail: DynamicFormDetail | null | undefined,
+  selectedMethods: Record<string, SummaryMethod>,
+  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto,
+) {
+  if (!detail) return [];
+
+  const value = buildEditorValue({
+    code: detail.code,
+    name: detail.name,
+    description: detail.description,
+    tagCodes: detail.tagCodes,
+    schemaVersion: detail.schemaVersion,
+    isActive: detail.isActive,
+    sectionsJson: detail.sectionsJson,
+    fieldsJson: detail.fieldsJson,
+    excelBlockJson: detail.excelBlockJson,
+    blocksJson: detail.blocksJson,
+  });
+
+  return [...value.fields]
+    .sort((a, b) => a.order - b.order)
+    .map((field) => {
+      const defaultMethod = defaultSummaryMethodForFieldType(field.type, defaultMethods);
+      const methodOptions = methodOptionsForFieldType(field.type);
+      const configuredMethod = selectedMethods[field.id];
+      const selectedMethod = configuredMethod && methodOptions.some((option) => option.value === configuredMethod)
+        ? configuredMethod
+        : defaultMethod;
+
+      return {
+        id: field.id,
+        label: getDynamicFormFieldDisplayName(field),
+        dataTypeLabel: fieldTypeLabels[field.type],
+        defaultMethod,
+        selectedMethod,
+        methodOptions,
+      };
+    });
+}
+
+function buildBasicSummaryFieldRules(rows: ReturnType<typeof buildBasicSummaryFieldMethodRows>): WorkAssignmentBasicSummaryRuleDto[] {
+  return rows
+    .filter((row) => row.selectedMethod !== row.defaultMethod)
+    .map((row) => ({
+      targetKind: "FIELD",
+      targetKey: `field:${row.id}`,
+      operation: row.selectedMethod,
+    }));
+}
 
 type DynamicFormExcelBlockResolution = {
   blockId: string;
@@ -212,10 +504,15 @@ type DynamicFormExcelBlockResolution = {
   dynamicExcelName?: string | null;
   metricLabelTargetCount: number;
   metricOptions: AggregateMetricOption[];
+  statisticsDisabled: boolean;
+  statisticsInputCellCount: number;
+  statisticsInputCellLimit: number;
+  statisticsDisabledReason?: string | null;
 };
 
 type AggregationScopeOption = {
   id: string;
+  assignmentType?: WorkAssignmentListResponse["assignmentType"];
   dynamicExcelId?: string | null;
   dynamicExcelCode?: string | null;
   dynamicExcelName?: string | null;
@@ -239,9 +536,9 @@ function createDefaultFilter(
     scopeMode: "DIRECT_CHILDREN",
     metricKeys: [],
     selectedUnitIds: [],
-    periodScopeMode: "SINGLE_PERIOD",
+    periodScopeMode: "PERIOD_RANGE",
     periodDate: defaultPeriodDate ?? "",
-    periodDateFrom: "",
+    periodDateFrom: defaultPeriodDate ?? "",
     periodDateTo: defaultPeriodDate ?? "",
     sourceStatusMode: "APPROVED_ONLY",
     aggregateMode: "SUM_BY_CELL",
@@ -256,6 +553,7 @@ function normalizeOptionalText(value?: string | null) {
 function toAggregationScopeOption(row: WorkAssignmentListResponse): AggregationScopeOption {
   return {
     id: row.id,
+    assignmentType: row.assignmentType,
     dynamicExcelId: normalizeOptionalText(row.dynamicExcelId),
     dynamicExcelCode: normalizeOptionalText(row.dynamicExcelCode),
     dynamicExcelName: normalizeOptionalText(row.dynamicExcelName),
@@ -313,6 +611,247 @@ function buildMetricKey(blockId: string, rowKey: string, columnKey: string) {
 function getPositiveInt(value: unknown) {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+function readOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return null;
+}
+
+function getOptionalNonNegativeInt(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+function getLargeTableStatisticMessage(inputCellCount: number, limit: number) {
+  return `Bảng có ${inputCellCount} ô nhập, vượt ngưỡng thống kê nền ${limit}; hệ thống không ghi projection từng ô, nhưng thống kê cơ bản vẫn tổng hợp trực tiếp từ báo cáo đã duyệt nếu không vượt ${DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô input.`;
+}
+
+function resolveBlockStatisticState(block: DynamicFormExcelBlockLike) {
+  const limit =
+    getOptionalNonNegativeInt(block.statisticsInputCellLimit ?? block.StatisticsInputCellLimit) ??
+    DESIGNER_LIMITS.MAX_TABLE_STATISTIC_INPUT_CELLS;
+  const inputCellCount =
+    getOptionalNonNegativeInt(block.statisticsInputCellCount ?? block.StatisticsInputCellCount) ??
+    countDynamicFormExcelBlockInputCells(block);
+  const explicitDisabled = readOptionalBoolean(block.statisticsDisabled ?? block.StatisticsDisabled);
+  const statisticsDisabled = explicitDisabled === true || inputCellCount > limit;
+  const reason = statisticsDisabled ? getLargeTableStatisticMessage(inputCellCount, limit) : null;
+
+  return {
+    statisticsDisabled,
+    statisticsInputCellCount: inputCellCount,
+    statisticsInputCellLimit: limit,
+    statisticsDisabledReason: statisticsDisabled ? reason : null,
+  };
+}
+
+function countDynamicFormExcelBlockInputCells(block: DynamicFormExcelBlockLike) {
+  const dataRect = normalizeMetricRange(block.dataRect ?? block.DataRect);
+  if (!dataRect) {
+    const width = getPositiveInt(block.w ?? block.W);
+    const height = getPositiveInt(block.h ?? block.H);
+    return width > 0 && height > 0 ? width * height : 0;
+  }
+
+  try {
+    return buildInputCellRefs(dataRect, buildStatisticHeaderSpec(block, dataRect)).length;
+  } catch {
+    return (dataRect.r1 - dataRect.r0 + 1) * (dataRect.c1 - dataRect.c0 + 1);
+  }
+}
+
+function buildStatisticHeaderSpec(
+  block: DynamicFormExcelBlockLike,
+  dataRect: NormalizedMetricRange,
+): FortuneHeaderSpec {
+  const kindRaw = normalizeOptionalText(
+    block.excelSpecKind ?? block.ExcelSpecKind ?? block.kind ?? block.Kind
+  );
+  const kind: FortuneHeaderSpec["kind"] = kindRaw === "LEFT" || kindRaw === "MATRIX" ? kindRaw : "TOP";
+  const defaultOptions = block.defaultOptions ?? block.DefaultOptions;
+  const dataTypeOverrides = block.dataTypeOverrides ?? block.DataTypeOverrides;
+  const specialRanges = block.specialRanges ?? block.SpecialRanges;
+  const base = {
+    defaultDataType: normalizeOptionalText(block.defaultDataType ?? block.DefaultDataType) as DynamicExcelDataType | undefined,
+    defaultOptions: Array.isArray(defaultOptions) ? defaultOptions as FortuneHeaderSpec["defaultOptions"] : [],
+    dataTypeOverrides: Array.isArray(dataTypeOverrides) ? dataTypeOverrides as FortuneHeaderSpec["dataTypeOverrides"] : [],
+    specialRanges: Array.isArray(specialRanges) ? specialRanges as FortuneHeaderSpec["specialRanges"] : [],
+  };
+
+  if (kind === "LEFT") {
+    return normalizeSpecDataTypeMetadata({
+      kind,
+      leftRows: dataRect.r1 + 1,
+      leftCols: Math.max(1, dataRect.c0),
+      dataCols: dataRect.c1 - dataRect.c0 + 1,
+      ...base,
+    });
+  }
+
+  if (kind === "MATRIX") {
+    return normalizeSpecDataTypeMetadata({
+      kind,
+      topRows: Math.max(1, dataRect.r0),
+      topCols: dataRect.c1 - dataRect.c0 + 1,
+      leftRows: dataRect.r1 - dataRect.r0 + 1,
+      leftCols: Math.max(1, dataRect.c0),
+      ...base,
+    });
+  }
+
+  return normalizeSpecDataTypeMetadata({
+    kind: "TOP",
+    topRows: Math.max(1, dataRect.r0),
+    topCols: dataRect.c1 - dataRect.c0 + 1,
+    dataRows: dataRect.r1 - dataRect.r0 + 1,
+    ...base,
+  });
+}
+
+function formatBlockMetricSummary(block: DynamicFormExcelBlockResolution) {
+  return block.statisticsDisabled
+    ? "Bảng lớn: theo template reporter"
+    : `${block.metricOptions.length} chỉ tiêu bảng tự động`;
+}
+
+function formatBlockMetricHelper(block?: DynamicFormExcelBlockResolution | null) {
+  if (block?.statisticsDisabled) {
+    return "Bảng lớn không ghi thống kê nền từng ô; màn này vẫn dùng template reporter và đọc trực tiếp từ báo cáo đã duyệt khi chạy tổng hợp.";
+  }
+
+  return "Tự động lấy table metric hợp lệ và field có nhãn thống kê. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, short text/single select đếm theo nhóm, multi select list + đếm.";
+}
+
+function parseExcelOrdinalCell(rowKey?: string | null, columnKey?: string | null) {
+  const rowMatch = normalizeOptionalText(rowKey)?.match(/^R(\d+)$/i);
+  const columnMatch = normalizeOptionalText(columnKey)?.match(/^C(\d+)$/i);
+  if (!rowMatch || !columnMatch) return null;
+
+  const r = Number(rowMatch[1]) - 1;
+  const c = Number(columnMatch[1]) - 1;
+  return Number.isInteger(r) && Number.isInteger(c) && r >= 0 && c >= 0
+    ? { r, c }
+    : null;
+}
+
+function parseMetricKeyCell(metricKey?: string | null) {
+  const text = normalizeOptionalText(metricKey);
+  if (!text) return null;
+
+  const match = text.match(/(?:^|[.])R(\d+)[.]C(\d+)$/i);
+  if (!match) return null;
+
+  const r = Number(match[1]) - 1;
+  const c = Number(match[2]) - 1;
+  return Number.isInteger(r) && Number.isInteger(c) && r >= 0 && c >= 0
+    ? { r, c }
+    : null;
+}
+
+function parseRelativeMetricCell(
+  rowKey: string | null | undefined,
+  columnKey: string | null | undefined,
+  rect: ReportRect,
+) {
+  const rowIndex = rowKey ? indexFromOrdinalPart(rowKey, "row_") : null;
+  const columnIndex = columnKey ? indexFromOrdinalPart(columnKey, "col_") : null;
+  if (rowIndex == null || columnIndex == null) return null;
+  return { r: rect.r0 + rowIndex, c: rect.c0 + columnIndex };
+}
+
+function resolveDynamicFormAggregateCell(
+  row: DynamicFormAggregateResponse["rows"][number],
+  option: AggregateMetricOption | null | undefined,
+  rect: ReportRect,
+) {
+  return (
+    parseExcelOrdinalCell(row.rowKey, row.columnKey) ??
+    parseExcelOrdinalCell(option?.rowKey, option?.columnKey) ??
+    parseMetricKeyCell(row.sourceMetricKey) ??
+    parseMetricKeyCell(row.metricKey) ??
+    parseRelativeMetricCell(row.rowKey, row.columnKey, rect) ??
+    parseRelativeMetricCell(option?.rowKey, option?.columnKey, rect) ??
+    resolveDynamicFormAggregateCellByIndex(row.index, rect)
+  );
+}
+
+function resolveDynamicFormAggregateCellByIndex(index: number | null | undefined, rect: ReportRect) {
+  if (!Number.isInteger(index) || index == null || index < 0) return null;
+
+  const width = Math.max(1, rect.c1 - rect.c0 + 1);
+  return {
+    r: rect.r0 + Math.floor(index / width),
+    c: rect.c0 + (index % width),
+  };
+}
+
+function formatExcelCellRef(r: number, c: number) {
+  return `${excelColumnName(c)}${r + 1}`;
+}
+
+function excelColumnName(index: number) {
+  let text = "";
+  let n = Math.max(0, Math.floor(index)) + 1;
+  while (n > 0) {
+    const mod = (n - 1) % 26;
+    text = String.fromCharCode(65 + mod) + text;
+    n = Math.floor((n - 1) / 26);
+  }
+  return text;
+}
+
+function resolveDynamicFormAggregateDisplayValue(row: DynamicFormAggregateResponse["rows"][number]) {
+  if (typeof row.sum === "number" && Number.isFinite(row.sum)) return row.sum;
+  if (typeof row.average === "number" && Number.isFinite(row.average)) return row.average;
+  if (typeof row.count === "number" && Number.isFinite(row.count)) return row.count;
+  return null;
+}
+
+function buildDynamicFormAggregateTemplateWorkbook(
+  result: DynamicFormAggregateResponse | null,
+  block: DynamicFormExcelBlockResolution | null,
+  templateWorkbook: Sheet[],
+  rect: ReportRect,
+) {
+  if (!result || !block || result.stackedTable || !templateWorkbook.length) {
+    return null;
+  }
+
+  const tableMode = normalizeTableMode(result.meta.tableMode);
+  if (tableMode !== "FIXED_GRID" && tableMode !== "MATRIX") {
+    return null;
+  }
+
+  const workbook = cloneDeepJson(templateWorkbook);
+  const firstSheet: any = workbook[0];
+  if (!firstSheet) return null;
+
+  const metricOptionByKey = new Map<string, AggregateMetricOption>();
+  block.metricOptions.forEach((option) => {
+    metricOptionByKey.set(option.metricKey, option);
+  });
+
+  result.rows.forEach((row) => {
+    const option =
+      metricOptionByKey.get(row.sourceMetricKey ?? "") ??
+      metricOptionByKey.get(row.metricKey) ??
+      null;
+    const cell = resolveDynamicFormAggregateCell(row, option, rect);
+    if (!cell) return;
+    setCellValue(firstSheet, cell.r, cell.c, resolveDynamicFormAggregateDisplayValue(row));
+  });
+
+  return {
+    workbook,
+    previewRect: rect,
+  };
 }
 
 function resolveMetricOptions(
@@ -398,8 +937,58 @@ function buildMetricOptionFromMapItem(
     rowKey,
     columnKey,
     index: Number.isInteger(index) && index >= 0 ? index : fallbackIndex,
-    label: null,
+    label: normalizeOptionalText(item.label) ?? normalizeOptionalText(item.excelRef),
   };
+}
+
+function buildAssignedUnitOptions(
+  options: AggregationScopeOption[],
+  scopeAssignmentId?: string | null,
+): AggregateUnitOption[] {
+  const parentId = normalizeOptionalText(scopeAssignmentId);
+  if (!parentId) return [];
+
+  const byUnitId = new Map<string, AggregateUnitOption & { assignmentCodes: Set<string> }>();
+  const sourceAssignments = options.filter(
+    (option) => option.isActive !== false && option.parentAssignmentId === parentId,
+  );
+
+  for (const assignment of sourceAssignments) {
+    for (const assignee of assignment.assignees ?? []) {
+      const unitId = normalizeOptionalText(assignee.unitId);
+      if (!unitId) continue;
+
+      const label =
+        normalizeOptionalText(assignee.unitShortName) ??
+        normalizeOptionalText(assignee.unitName) ??
+        normalizeOptionalText(assignee.unitSymbol) ??
+        unitId;
+      const code = normalizeOptionalText(assignee.unitSymbol);
+      const existing = byUnitId.get(unitId);
+
+      if (existing) {
+        if (assignment.id) existing.assignmentCodes.add(assignment.id);
+        continue;
+      }
+
+      byUnitId.set(unitId, {
+        id: unitId,
+        label,
+        code,
+        secondaryLabel: code ? `Ký hiệu: ${code}` : undefined,
+        assignmentCodes: new Set(assignment.id ? [assignment.id] : []),
+      });
+    }
+  }
+
+  return Array.from(byUnitId.values())
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      code: item.code,
+      secondaryLabel: item.secondaryLabel,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "vi"));
 }
 
 function parseConfiguredMetricOption(
@@ -541,7 +1130,7 @@ function expandMetricOptionRange(
   return options;
 }
 
-function normalizeMetricRange(value: DynamicFormMetricRangeLike | null | undefined) {
+function normalizeMetricRange(value: DynamicFormMetricRangeLike | null | undefined): NormalizedMetricRange | null {
   if (!value || typeof value !== "object") return null;
   const r0 = Number(value.r0 ?? value.R0);
   const c0 = Number(value.c0 ?? value.C0);
@@ -604,26 +1193,43 @@ function countMetricLabelTargets(block: DynamicFormExcelBlockLike) {
     : 0;
 }
 
-function resolveDynamicFormExcelBlock(
+function resolveDynamicFormExcelBlocks(
   detail?: DynamicFormDetail | null
-): DynamicFormExcelBlockResolution | null {
-  const block = parseJsonSafe<DynamicFormExcelBlockLike | null>(
-    getPrimaryDynamicFormBlockJson(detail?.blocksJson, detail?.excelBlockJson),
-    null
-  );
-  if (!block) return null;
+): DynamicFormExcelBlockResolution[] {
+  return getDynamicFormBlockJsonList(detail?.blocksJson, detail?.excelBlockJson)
+    .map((blockJson) => parseJsonSafe<DynamicFormExcelBlockLike | null>(blockJson, null))
+    .filter((block): block is DynamicFormExcelBlockLike => Boolean(block))
+    .map((block) => resolveDynamicFormExcelBlockFromJson(detail, block))
+    .filter((block): block is DynamicFormExcelBlockResolution => Boolean(block));
+}
 
+function resolveDynamicFormExcelBlockFromJson(
+  detail: DynamicFormDetail | null | undefined,
+  block: DynamicFormExcelBlockLike
+): DynamicFormExcelBlockResolution | null {
   const tableMode = normalizeTableMode(block.tableMode ?? block.TableMode);
 
   const dynamicExcelId =
-    normalizeOptionalText(detail?.excelBlockDynamicExcelTemplateId) ??
+    normalizeOptionalText(block.dynamicExcelTemplateId ?? block.DynamicExcelTemplateId) ??
     normalizeOptionalText(
-      block.dynamicExcelTemplateId ?? block.DynamicExcelTemplateId
+      tableMode === "SUMMARY_TEMPLATE" ? null : detail?.excelBlockDynamicExcelTemplateId
     );
   if (!dynamicExcelId && tableMode !== "SUMMARY_TEMPLATE") return null;
 
+  const blockId = normalizeBlockId(block.blockId ?? block.id);
+  const statisticState = resolveBlockStatisticState(block);
+  const metricOptions = tableMode === "FIXED_GRID"
+    ? resolveMetricOptions(block, blockId)
+    : tableMode === "APPEND_ROWS"
+      ? resolveAppendRowsMetricOptions(block, blockId)
+      : tableMode === "APPEND_COLUMNS"
+        ? resolveAppendColumnsMetricOptions(block, blockId)
+        : tableMode === "MATRIX"
+          ? resolveMetricOptions(block, blockId)
+          : resolveSummaryTemplateMetricOptions(block);
+
   return {
-    blockId: normalizeBlockId(block.blockId ?? block.id),
+    blockId,
     tableMode,
     dynamicExcelId,
     dynamicExcelCode: normalizeOptionalText(
@@ -633,16 +1239,70 @@ function resolveDynamicFormExcelBlock(
       block.dynamicExcelName ?? block.DynamicExcelName
     ),
     metricLabelTargetCount: countMetricLabelTargets(block),
-    metricOptions:
-      tableMode === "FIXED_GRID"
-        ? resolveMetricOptions(block, normalizeBlockId(block.blockId ?? block.id))
-        : tableMode === "APPEND_ROWS"
-          ? resolveAppendRowsMetricOptions(block, normalizeBlockId(block.blockId ?? block.id))
-          : tableMode === "APPEND_COLUMNS"
-            ? resolveAppendColumnsMetricOptions(block, normalizeBlockId(block.blockId ?? block.id))
-            : tableMode === "MATRIX"
-              ? resolveMetricOptions(block, normalizeBlockId(block.blockId ?? block.id))
-              : resolveSummaryTemplateMetricOptions(block),
+    metricOptions,
+    statisticsDisabled: statisticState.statisticsDisabled,
+    statisticsInputCellCount: statisticState.statisticsInputCellCount,
+    statisticsInputCellLimit: statisticState.statisticsInputCellLimit,
+    statisticsDisabledReason: statisticState.statisticsDisabledReason,
+  };
+}
+
+function findDynamicFormBlock(
+  blocks: DynamicFormExcelBlockResolution[],
+  blockId?: string | null,
+) {
+  const normalized = normalizeOptionalText(blockId);
+  if (!normalized) return null;
+  return blocks.find((block) => block.blockId === normalized) ?? null;
+}
+
+function findDynamicFormBlockByExcelId(
+  blocks: DynamicFormExcelBlockResolution[],
+  dynamicExcelId?: string | null,
+) {
+  const normalized = normalizeOptionalText(dynamicExcelId);
+  if (!normalized) return null;
+  return blocks.find((block) => block.dynamicExcelId === normalized) ?? null;
+}
+
+function getDynamicFormBlockDisplayLabel(block: DynamicFormExcelBlockResolution) {
+  const template = [block.dynamicExcelCode, block.dynamicExcelName]
+    .filter(Boolean)
+    .join(" - ");
+  const source = template || block.blockId;
+  return `${source} (${formatTableModeLabel(block.tableMode)})`;
+}
+
+type AggregateConfigMetricMapping = {
+  sourceDynamicExcelTemplateId?: string | null;
+  sourceBlockId?: string | null;
+  metricKeys: string[];
+};
+
+function parseAggregateConfigMetricMapping(
+  value?: string | null
+): AggregateConfigMetricMapping {
+  const parsed = parseJsonSafe<Record<string, unknown> | null>(value, null);
+  if (!parsed || typeof parsed !== "object") {
+    return { metricKeys: [] };
+  }
+
+  const metricKeys = Array.isArray(parsed.metricKeys)
+    ? parsed.metricKeys
+        .map((item) => normalizeOptionalText(typeof item === "string" ? item : null))
+        .filter((item): item is string => Boolean(item))
+    : [];
+
+  return {
+    sourceDynamicExcelTemplateId: normalizeOptionalText(
+      typeof parsed.sourceDynamicExcelTemplateId === "string"
+        ? parsed.sourceDynamicExcelTemplateId
+        : null
+    ),
+    sourceBlockId: normalizeOptionalText(
+      typeof parsed.sourceBlockId === "string" ? parsed.sourceBlockId : null
+    ),
+    metricKeys,
   };
 }
 
@@ -664,7 +1324,7 @@ function formatTableModeLabel(tableMode?: DynamicFormTableMode | string | null) 
 
 function formatScopeModeLabel(scopeMode?: string | null) {
   if (scopeMode === "DIRECT_CHILDREN") return "Cấp con trực tiếp";
-  if (scopeMode === "SUBTREE") return "Toàn bộ cây con";
+  if (scopeMode === "SUBTREE") return "Cấp con trực tiếp";
   return scopeMode || "-";
 }
 
@@ -691,11 +1351,797 @@ function isSupportedDynamicFormAggregateMode(tableMode?: DynamicFormTableMode | 
   );
 }
 
+const METRIC_PREVIEW_LIMIT = 8;
+
+function isStackedTableMode(tableMode?: DynamicFormTableMode | null) {
+  return tableMode === "APPEND_ROWS" || tableMode === "APPEND_COLUMNS";
+}
+
+function getStackIdentityAxisLabel(tableMode?: DynamicFormTableMode | null) {
+  return tableMode === "APPEND_COLUMNS" ? "Hàng định danh nguồn" : "Cột định danh nguồn";
+}
+
+function getStackIdentityAxisLowerLabel(tableMode?: DynamicFormTableMode | null) {
+  return tableMode === "APPEND_COLUMNS" ? "hàng định danh nguồn" : "cột định danh nguồn";
+}
+
+function getStackIdentityHelperText(tableMode?: DynamicFormTableMode | null) {
+  if (tableMode === "APPEND_COLUMNS") {
+    return "Chỉ dùng cho bảng thêm cột. Các hàng này mô tả từng cột nguồn như kỳ, đơn vị, người báo cáo để đọc và đối chiếu; không tham gia tính tổng.";
+  }
+
+  return "Chỉ dùng cho bảng thêm dòng. Các cột này mô tả từng dòng nguồn như kỳ, đơn vị, người báo cáo để đọc và đối chiếu; không tham gia tính tổng.";
+}
+
+function buildMetricPreviewHighlights(
+  block: DynamicFormExcelBlockResolution,
+  dataRect: ReportRect
+): WorkbookPreviewHighlight[] {
+  const highlights: WorkbookPreviewHighlight[] = [];
+  const seen = new Set<string>();
+
+  for (const option of block.metricOptions) {
+    const rect = resolveMetricPreviewRect(block.tableMode, option, dataRect);
+    if (!rect) continue;
+
+    const key = `${rect.r0}:${rect.c0}:${rect.r1}:${rect.c1}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    highlights.push({ rect, color: MARK_COLORS.RANGE_BG });
+  }
+
+  return highlights;
+}
+
+function resolveMetricPreviewRect(
+  tableMode: DynamicFormTableMode,
+  option: AggregateMetricOption,
+  dataRect: ReportRect
+): ReportRect | null {
+  if (tableMode === "APPEND_ROWS") {
+    const columnIndex = resolveOrdinalIndex(option.columnKey, "col_", option.index);
+    if (columnIndex == null) return null;
+    const c = dataRect.c0 + columnIndex;
+    if (c < dataRect.c0 || c > dataRect.c1) return null;
+    return { r0: dataRect.r0, c0: c, r1: dataRect.r1, c1: c };
+  }
+
+  if (tableMode === "APPEND_COLUMNS") {
+    const rowIndex = resolveOrdinalIndex(option.rowKey, "row_", option.index);
+    if (rowIndex == null) return null;
+    const r = dataRect.r0 + rowIndex;
+    if (r < dataRect.r0 || r > dataRect.r1) return null;
+    return { r0: r, c0: dataRect.c0, r1: r, c1: dataRect.c1 };
+  }
+
+  const rowIndex = indexFromOrdinalPart(option.rowKey ?? "", "row_");
+  const columnIndex = indexFromOrdinalPart(option.columnKey ?? "", "col_");
+  if (rowIndex == null || columnIndex == null) return null;
+
+  const r = dataRect.r0 + rowIndex;
+  const c = dataRect.c0 + columnIndex;
+  if (r < dataRect.r0 || r > dataRect.r1 || c < dataRect.c0 || c > dataRect.c1) {
+    return null;
+  }
+
+  return { r0: r, c0: c, r1: r, c1: c };
+}
+
+function buildBasicSummaryRulesFromTemplateMethods(
+  block: DynamicFormExcelBlockResolution | null | undefined,
+  rows: TemplateDataTypeMethodRow[],
+): WorkAssignmentBasicSummaryRuleDto[] {
+  if (!block || block.tableMode !== "MATRIX" || rows.length === 0) return [];
+
+  const rules: WorkAssignmentBasicSummaryRuleDto[] = [];
+  const seen = new Set<string>();
+
+  for (const row of rows) {
+    if (row.selectedMethod === row.defaultMethod) continue;
+
+    for (const inputIndex of row.inputIndexes) {
+      const targetKey = `table:${block.blockId}:index:${inputIndex}`;
+      const ruleKey = `${targetKey}:${row.selectedMethod}`;
+      if (seen.has(ruleKey)) continue;
+      seen.add(ruleKey);
+
+      rules.push({
+        targetKind: "TABLE",
+        targetKey,
+        operation: row.selectedMethod,
+      });
+    }
+  }
+
+  return rules;
+}
+
+function buildTemplateSummaryMethodsFromRules(
+  block: DynamicFormExcelBlockResolution | null | undefined,
+  rows: TemplateDataTypeMethodRow[],
+  rules: WorkAssignmentBasicSummaryRuleDto[] | null | undefined,
+): Record<string, SummaryMethod> {
+  if (!block || block.tableMode !== "MATRIX" || rows.length === 0 || !rules?.length) return {};
+
+  const ruleByTargetKey = new Map(
+    rules
+      .filter((rule) => String(rule.targetKind).toUpperCase() === "TABLE")
+      .map((rule) => [rule.targetKey, normalizeSummaryMethod(rule.operation, "COUNT")] as const),
+  );
+  const methods: Record<string, SummaryMethod> = {};
+
+  for (const row of rows) {
+    const method = row.inputIndexes
+      .map((inputIndex) =>
+        ruleByTargetKey.get(`table:${block.blockId}:index:${inputIndex}`) ??
+        ruleByTargetKey.get(`index:${inputIndex}`),
+      )
+      .find(Boolean);
+    if (!method || !row.methodOptions.some((option) => option.value === method)) continue;
+
+    methods[row.id] = method;
+  }
+
+  return methods;
+}
+
+function buildFieldSummaryMethodsFromRules(
+  rows: ReturnType<typeof buildBasicSummaryFieldMethodRows>,
+  rules: WorkAssignmentBasicSummaryRuleDto[] | null | undefined,
+): Record<string, SummaryMethod> {
+  if (!rows.length || !rules?.length) return {};
+
+  const fieldIds = new Set(rows.map((row) => row.id));
+  const methods: Record<string, SummaryMethod> = {};
+  for (const rule of rules) {
+    if (String(rule.targetKind).toUpperCase() !== "FIELD") continue;
+    const fieldId = String(rule.targetKey ?? "").replace(/^field:/i, "");
+    if (!fieldIds.has(fieldId)) continue;
+
+    const row = rows.find((item) => item.id === fieldId);
+    const method = normalizeSummaryMethod(rule.operation, row?.defaultMethod ?? "COUNT");
+    if (row?.methodOptions.some((option) => option.value === method)) {
+      methods[fieldId] = method;
+    }
+  }
+
+  return methods;
+}
+
+function containsRect(container: ReportRect, rect: ReportRect) {
+  return (
+    rect.r0 >= container.r0 &&
+    rect.r1 <= container.r1 &&
+    rect.c0 >= container.c0 &&
+    rect.c1 <= container.c1
+  );
+}
+
+function resolveOrdinalIndex(value: string | null | undefined, prefix: string, fallback: unknown) {
+  const fromKey = indexFromOrdinalPart(value ?? "", prefix);
+  if (fromKey != null) return fromKey;
+
+  const n = Number(fallback);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+type DynamicFormAggregatePreviewPanelProps = {
+  block: DynamicFormExcelBlockResolution;
+  workbook: Sheet[];
+  templateRect: ReportRect;
+  templateSpec: DynamicExcelSpecLike;
+  selectedTemplateLabel?: string;
+  previewHighlights: WorkbookPreviewHighlight[];
+  loading?: boolean;
+  title: string;
+  description: string;
+};
+
+function DynamicFormAggregatePreviewPanel({
+  block,
+  workbook,
+  templateRect,
+  templateSpec,
+  selectedTemplateLabel,
+  previewHighlights,
+  loading,
+  title,
+  description,
+}: DynamicFormAggregatePreviewPanelProps) {
+  const metricOptions = block.metricOptions;
+  const visibleMetrics = metricOptions.slice(0, METRIC_PREVIEW_LIMIT);
+  const hiddenMetricCount = Math.max(metricOptions.length - visibleMetrics.length, 0);
+  const excelLabel =
+    [block.dynamicExcelCode, block.dynamicExcelName].filter(Boolean).join(" - ") ||
+    block.dynamicExcelId ||
+    block.blockId;
+
+  return (
+    <Box
+      sx={{
+        p: 2,
+        border: 1,
+        borderColor: "divider",
+        borderRadius: 1,
+      }}
+    >
+      <Stack spacing={1.5}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "stretch", md: "flex-start" }}
+          spacing={1}
+        >
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+              {title}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {description}
+            </Typography>
+            {selectedTemplateLabel && (
+              <Typography variant="body2">
+                Biểu mẫu động: <b>{selectedTemplateLabel}</b>
+              </Typography>
+            )}
+          </Stack>
+
+          <Stack direction="row" flexWrap="wrap" gap={1} justifyContent={{ md: "flex-end" }}>
+            <Chip label={`Bảng: ${formatTableModeLabel(block.tableMode)}`} variant="outlined" />
+            <Chip
+              label={`Excel: ${excelLabel}`}
+              variant="outlined"
+              sx={{ maxWidth: { xs: "100%", md: 320 } }}
+            />
+            <Chip
+              label={block.statisticsDisabled ? "Không thống kê nền" : `${metricOptions.length} chỉ tiêu`}
+              color={block.statisticsDisabled ? "warning" : metricOptions.length ? "primary" : "warning"}
+              variant={metricOptions.length && !block.statisticsDisabled ? "filled" : "outlined"}
+            />
+          </Stack>
+        </Stack>
+
+        {block.statisticsDisabled && (
+          <Alert severity="warning" sx={{ py: 0.75 }}>
+            {block.statisticsDisabledReason ?? getLargeTableStatisticMessage(
+              block.statisticsInputCellCount,
+              block.statisticsInputCellLimit,
+            )}
+          </Alert>
+        )}
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1fr) 300px" },
+            gap: 2,
+            alignItems: "start",
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            {workbook.length ? (
+              <AggregateWorkbookPreview
+                title="Xem trước bảng Excel"
+                workbook={workbook}
+                previewRect={templateRect}
+                spec={templateSpec}
+                previewHighlights={previewHighlights}
+              />
+            ) : (
+              <Alert severity={loading ? "info" : "warning"}>
+                {loading
+                  ? "Đang tải bản xem trước bảng Excel."
+                  : "Chưa tải được bản xem trước bảng Excel của biểu mẫu động."}
+              </Alert>
+            )}
+          </Box>
+
+          <Stack spacing={1.25}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+              Chú giải
+            </Typography>
+            <PreviewLegendItem
+              color={MARK_COLORS.HEADER_BG}
+              label="Vùng tiêu đề"
+              description="Các ô tiêu đề của bảng Excel."
+            />
+            <PreviewLegendItem
+              color={MARK_COLORS.DATA_BG}
+              label="Vùng dữ liệu"
+              description="Các ô hệ thống đọc dữ liệu theo kiểu dữ liệu đã cấu hình."
+            />
+            <PreviewLegendItem
+              color={MARK_COLORS.RANGE_BG}
+              label="Ô/chỉ tiêu tổng hợp"
+              description="Ô, dòng hoặc cột được cấu hình để đọc khi chạy tổng hợp."
+            />
+            {isStackedTableMode(block.tableMode) && (
+              <Alert severity="info" sx={{ py: 0.75 }}>
+                {getStackIdentityAxisLabel(block.tableMode)} chỉ dùng để truy vết kỳ, đơn vị, người báo cáo và báo cáo nguồn; không tham gia tính tổng.
+              </Alert>
+            )}
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 0.75, fontWeight: 800 }}>
+                Dữ liệu đọc từ template
+              </Typography>
+              {metricOptions.length ? (
+                <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                  {visibleMetrics.map((option) => (
+                    <Chip
+                      key={option.metricKey}
+                      size="small"
+                      label={resolveMetricDisplayLabel(option)}
+                      sx={{ maxWidth: "100%" }}
+                    />
+                  ))}
+                  {hiddenMetricCount > 0 && (
+                    <Chip size="small" variant="outlined" label={`+${hiddenMetricCount} chỉ tiêu`} />
+                  )}
+                </Stack>
+              ) : (
+                <Alert severity={block.statisticsDisabled ? "info" : "warning"} sx={{ py: 0.75 }}>
+                  {block.statisticsDisabled
+                    ? "Bảng lớn đang khóa thống kê nền từng ô. Template reporter vẫn là bề mặt chính; nếu cần ghi dữ liệu vào báo cáo đích, dùng luồng Gán dữ liệu tổng hợp riêng."
+                    : "Bảng này chưa cấu hình chỉ tiêu thống kê. Hãy gắn label/chỉ tiêu cho ô, dòng, cột hoặc vùng cần tổng hợp trong biểu mẫu động."}
+                </Alert>
+              )}
+            </Box>
+          </Stack>
+        </Box>
+      </Stack>
+    </Box>
+  );
+}
+
+type PreviewLegendItemProps = {
+  color: string;
+  label: string;
+  description: string;
+};
+
+function PreviewLegendItem({ color, label, description }: PreviewLegendItemProps) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="flex-start">
+      <Box
+        sx={{
+          width: 18,
+          height: 18,
+          mt: 0.25,
+          borderRadius: 0.5,
+          border: "1px solid",
+          borderColor: "divider",
+          bgcolor: color,
+          flex: "0 0 auto",
+        }}
+      />
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          {label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {description}
+        </Typography>
+      </Box>
+    </Stack>
+  );
+}
+
+type StackIdentityPreviewProps = {
+  block: DynamicFormExcelBlockResolution;
+  identityColumns: string[];
+  workbook: Sheet[];
+  templateRect: ReportRect;
+  templateSpec: DynamicExcelSpecLike;
+  previewHighlights: WorkbookPreviewHighlight[];
+  loading?: boolean;
+  periodScopeMode: string;
+  selectedTemplateLabel?: string;
+};
+
+function StackIdentityPreviewDialogContent({
+  block,
+  identityColumns,
+  workbook,
+  templateRect,
+  templateSpec,
+  previewHighlights,
+  loading,
+  periodScopeMode,
+  selectedTemplateLabel,
+}: StackIdentityPreviewProps) {
+  const identityOptions = identityColumns
+    .map((value) => STACK_IDENTITY_COLUMN_OPTIONS.find((option) => option.value === value))
+    .filter((option): option is (typeof STACK_IDENTITY_COLUMN_OPTIONS)[number] => Boolean(option));
+  const metricRows = buildStackMetricPreviewRows(block, templateRect, templateSpec);
+  const axisLabel = getStackIdentityAxisLabel(block.tableMode);
+  const axisLower = getStackIdentityAxisLowerLabel(block.tableMode);
+  const sourceAxisLabel = block.tableMode === "APPEND_COLUMNS" ? "cột nguồn" : "dòng nguồn";
+
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" flexWrap="wrap" gap={1}>
+        <Chip label={`Bảng: ${formatTableModeLabel(block.tableMode)}`} variant="outlined" />
+        <Chip label={axisLabel} color="primary" variant="outlined" />
+        <Chip label={`Phạm vi kỳ: ${formatPeriodScopeModeLabel(periodScopeMode)}`} variant="outlined" />
+        <Chip
+          label={block.statisticsDisabled ? "Không thống kê nền" : `${metricRows.length} chỉ tiêu`}
+          color={block.statisticsDisabled ? "warning" : undefined}
+          variant="outlined"
+        />
+      </Stack>
+
+      {selectedTemplateLabel && (
+        <Typography variant="body2">
+          Biểu mẫu động: <b>{selectedTemplateLabel}</b>
+        </Typography>
+      )}
+
+      <Alert severity="info">
+        {block.tableMode === "APPEND_COLUMNS"
+          ? "Bảng thêm cột: mỗi cột nguồn cần các hàng định danh để biết cột đó đến từ kỳ, đơn vị, người báo cáo hoặc báo cáo nào."
+          : "Bảng thêm dòng: mỗi dòng nguồn cần các cột định danh để biết dòng đó đến từ kỳ, đơn vị, người báo cáo hoặc báo cáo nào."}
+      </Alert>
+
+      {block.statisticsDisabled && (
+        <Alert severity="warning">
+          {block.statisticsDisabledReason ?? getLargeTableStatisticMessage(
+            block.statisticsInputCellCount,
+            block.statisticsInputCellLimit,
+          )}
+        </Alert>
+      )}
+
+      <DynamicFormAggregatePreviewPanel
+        block={block}
+        workbook={workbook}
+        templateRect={templateRect}
+        templateSpec={templateSpec}
+        selectedTemplateLabel={selectedTemplateLabel}
+        previewHighlights={previewHighlights}
+        loading={loading}
+        title="Xem trước bảng Excel nguồn"
+        description="Preview dùng cùng cách hiển thị với các bảng khác: vùng dữ liệu và các chỉ tiêu đang chọn được tô màu trực tiếp trên bảng Excel nguồn."
+      />
+
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 800 }}>
+          Dạng bảng sau khi ghép thêm định danh nguồn
+        </Typography>
+        {block.tableMode === "APPEND_COLUMNS" ? (
+          <AppendColumnsIdentityLayoutPreview
+            identityOptions={identityOptions}
+            metricRows={metricRows}
+          />
+        ) : (
+          <AppendRowsIdentityLayoutPreview
+            identityOptions={identityOptions}
+            metricRows={metricRows}
+          />
+        )}
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 800 }}>
+          Tọa độ, kiểu dữ liệu và cách tổng hợp
+        </Typography>
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Vai trò</TableCell>
+                <TableCell>{axisLabel}</TableCell>
+                <TableCell>Tọa độ nguồn</TableCell>
+                <TableCell>Kiểu dữ liệu</TableCell>
+                <TableCell>Cách tổng hợp hiện có</TableCell>
+                <TableCell>Ghi chú</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {identityOptions.map((option, index) => (
+                <TableRow key={option.value} hover>
+                  <TableCell>Định danh</TableCell>
+                  <TableCell>
+                    {index + 1}. {option.label}
+                  </TableCell>
+                  <TableCell>Thêm mới vào {axisLower}</TableCell>
+                  <TableCell>{option.value === "sourceReportCount" ? "Số" : "Văn bản"}</TableCell>
+                  <TableCell>Không tính toán</TableCell>
+                  <TableCell>{option.description}</TableCell>
+                </TableRow>
+              ))}
+              {metricRows.map((row) => (
+                <TableRow key={row.metricKey} hover>
+                  <TableCell>Chỉ tiêu</TableCell>
+                  <TableCell>{row.label}</TableCell>
+                  <TableCell>{row.coordinate}</TableCell>
+                  <TableCell>{row.dataTypeLabel}</TableCell>
+                  <TableCell>{row.aggregateOptions}</TableCell>
+                  <TableCell>{row.note}</TableCell>
+                </TableRow>
+              ))}
+              {identityOptions.length === 0 && metricRows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Chưa có {axisLower} hoặc chỉ tiêu để xem trước.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      <Alert severity="warning">
+        Bộ lọc một kỳ, khoảng kỳ hoặc lũy kế là phạm vi chung của lần tổng hợp. Từng chỉ tiêu nhỏ vẫn cần chọn đúng phép tính theo kiểu dữ liệu khi map vào báo cáo đích; không nên tự tổng hợp các ô chưa được gắn chỉ tiêu.
+      </Alert>
+
+      <Typography variant="caption" color="text.secondary">
+        Với {sourceAxisLabel}, hệ thống chỉ lấy báo cáo đã duyệt trong phạm vi hiện tại. Nếu thấy lỗi bảng không thuộc biểu mẫu động, hãy kiểm tra lại biểu mẫu của công việc đang mở hoặc lưu lại cấu hình tổng hợp sau khi biểu mẫu động thay đổi.
+      </Typography>
+    </Stack>
+  );
+}
+
+type StackMetricPreviewRow = {
+  metricKey: string;
+  label: string;
+  coordinate: string;
+  dataType: DynamicExcelDataType;
+  dataTypeLabel: string;
+  aggregateOptions: string;
+  note: string;
+};
+
+function AppendRowsIdentityLayoutPreview({
+  identityOptions,
+  metricRows,
+}: {
+  identityOptions: Array<(typeof STACK_IDENTITY_COLUMN_OPTIONS)[number]>;
+  metricRows: StackMetricPreviewRow[];
+}) {
+  const visibleMetrics = metricRows.slice(0, 4);
+  return (
+    <TableContainer component={Paper} variant="outlined">
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            {identityOptions.map((option) => (
+              <TableCell key={option.value} sx={{ bgcolor: "action.hover", fontWeight: 700 }}>
+                {option.label}
+              </TableCell>
+            ))}
+            <TableCell sx={{ bgcolor: "action.hover", fontWeight: 700 }}>Dòng nguồn</TableCell>
+            {visibleMetrics.map((metric) => (
+              <TableCell key={metric.metricKey} sx={{ fontWeight: 700 }}>
+                {metric.label}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {[1, 2].map((index) => (
+            <TableRow key={index}>
+              {identityOptions.map((option) => (
+                <TableCell key={option.value}>{sampleIdentityValue(option.value, index)}</TableCell>
+              ))}
+              <TableCell>Dòng {index}</TableCell>
+              {visibleMetrics.map((metric) => (
+                <TableCell key={metric.metricKey}>{sampleMetricValue(metric.dataType, index)}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+}
+
+function AppendColumnsIdentityLayoutPreview({
+  identityOptions,
+  metricRows,
+}: {
+  identityOptions: Array<(typeof STACK_IDENTITY_COLUMN_OPTIONS)[number]>;
+  metricRows: StackMetricPreviewRow[];
+}) {
+  const visibleMetrics = metricRows.slice(0, 4);
+  const sourceColumns = [1, 2, 3];
+  return (
+    <TableContainer component={Paper} variant="outlined">
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ bgcolor: "action.hover", fontWeight: 700 }}>Hàng thêm</TableCell>
+            {sourceColumns.map((index) => (
+              <TableCell key={index} sx={{ fontWeight: 700 }}>
+                Cột nguồn {index}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {identityOptions.map((option) => (
+            <TableRow key={option.value}>
+              <TableCell sx={{ bgcolor: "action.hover", fontWeight: 700 }}>
+                {option.label}
+              </TableCell>
+              {sourceColumns.map((index) => (
+                <TableCell key={index}>{sampleIdentityValue(option.value, index)}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+          {visibleMetrics.map((metric) => (
+            <TableRow key={metric.metricKey}>
+              <TableCell sx={{ fontWeight: 700 }}>{metric.label}</TableCell>
+              {sourceColumns.map((index) => (
+                <TableCell key={index}>{sampleMetricValue(metric.dataType, index)}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+}
+
+function buildStackMetricPreviewRows(
+  block: DynamicFormExcelBlockResolution,
+  templateRect: ReportRect,
+  templateSpec: DynamicExcelSpecLike
+): StackMetricPreviewRow[] {
+  const headerSpec = resolvePreviewHeaderSpec(templateSpec);
+
+  return block.metricOptions.map((option, index) => {
+    const rect = resolveMetricPreviewRect(block.tableMode, option, templateRect);
+    const dataType = resolveMetricDataType(headerSpec, templateRect, rect);
+    const label = resolveMetricDisplayLabel(option);
+
+    return {
+      metricKey: option.metricKey,
+      label,
+      coordinate: rect
+        ? formatMetricCoordinate(block.tableMode, rect)
+        : `Chỉ tiêu ${index + 1}`,
+      dataType,
+      dataTypeLabel: dataTypeLabel(dataType),
+      aggregateOptions: formatAvailableAggregateOptions(dataType),
+      note: formatMetricPreviewNote(block.tableMode, dataType),
+    };
+  });
+}
+
+function resolvePreviewHeaderSpec(spec: DynamicExcelSpecLike): FortuneHeaderSpec | null {
+  const raw =
+    (spec as unknown as { kind?: unknown })?.kind
+      ? spec
+      : (spec as unknown as { headerSpec?: unknown })?.headerSpec;
+  if (!raw || typeof raw !== "object") return null;
+
+  const kind = (raw as { kind?: unknown }).kind;
+  if (kind !== "TOP" && kind !== "LEFT" && kind !== "MATRIX") return null;
+
+  try {
+    return normalizeSpecDataTypeMetadata(raw as FortuneHeaderSpec);
+  } catch {
+    return raw as FortuneHeaderSpec;
+  }
+}
+
+function resolveMetricDataType(
+  headerSpec: FortuneHeaderSpec | null,
+  templateRect: ReportRect,
+  rect: ReportRect | null
+): DynamicExcelDataType {
+  if (!headerSpec || !rect) return "NUMBER";
+  return getCellDataType(headerSpec, templateRect, rect.r0, rect.c0);
+}
+
+function formatMetricCoordinate(tableMode: DynamicFormTableMode, rect: ReportRect) {
+  if (tableMode === "APPEND_ROWS") {
+    return `Cột nguồn C${rect.c0 + 1}; vùng R${rect.r0 + 1}:R${rect.r1 + 1}`;
+  }
+
+  if (tableMode === "APPEND_COLUMNS") {
+    return `Hàng nguồn R${rect.r0 + 1}; vùng C${rect.c0 + 1}:C${rect.c1 + 1}`;
+  }
+
+  if (rect.r0 === rect.r1 && rect.c0 === rect.c1) {
+    return `Ô R${rect.r0 + 1}C${rect.c0 + 1}`;
+  }
+
+  return `Vùng R${rect.r0 + 1}C${rect.c0 + 1}:R${rect.r1 + 1}C${rect.c1 + 1}`;
+}
+
+function formatAvailableAggregateOptions(dataType: DynamicExcelDataType) {
+  switch (dataType) {
+    case "IGNORE":
+      return "Bỏ qua nhập";
+    case "NUMBER":
+      return "Tổng, số dòng có dữ liệu, nhỏ nhất, lớn nhất, trung bình";
+    case "SHORT_TEXT":
+      return "Đếm dữ liệu, đếm theo nhóm nội dung";
+    case "MULTI_SELECT":
+      return "Đếm dữ liệu, đếm theo từng lựa chọn";
+    case "BOOLEAN":
+      return "Đếm dữ liệu, đếm Đúng/Sai";
+    case "DATE":
+    case "FULL_DATE":
+      return "Đếm dữ liệu, ngày sớm nhất, ngày muộn nhất";
+    default:
+      return "Đếm dữ liệu";
+  }
+}
+
+function formatMetricPreviewNote(tableMode: DynamicFormTableMode, dataType: DynamicExcelDataType) {
+  const sourceAxis = tableMode === "APPEND_COLUMNS" ? "hàng nguồn" : "cột nguồn";
+  if (dataType === "IGNORE") {
+    return `Ô dùng cấu hình cũ Bỏ qua nhập cho ${sourceAxis}.`;
+  }
+  if (dataType === "NUMBER") {
+    return `Có thể cộng theo kỳ/lũy kế trên ${sourceAxis}.`;
+  }
+  return `Không tự cộng số; cần chọn phép đếm hoặc nhóm giá trị cho ${sourceAxis}.`;
+}
+
+function sampleIdentityValue(key: string, index: number) {
+  switch (key) {
+    case "periodKey":
+      return "22/05/2026";
+    case "periodInstanceKey":
+      return `Lần ${index}`;
+    case "unitSymbol":
+      return `PV0${index}`;
+    case "unitShortName":
+      return `Đơn vị ${index}`;
+    case "fullName":
+      return `Người báo cáo ${index}`;
+    case "userName":
+      return `user${index}`;
+    case "workAssignmentId":
+      return `Công việc ${index}`;
+    case "reportId":
+      return `Báo cáo ${index}`;
+    case "approvedAtUtc":
+      return "Đã duyệt";
+    case "sourceReportCount":
+      return index;
+    default:
+      return "-";
+  }
+}
+
+function sampleMetricValue(dataType: DynamicExcelDataType, index: number) {
+  switch (dataType) {
+    case "IGNORE":
+      return "-";
+    case "NUMBER":
+      return formatMetricNumber(index * 10);
+    case "SHORT_TEXT":
+      return index === 1 ? "Nhóm A" : "Nhóm B";
+    case "MULTI_SELECT":
+      return index === 1 ? "A; B" : "B";
+    case "BOOLEAN":
+      return index % 2 === 0 ? "Không" : "Có";
+    case "DATE":
+    case "FULL_DATE":
+      return `2${index}/05/2026`;
+    default:
+      return "-";
+  }
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (!error || typeof error !== "object") return fallback;
 
   const data = "data" in error ? (error as { data?: unknown }).data : null;
   if (data && typeof data === "object" && "message" in data) {
+    const code = readApiErrorCode(data);
+    if (code === "DYNAMIC_FORM_BLOCK_NOT_FOUND") {
+      return "Template/vùng đã chọn không còn thuộc biểu mẫu động đang tổng hợp. Hãy mở đúng công việc có biểu mẫu đó, hoặc lưu lại cấu hình tổng hợp sau khi biểu mẫu động thay đổi.";
+    }
+
     const message = (data as { message?: unknown }).message;
     if (typeof message === "string" && message.trim()) return message;
   }
@@ -708,46 +2154,21 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function readApiErrorCode(data: object) {
+  const code = (data as { code?: unknown; errorCode?: unknown }).code ??
+    (data as { code?: unknown; errorCode?: unknown }).errorCode;
+  return typeof code === "string" ? code.trim().toUpperCase() : "";
+}
+
 function formatMetricNumber(value?: number | null) {
   if (value == null || !Number.isFinite(value)) return "-";
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value);
 }
 
-function formatDraftReportOptionLabel(row: {
-  reportTitle?: string | null;
-  periodKey?: string | null;
-  id: string;
-}) {
-  const title = normalizeOptionalText(row.reportTitle);
-  const period = normalizeOptionalText(row.periodKey);
-  return [title || "Bản nháp báo cáo", period].filter(Boolean).join(" - ") || row.id;
-}
-
-function getAggregateDraftDefaultClearExisting(origin: WorkReportDataOrigin) {
-  return origin === "PARTIAL_MAPPING" ? false : true;
-}
-
-function formatAggregateDraftContributionPolicy(
-  origin: WorkReportDataOrigin,
-  clearExisting: boolean,
-) {
-  if (origin === "PARTIAL_MAPPING") {
-    return clearExisting
-      ? "Báo cáo sẽ lưu dạng gán một phần, xóa giá trị cũ ở block đích và loại trừ các chỉ số lấy từ cấp con khi tính thống kê để tránh cộng hai lần."
-      : "Báo cáo sẽ lưu dạng gán một phần, giữ các ô nhập tay và loại trừ các chỉ số lấy từ cấp con khi tính thống kê để tránh cộng hai lần.";
-  }
-
-  if (origin === "AUTO_SUMMARY") {
-    return "Báo cáo tự tổng hợp mặc định không đóng góp ngược vào thống kê chính thức sau khi duyệt.";
-  }
-
-  return "Báo cáo sao chép tổng hợp mặc định không đóng góp ngược vào thống kê chính thức sau khi duyệt.";
-}
-
 function formatFieldStatisticValue(row: FieldStatisticSummaryRow) {
   const type = row.fieldType?.trim().toLowerCase();
   if (type === "number") {
-    return `Tổng ${formatMetricNumber(row.sum)} / Min ${formatMetricNumber(row.min)} / Max ${formatMetricNumber(row.max)}`;
+    return `Tổng ${formatMetricNumber(row.sum)} / Nhỏ nhất ${formatMetricNumber(row.min)} / Lớn nhất ${formatMetricNumber(row.max)}`;
   }
   if (type === "boolean") {
     return `Có ${row.trueCount} / Không ${row.falseCount}`;
@@ -782,6 +2203,88 @@ function formatAggregateModeLabel(mode?: string | null) {
   }
 }
 
+function formatStackCellValue(value: unknown) {
+  if (value == null) return "-";
+  if (typeof value === "number") return formatMetricNumber(value);
+  if (typeof value === "boolean") return value ? "Có" : "Không";
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
+  return String(value);
+}
+
+function StackedAggregatePreview({
+  table,
+  metricLabelByKey,
+}: {
+  table: DynamicFormStackedTableDto;
+  metricLabelByKey?: ReadonlyMap<string, string>;
+}) {
+  const sourceTableMode = normalizeTableMode(table.sourceTableMode);
+  const identityAxisLower = getStackIdentityAxisLowerLabel(sourceTableMode);
+  const sourceAxisLower = sourceTableMode === "APPEND_COLUMNS" ? "cột" : "dòng";
+  const visibleColumns = table.columns;
+  return (
+    <Box sx={{ minHeight: 260 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+        <Stack spacing={0.25}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            Bảng gộp sau tổng hợp
+          </Typography>
+          <Typography variant="body2" sx={{ opacity: 0.72 }}>
+            {table.rowMode === "PERIOD_GROUPED_STACK"
+              ? `Đã gom dữ liệu theo kỳ và ${identityAxisLower} trước khi hiển thị.`
+              : `Hiển thị từng ${sourceAxisLower} nguồn của kỳ đã chọn cùng ${identityAxisLower}.`}
+          </Typography>
+        </Stack>
+        <Chip size="small" variant="outlined" label={`${table.rows.length} dòng`} />
+      </Stack>
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              {visibleColumns.map((column) => (
+                <TableCell key={column.key}>
+                  <Stack spacing={0.25}>
+                    <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                      {column.role === "METRIC"
+                        ? metricLabelByKey?.get(column.metricKey ?? column.key) || column.label || column.key
+                        : column.label || column.key}
+                    </Typography>
+                  </Stack>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {table.rows.slice(0, 200).map((row) => (
+              <TableRow key={row.rowKey} hover>
+                {visibleColumns.map((column) => (
+                  <TableCell key={`${row.rowKey}:${column.key}`}>
+                    {formatStackCellValue(row.cells?.[column.key])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+            {table.rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={Math.max(1, visibleColumns.length)}>
+                  <Typography variant="body2" sx={{ opacity: 0.72 }}>
+                    Chưa có dòng dữ liệu phù hợp với bộ lọc hiện tại.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      {table.rows.length > 200 && (
+        <Alert severity="info" sx={{ mt: 1 }}>
+          Bản xem trước đang hiển thị 200 dòng đầu; xuất file để kiểm tra toàn bộ dữ liệu.
+        </Alert>
+      )}
+    </Box>
+  );
+}
+
 function isTextFieldStatisticRow(row: FieldStatisticSummaryRow) {
   const type = row.fieldType?.trim();
   return type === "stringList" || type === "longText";
@@ -808,7 +2311,10 @@ type AggregateExportColumn = {
 };
 type AggregateExportRow = Record<string, AggregateExportCell>;
 
-function getDynamicFormAggregateExportShape(result: DynamicFormAggregateResponse) {
+function getDynamicFormAggregateExportShape(
+  result: DynamicFormAggregateResponse,
+  metricLabelByKey?: ReadonlyMap<string, string>,
+) {
   const isSummary = result.meta.tableMode === "SUMMARY_TEMPLATE";
   const columns: AggregateExportColumn[] = isSummary
     ? [
@@ -820,7 +2326,7 @@ function getDynamicFormAggregateExportShape(result: DynamicFormAggregateResponse
         { key: "unitSymbol", header: "Ký hiệu đơn vị", width: 16 },
         { key: "unitShortName", header: "Tên ngắn đơn vị", width: 20 },
         { key: "workAssignmentId", header: "Mã công việc", width: 26 },
-        { key: "metricKey", header: "Mã chỉ số", width: 54 },
+        { key: "metricLabel", header: "Chỉ số", width: 34 },
         { key: "count", header: "Số dòng", width: 12, type: "integer" },
         { key: "reportCount", header: "Số báo cáo", width: 12, type: "integer" },
         { key: "sum", header: "Tổng", width: 14, type: "decimal" },
@@ -829,9 +2335,7 @@ function getDynamicFormAggregateExportShape(result: DynamicFormAggregateResponse
         { key: "average", header: "Trung bình", width: 14, type: "decimal" },
       ]
     : [
-        { key: "metricKey", header: "Mã chỉ số", width: 54 },
-        { key: "rowKey", header: "Dòng", width: 20 },
-        { key: "columnKey", header: "Cột", width: 20 },
+        { key: "metricLabel", header: "Chỉ tiêu", width: 34 },
         { key: "count", header: "Số dòng", width: 12, type: "integer" },
         { key: "sum", header: "Tổng", width: 14, type: "decimal" },
         { key: "min", header: "Nhỏ nhất", width: 14, type: "decimal" },
@@ -850,7 +2354,7 @@ function getDynamicFormAggregateExportShape(result: DynamicFormAggregateResponse
           unitSymbol: row.unitSymbol,
           unitShortName: row.unitShortName,
           workAssignmentId: row.workAssignmentId,
-          metricKey: row.metricKey,
+          metricLabel: resolveExportMetricLabel(row, metricLabelByKey),
           count: row.count,
           reportCount: row.reportCount,
           sum: row.sum,
@@ -859,9 +2363,7 @@ function getDynamicFormAggregateExportShape(result: DynamicFormAggregateResponse
           average: row.average,
         }
       : {
-          metricKey: row.metricKey,
-          rowKey: row.rowKey,
-          columnKey: row.columnKey,
+          metricLabel: resolveExportMetricLabel(row, metricLabelByKey),
           count: row.count,
           sum: row.sum,
           min: row.min,
@@ -877,14 +2379,29 @@ function getDynamicFormAggregateExportShape(result: DynamicFormAggregateResponse
   };
 }
 
+function resolveExportMetricLabel(
+  row: DynamicFormAggregateResponse["rows"][number],
+  metricLabelByKey?: ReadonlyMap<string, string>,
+) {
+  return (
+    metricLabelByKey?.get(row.sourceMetricKey ?? "") ??
+    metricLabelByKey?.get(row.metricKey) ??
+    (row.label && row.label !== row.metricKey ? row.label : null) ??
+    `Chỉ tiêu ${row.index + 1}`
+  );
+}
+
 function csvCell(value: unknown) {
   if (value == null) return "";
   const raw = String(value);
   return /[",\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
 }
 
-function buildDynamicFormAggregateCsv(result: DynamicFormAggregateResponse) {
-  const { columns, rows } = getDynamicFormAggregateExportShape(result);
+function buildDynamicFormAggregateCsv(
+  result: DynamicFormAggregateResponse,
+  metricLabelByKey?: ReadonlyMap<string, string>,
+) {
+  const { columns, rows } = getDynamicFormAggregateExportShape(result, metricLabelByKey);
 
   return `\ufeff${[
     columns.map((column) => column.header),
@@ -902,8 +2419,11 @@ function sanitizeFilePart(value?: string | null) {
     .slice(0, 80) || "dynamic_form";
 }
 
-function downloadDynamicFormAggregateCsv(result: DynamicFormAggregateResponse) {
-  const csv = buildDynamicFormAggregateCsv(result);
+function downloadDynamicFormAggregateCsv(
+  result: DynamicFormAggregateResponse,
+  metricLabelByKey?: ReadonlyMap<string, string>,
+) {
+  const csv = buildDynamicFormAggregateCsv(result, metricLabelByKey);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   downloadBlob(blob, buildDynamicFormAggregateFileName(result, "csv"));
 }
@@ -931,14 +2451,17 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-async function downloadDynamicFormAggregateXlsx(result: DynamicFormAggregateResponse) {
+async function downloadDynamicFormAggregateXlsx(
+  result: DynamicFormAggregateResponse,
+  metricLabelByKey?: ReadonlyMap<string, string>,
+) {
   const { Workbook } = await import("exceljs");
   const workbook = new Workbook();
   workbook.creator = "TDTD";
   workbook.created = new Date();
   workbook.modified = new Date();
 
-  const { columns, rows, sheetName } = getDynamicFormAggregateExportShape(result);
+  const { columns, rows, sheetName } = getDynamicFormAggregateExportShape(result, metricLabelByKey);
   const worksheet = workbook.addWorksheet(sheetName);
   worksheet.columns = columns.map((column) => ({
     key: column.key,
@@ -977,7 +2500,8 @@ async function downloadDynamicFormAggregateXlsx(result: DynamicFormAggregateResp
     { key: "value", header: "Giá trị", width: 46 },
   ];
   [
-    ["Mã biểu mẫu", result.meta.dynamicFormTemplateId],
+    ["Biểu mẫu", [result.meta.dynamicFormTemplateCode, result.meta.dynamicFormTemplateName].filter(Boolean).join(" - ") || result.meta.dynamicFormTemplateId],
+    ["Id biểu mẫu", result.meta.dynamicFormTemplateId],
     ["Mã đại diện biểu mẫu", result.meta.dynamicFormTemplateCode],
     ["Tên biểu mẫu", result.meta.dynamicFormTemplateName],
     ["Phần bảng", result.meta.blockId],
@@ -1002,9 +2526,12 @@ async function downloadDynamicFormAggregateXlsx(result: DynamicFormAggregateResp
   downloadBlob(blob, buildDynamicFormAggregateFileName(result, "xlsx"));
 }
 
-async function downloadSummaryTemplateWorkbookXlsx(result: DynamicFormAggregateResponse) {
+async function downloadSummaryTemplateWorkbookXlsx(
+  result: DynamicFormAggregateResponse,
+  metricLabelByKey?: ReadonlyMap<string, string>,
+) {
   if (result.meta.tableMode !== "SUMMARY_TEMPLATE") {
-    await downloadDynamicFormAggregateXlsx(result);
+    await downloadDynamicFormAggregateXlsx(result, metricLabelByKey);
     return;
   }
 
@@ -1020,7 +2547,6 @@ async function downloadSummaryTemplateWorkbookXlsx(result: DynamicFormAggregateR
     { key: "groupLabel", header: "Đơn vị / Công việc", width: 30 },
     { key: "workAssignmentId", header: "Mã công việc", width: 26 },
     { key: "metricLabel", header: "Chỉ số", width: 34 },
-    { key: "metricKey", header: "Mã chỉ số", width: 54 },
     { key: "reportCount", header: "Số báo cáo", width: 12 },
     { key: "count", header: "Số dòng", width: 12 },
     { key: "sum", header: "Tổng", width: 14 },
@@ -1080,8 +2606,7 @@ async function downloadSummaryTemplateWorkbookXlsx(result: DynamicFormAggregateR
         outputRowNumber: group.groupIndex * group.rowsPerGroup + offset + 1,
         groupLabel: group.groupLabel,
         workAssignmentId: group.workAssignmentId,
-        metricLabel: row?.label ?? row?.sourceMetricKey ?? row?.metricKey ?? "",
-        metricKey: row?.sourceMetricKey ?? row?.metricKey ?? "",
+        metricLabel: row ? resolveExportMetricLabel(row, metricLabelByKey) : "",
         reportCount: row?.reportCount ?? null,
         count: row?.count ?? null,
         sum: row?.sum ?? null,
@@ -1134,7 +2659,7 @@ async function downloadSummaryTemplateWorkbookXlsx(result: DynamicFormAggregateR
   });
 
   const raw = workbook.addWorksheet("Dữ liệu thô");
-  const { columns, rows } = getDynamicFormAggregateExportShape(result);
+  const { columns, rows } = getDynamicFormAggregateExportShape(result, metricLabelByKey);
   raw.columns = columns.map((column) => ({
     key: column.key,
     header: column.header,
@@ -1150,7 +2675,8 @@ async function downloadSummaryTemplateWorkbookXlsx(result: DynamicFormAggregateR
     { key: "value", header: "Giá trị", width: 46 },
   ];
   [
-    ["Mã biểu mẫu", result.meta.dynamicFormTemplateId],
+    ["Biểu mẫu", [result.meta.dynamicFormTemplateCode, result.meta.dynamicFormTemplateName].filter(Boolean).join(" - ") || result.meta.dynamicFormTemplateId],
+    ["Id biểu mẫu", result.meta.dynamicFormTemplateId],
     ["Mã đại diện biểu mẫu", result.meta.dynamicFormTemplateCode],
     ["Tên biểu mẫu", result.meta.dynamicFormTemplateName],
     ["Phần bảng", result.meta.blockId],
@@ -1188,17 +2714,14 @@ const WorkAggregationTab: React.FC<Props> = ({
   const [getAggregateTable, aggregateState] = useGetAggregateTableMutation();
   const [getDynamicFormAggregateTable, dynamicFormAggregateState] =
     useGetDynamicFormAggregateTableMutation();
-  const [applyDynamicFormAggregateDraft, applyDynamicFormAggregateDraftState] =
-    useApplyDynamicFormAggregateDraftMutation();
-  const [previewDynamicFormAggregateDraft, previewDynamicFormAggregateDraftState] =
-    usePreviewDynamicFormAggregateDraftMutation();
-  const [createUserCreatedReport, createUserCreatedReportState] =
-    useCreateUserCreatedReportMutation();
+  const [getWorkAssignmentBasicSummary, basicSummaryState] =
+    useGetWorkAssignmentBasicSummaryMutation();
+  const [saveWorkAssignmentBasicSummaryConfig, saveBasicSummaryConfigState] =
+    useSaveWorkAssignmentBasicSummaryConfigMutation();
   const [searchFieldStatisticSummary, fieldStatisticState] =
     useSearchFieldStatisticSummaryMutation();
   const [searchFieldTextConcat, fieldTextConcatState] =
     useSearchFieldTextConcatMutation();
-  const currentUserId = React.useMemo(() => getMeSnapshot()?.id ?? null, []);
   const externalParentAssignmentId = normalizeOptionalText(parentAssignmentId);
 
   const scopeOptionsQuery = useGetWorkAssignmentsByWorkQuery(
@@ -1241,25 +2764,102 @@ const WorkAggregationTab: React.FC<Props> = ({
   const selectedScopeIsRoot = isRootAggregationScope(selectedScopeOption);
 
   const effectiveParentAssignmentId = externalParentAssignmentId ?? null;
+  const directChildScopeOptions = React.useMemo(
+    () =>
+      scopeOptions.filter(
+        (option) =>
+          option.isActive !== false &&
+          option.parentAssignmentId === effectiveParentAssignmentId &&
+          Boolean(option.dynamicFormTemplateId || option.dynamicExcelId),
+      ),
+    [effectiveParentAssignmentId, scopeOptions],
+  );
+  const aggregateUnitOptions = React.useMemo(
+    () => buildAssignedUnitOptions(scopeOptions, effectiveParentAssignmentId),
+    [effectiveParentAssignmentId, scopeOptions],
+  );
+  const aggregateConfigQuery = useGetWorkAssignmentAggregateConfigQuery(
+    effectiveParentAssignmentId ?? "",
+    { skip: !effectiveParentAssignmentId }
+  );
+  const [saveWorkAssignmentAggregateConfig, saveAggregateConfigState] =
+    useSaveWorkAssignmentAggregateConfigMutation();
+  const aggregateConfigMetricMapping = React.useMemo(
+    () => parseAggregateConfigMetricMapping(aggregateConfigQuery.data?.metricMappingsJson),
+    [aggregateConfigQuery.data?.metricMappingsJson]
+  );
+  const aggregateConfigSourceBlockId =
+    normalizeOptionalText(aggregateConfigQuery.data?.sourceBlockId) ??
+    aggregateConfigMetricMapping.sourceBlockId;
+  const sourceScopeOption = React.useMemo(() => {
+    const configuredFormId = normalizeOptionalText(aggregateConfigQuery.data?.sourceDynamicFormTemplateId);
+    const configuredExcelId = aggregateConfigMetricMapping.sourceDynamicExcelTemplateId;
+    const configuredChild = directChildScopeOptions.find(
+      (option) =>
+        (configuredFormId && option.dynamicFormTemplateId === configuredFormId) ||
+        (configuredExcelId && option.dynamicExcelId === configuredExcelId),
+    );
+    if (configuredChild) return configuredChild;
+
+    const childDynamicForms = directChildScopeOptions.filter((option) =>
+      Boolean(option.dynamicFormTemplateId)
+    );
+    if (childDynamicForms.length > 0) {
+      return (
+        childDynamicForms.find(
+          (option) =>
+            option.dynamicFormTemplateId &&
+            option.dynamicFormTemplateId !== selectedScopeOption?.dynamicFormTemplateId,
+        ) ?? childDynamicForms[0]
+      );
+    }
+
+    return directChildScopeOptions.find((option) => Boolean(option.dynamicExcelId)) ?? selectedScopeOption;
+  }, [
+    aggregateConfigMetricMapping.sourceDynamicExcelTemplateId,
+    aggregateConfigQuery.data?.sourceDynamicFormTemplateId,
+    directChildScopeOptions,
+    selectedScopeOption,
+  ]);
   const seedDynamicExcelId =
-    normalizeOptionalText(defaultDynamicExcelId) ??
-    normalizeOptionalText(selectedScopeOption?.dynamicExcelId);
+    normalizeOptionalText(sourceScopeOption?.dynamicFormTemplateId)
+      ? normalizeOptionalText(sourceScopeOption?.dynamicExcelId)
+      : normalizeOptionalText(sourceScopeOption?.dynamicExcelId) ??
+        normalizeOptionalText(defaultDynamicExcelId) ??
+        normalizeOptionalText(selectedScopeOption?.dynamicExcelId);
   const seedDynamicExcelCode =
-    normalizeOptionalText(defaultDynamicExcelCode) ??
-    normalizeOptionalText(selectedScopeOption?.dynamicExcelCode);
+    normalizeOptionalText(sourceScopeOption?.dynamicFormTemplateId)
+      ? normalizeOptionalText(sourceScopeOption?.dynamicExcelCode)
+      : normalizeOptionalText(sourceScopeOption?.dynamicExcelCode) ??
+        normalizeOptionalText(defaultDynamicExcelCode) ??
+        normalizeOptionalText(selectedScopeOption?.dynamicExcelCode);
   const seedDynamicExcelName =
-    normalizeOptionalText(defaultDynamicExcelName) ??
-    normalizeOptionalText(selectedScopeOption?.dynamicExcelName);
+    normalizeOptionalText(sourceScopeOption?.dynamicFormTemplateId)
+      ? normalizeOptionalText(sourceScopeOption?.dynamicExcelName)
+      : normalizeOptionalText(sourceScopeOption?.dynamicExcelName) ??
+        normalizeOptionalText(defaultDynamicExcelName) ??
+        normalizeOptionalText(selectedScopeOption?.dynamicExcelName);
   const seedDynamicFormTemplateId =
+    normalizeOptionalText(sourceScopeOption?.dynamicFormTemplateId) ??
     normalizeOptionalText(defaultDynamicFormTemplateId) ??
     normalizeOptionalText(selectedScopeOption?.dynamicFormTemplateId);
   const seedDynamicFormTemplateCode =
+    normalizeOptionalText(sourceScopeOption?.dynamicFormTemplateCode) ??
     normalizeOptionalText(defaultDynamicFormTemplateCode) ??
     normalizeOptionalText(selectedScopeOption?.dynamicFormTemplateCode);
   const seedDynamicFormTemplateName =
+    normalizeOptionalText(sourceScopeOption?.dynamicFormTemplateName) ??
     normalizeOptionalText(defaultDynamicFormTemplateName) ??
     normalizeOptionalText(selectedScopeOption?.dynamicFormTemplateName);
-  const seedPeriodDate = dayKeyToDateInput(selectedScopeOption?.latestPeriodKey);
+  const seedPeriodDate = dayKeyToDateInput(sourceScopeOption?.latestPeriodKey ?? selectedScopeOption?.latestPeriodKey);
+
+  const basicSummaryConfigQuery = useGetWorkAssignmentBasicSummaryConfigQuery(
+    {
+      assignmentId: effectiveParentAssignmentId ?? "",
+      dynamicFormTemplateId: seedDynamicFormTemplateId ?? "",
+    },
+    { skip: !effectiveParentAssignmentId || !seedDynamicFormTemplateId },
+  );
 
   const [filter, setFilter] = React.useState<AggregateFilterState>(() =>
     createDefaultFilter(seedDynamicExcelId, seedPeriodDate)
@@ -1267,8 +2867,9 @@ const WorkAggregationTab: React.FC<Props> = ({
   const [result, setResult] = React.useState<AggregateTableResponse | null>(null);
   const [dynamicFormResult, setDynamicFormResult] =
     React.useState<DynamicFormAggregateResponse | null>(null);
-  const [lastDynamicFormAggregateRequest, setLastDynamicFormAggregateRequest] =
-    React.useState<DynamicFormAggregateRequest | null>(null);
+  const [basicSummaryResult, setBasicSummaryResult] =
+    React.useState<WorkAssignmentBasicSummaryResponse | null>(null);
+  const [summaryMode, setSummaryMode] = React.useState<"BASIC" | "ADVANCED">("BASIC");
   const [fieldStatisticResult, setFieldStatisticResult] =
     React.useState<FieldStatisticSummaryResponse | null>(null);
   const [fieldTextConcatResult, setFieldTextConcatResult] =
@@ -1276,61 +2877,150 @@ const WorkAggregationTab: React.FC<Props> = ({
   const [fieldTextConcatRequest, setFieldTextConcatRequest] =
     React.useState<FieldTextConcatRequest | null>(null);
   const [fieldTextConcatExporting, setFieldTextConcatExporting] = React.useState(false);
-  const [targetDraftReportId, setTargetDraftReportId] = React.useState("");
-  const [createdDraftReportOption, setCreatedDraftReportOption] =
-    React.useState<WorkAssignmentReportListRow | null>(null);
-  const [aggregateDraftDataOrigin, setAggregateDraftDataOrigin] =
-    React.useState<WorkReportDataOrigin>("PARTIAL_MAPPING");
-  const [aggregateDraftValueSelector, setAggregateDraftValueSelector] =
-    React.useState<AggregateDraftValueSelector>("SUM");
-  const [aggregateDraftClearExisting, setAggregateDraftClearExisting] =
-    React.useState(false);
+  const [selectedDynamicFormBlockId, setSelectedDynamicFormBlockId] = React.useState("");
+  const [basicSummaryDefaultMethods, setBasicSummaryDefaultMethods] =
+    React.useState<WorkAssignmentBasicSummaryDefaultMethodsDto>(DEFAULT_BASIC_SUMMARY_METHODS);
+  const [basicSummaryFieldMethods, setBasicSummaryFieldMethods] =
+    React.useState<Record<string, SummaryMethod>>({});
+  const [templateSummaryMethods, setTemplateSummaryMethods] =
+    React.useState<Record<string, SummaryMethod>>({});
+  const [basicSummarySourceView, setBasicSummarySourceView] =
+    React.useState(DEFAULT_BASIC_SUMMARY_SOURCE_VIEW);
+  const [stackIdentityPreviewOpen, setStackIdentityPreviewOpen] = React.useState(false);
+  const [stackIdentityColumns, setStackIdentityColumns] = React.useState<string[]>([
+    "periodKey",
+    "unitSymbol",
+    "unitShortName",
+    "fullName",
+    "userName",
+    "sourceReportCount",
+  ]);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "" });
   const [previewReportId, setPreviewReportId] = React.useState("");
-  const [mappedPreviewReport, setMappedPreviewReport] =
-    React.useState<WorkAssignmentReportResponse | null>(null);
-  const [applyConfirmOpen, setApplyConfirmOpen] = React.useState(false);
+  const appliedAggregateConfigIdRef = React.useRef<string | null>(null);
+  const appliedAggregateMetricMappingRef = React.useRef("");
+  const appliedBasicSummaryConfigRef = React.useRef("");
 
   const showMessage = React.useCallback((message: string) => {
     setSnackbar({ open: true, message });
   }, []);
 
+  const hasDynamicFormSeed = Boolean(seedDynamicFormTemplateId);
+
   const dynamicFormQuery = useGetDynamicFormQuery(
     { id: seedDynamicFormTemplateId ?? "" },
     { skip: !seedDynamicFormTemplateId }
   );
-  const assignmentReportsQuery = useGetReportsByAssignmentQuery(
-    { workAssignmentId: effectiveParentAssignmentId ?? "" },
-    { skip: !effectiveParentAssignmentId || !seedDynamicFormTemplateId || selectedScopeIsRoot }
-  );
 
-  const resolvedDynamicFormExcelBlock = React.useMemo(
-    () => resolveDynamicFormExcelBlock(dynamicFormQuery.data),
+  React.useEffect(() => {
+    const configured = aggregateConfigQuery.data?.identityColumns;
+    if (Array.isArray(configured) && configured.length > 0) {
+      setStackIdentityColumns(configured);
+    }
+  }, [aggregateConfigQuery.data?.identityColumns]);
+
+  const dynamicFormExcelBlocks = React.useMemo(
+    () => resolveDynamicFormExcelBlocks(dynamicFormQuery.data),
     [dynamicFormQuery.data]
   );
+
+  React.useEffect(() => {
+    if (!dynamicFormExcelBlocks.length) {
+      setSelectedDynamicFormBlockId("");
+      return;
+    }
+
+    setSelectedDynamicFormBlockId((prev) => {
+      if (prev && dynamicFormExcelBlocks.some((block) => block.blockId === prev)) return prev;
+
+      const configuredBlock = findDynamicFormBlock(
+        dynamicFormExcelBlocks,
+        aggregateConfigSourceBlockId,
+      ) ?? findDynamicFormBlockByExcelId(
+        dynamicFormExcelBlocks,
+        aggregateConfigMetricMapping.sourceDynamicExcelTemplateId,
+      );
+      const seedBlock = findDynamicFormBlockByExcelId(dynamicFormExcelBlocks, seedDynamicExcelId);
+      const supportedBlock =
+        configuredBlock ??
+        seedBlock ??
+        dynamicFormExcelBlocks.find((block) => isSupportedDynamicFormAggregateMode(block.tableMode)) ??
+        dynamicFormExcelBlocks[0];
+
+      return supportedBlock?.blockId ?? "";
+    });
+  }, [
+    aggregateConfigMetricMapping.sourceDynamicExcelTemplateId,
+    aggregateConfigSourceBlockId,
+    dynamicFormExcelBlocks,
+    seedDynamicExcelId,
+  ]);
+
+  React.useEffect(() => {
+    if (!aggregateConfigQuery.data || !dynamicFormExcelBlocks.length) return;
+
+    const configuredBlock =
+      findDynamicFormBlock(dynamicFormExcelBlocks, aggregateConfigSourceBlockId) ??
+      findDynamicFormBlockByExcelId(
+        dynamicFormExcelBlocks,
+        aggregateConfigMetricMapping.sourceDynamicExcelTemplateId,
+      );
+    if (!configuredBlock) return;
+
+    const fingerprint = [
+      aggregateConfigQuery.data.id ?? "",
+      aggregateConfigQuery.data.versionNo ?? "",
+      aggregateConfigSourceBlockId ?? "",
+      aggregateConfigMetricMapping.sourceDynamicExcelTemplateId ?? "",
+    ].join(":");
+    if (appliedAggregateConfigIdRef.current === fingerprint) return;
+
+    appliedAggregateConfigIdRef.current = fingerprint;
+    setSelectedDynamicFormBlockId(configuredBlock.blockId);
+  }, [
+    aggregateConfigMetricMapping.sourceDynamicExcelTemplateId,
+    aggregateConfigQuery.data,
+    aggregateConfigSourceBlockId,
+    dynamicFormExcelBlocks,
+  ]);
+
+  const resolvedDynamicFormExcelBlock =
+    findDynamicFormBlock(dynamicFormExcelBlocks, selectedDynamicFormBlockId) ??
+    findDynamicFormBlock(dynamicFormExcelBlocks, aggregateConfigSourceBlockId) ??
+    findDynamicFormBlockByExcelId(
+      dynamicFormExcelBlocks,
+      aggregateConfigMetricMapping.sourceDynamicExcelTemplateId,
+    ) ??
+    findDynamicFormBlockByExcelId(dynamicFormExcelBlocks, seedDynamicExcelId) ??
+    dynamicFormExcelBlocks[0] ??
+    null;
   const resolvedSupportedDynamicFormExcelBlock =
     isSupportedDynamicFormAggregateMode(resolvedDynamicFormExcelBlock?.tableMode)
       ? resolvedDynamicFormExcelBlock
       : null;
 
-  const effectiveDynamicExcelId =
-    seedDynamicExcelId ?? resolvedDynamicFormExcelBlock?.dynamicExcelId ?? null;
-  const effectiveDynamicExcelCode =
-    seedDynamicExcelCode ?? resolvedDynamicFormExcelBlock?.dynamicExcelCode ?? null;
-  const effectiveDynamicExcelName =
-    seedDynamicExcelName ?? resolvedDynamicFormExcelBlock?.dynamicExcelName ?? null;
+  const effectiveDynamicExcelId = hasDynamicFormSeed
+    ? resolvedDynamicFormExcelBlock?.dynamicExcelId ?? null
+    : seedDynamicExcelId ?? null;
+  const effectiveDynamicExcelCode = hasDynamicFormSeed
+    ? resolvedDynamicFormExcelBlock?.dynamicExcelCode ?? null
+    : seedDynamicExcelCode ?? null;
+  const effectiveDynamicExcelName = hasDynamicFormSeed
+    ? resolvedDynamicFormExcelBlock?.dynamicExcelName ?? null
+    : seedDynamicExcelName ?? null;
 
   React.useEffect(() => {
     setFilter(createDefaultFilter(effectiveDynamicExcelId, seedPeriodDate));
     setResult(null);
     setDynamicFormResult(null);
-    setLastDynamicFormAggregateRequest(null);
+    setBasicSummaryResult(null);
+    setBasicSummaryDefaultMethods(DEFAULT_BASIC_SUMMARY_METHODS);
+    setBasicSummaryFieldMethods({});
+    setTemplateSummaryMethods({});
+    setBasicSummarySourceView(DEFAULT_BASIC_SUMMARY_SOURCE_VIEW);
     setFieldStatisticResult(null);
     setFieldTextConcatResult(null);
     setFieldTextConcatRequest(null);
-    setTargetDraftReportId("");
-    setCreatedDraftReportOption(null);
-    setMappedPreviewReport(null);
   }, [
     effectiveDynamicExcelId,
     effectiveParentAssignmentId,
@@ -1338,6 +3028,60 @@ const WorkAggregationTab: React.FC<Props> = ({
     seedPeriodDate,
     workId,
   ]);
+
+  React.useEffect(() => {
+    setTemplateSummaryMethods({});
+    setBasicSummaryFieldMethods({});
+  }, [selectedDynamicFormBlockId, effectiveDynamicExcelId, seedDynamicFormTemplateId]);
+
+  React.useEffect(() => {
+    if (!aggregateConfigQuery.data || !resolvedSupportedDynamicFormExcelBlock) return;
+
+    if (
+      aggregateConfigSourceBlockId &&
+      aggregateConfigSourceBlockId !== resolvedSupportedDynamicFormExcelBlock.blockId
+    ) {
+      return;
+    }
+
+    if (
+      aggregateConfigMetricMapping.sourceDynamicExcelTemplateId &&
+      resolvedSupportedDynamicFormExcelBlock.dynamicExcelId &&
+      aggregateConfigMetricMapping.sourceDynamicExcelTemplateId !==
+        resolvedSupportedDynamicFormExcelBlock.dynamicExcelId
+    ) {
+      return;
+    }
+
+    const fingerprint = [
+      aggregateConfigQuery.data.id ?? "",
+      aggregateConfigQuery.data.versionNo ?? "",
+      resolvedSupportedDynamicFormExcelBlock.blockId,
+      aggregateConfigQuery.data.metricMappingsJson ?? "",
+    ].join(":");
+    if (appliedAggregateMetricMappingRef.current === fingerprint) return;
+
+    appliedAggregateMetricMappingRef.current = fingerprint;
+    setFilter((prev) =>
+      prev.metricKeys.length === 0 ? prev : { ...prev, metricKeys: [] }
+    );
+  }, [
+    aggregateConfigMetricMapping,
+    aggregateConfigQuery.data,
+    aggregateConfigSourceBlockId,
+    resolvedSupportedDynamicFormExcelBlock,
+  ]);
+
+  React.useEffect(() => {
+    const allowedUnitIds = new Set(aggregateUnitOptions.map((item) => item.id));
+    setFilter((prev) => {
+      const nextSelectedUnitIds = prev.selectedUnitIds.filter((unitId) =>
+        allowedUnitIds.has(unitId),
+      );
+      if (nextSelectedUnitIds.length === prev.selectedUnitIds.length) return prev;
+      return { ...prev, selectedUnitIds: nextSelectedUnitIds };
+    });
+  }, [aggregateUnitOptions]);
 
   const templateQuery = useGetDynamicExcelQuery(
     { id: filter.dynamicExcelId },
@@ -1357,6 +3101,122 @@ const WorkAggregationTab: React.FC<Props> = ({
     () => resolveTemplateRect(templateDetail?.dataRect),
     [templateDetail?.dataRect]
   );
+  const basicSummaryFieldMethodRows = React.useMemo(
+    () =>
+      buildBasicSummaryFieldMethodRows(
+        dynamicFormQuery.data,
+        basicSummaryFieldMethods,
+        basicSummaryDefaultMethods,
+      ),
+    [basicSummaryDefaultMethods, basicSummaryFieldMethods, dynamicFormQuery.data],
+  );
+  const templateDataTypeMethodRows = React.useMemo(
+    () =>
+      buildTemplateDataTypeMethodRows(
+        resolvedSupportedDynamicFormExcelBlock,
+        templateRect,
+        templateSpec,
+        templateSummaryMethods,
+        basicSummaryDefaultMethods,
+      ),
+    [
+      basicSummaryDefaultMethods,
+      resolvedSupportedDynamicFormExcelBlock,
+      templateRect,
+      templateSpec,
+      templateSummaryMethods,
+    ],
+  );
+  const basicSummaryRules = React.useMemo(
+    () => [
+      ...buildBasicSummaryFieldRules(basicSummaryFieldMethodRows),
+      ...buildBasicSummaryRulesFromTemplateMethods(
+        resolvedSupportedDynamicFormExcelBlock,
+        templateDataTypeMethodRows,
+      ),
+    ],
+    [
+      basicSummaryFieldMethodRows,
+      resolvedSupportedDynamicFormExcelBlock,
+      templateDataTypeMethodRows,
+    ],
+  );
+  const handleTemplateSummaryMethodChange = React.useCallback((rowId: string, method: SummaryMethod) => {
+    setTemplateSummaryMethods((prev) => ({
+      ...prev,
+      [rowId]: method,
+    }));
+    setBasicSummaryResult(null);
+    setDynamicFormResult(null);
+  }, []);
+  const handleBasicSummaryFieldMethodChange = React.useCallback((fieldId: string, method: SummaryMethod) => {
+    setBasicSummaryFieldMethods((prev) => ({
+      ...prev,
+      [fieldId]: method,
+    }));
+    setBasicSummaryResult(null);
+  }, []);
+  const handleBasicSummaryDefaultMethodsChange = React.useCallback((methods: WorkAssignmentBasicSummaryDefaultMethodsDto) => {
+    setBasicSummaryDefaultMethods({ ...DEFAULT_BASIC_SUMMARY_METHODS, ...methods });
+    setBasicSummaryResult(null);
+  }, []);
+
+  React.useEffect(() => {
+    const config = basicSummaryConfigQuery.data;
+    if (!config) return;
+
+    const fingerprint = `${config.id ?? ""}:${config.versionNo ?? ""}:${config.assignmentId}:${config.dynamicFormTemplateId}`;
+    if (appliedBasicSummaryConfigRef.current === fingerprint) return;
+    appliedBasicSummaryConfigRef.current = fingerprint;
+
+    const nextDefaultMethods = { ...DEFAULT_BASIC_SUMMARY_METHODS, ...(config.defaultMethods ?? {}) };
+    setBasicSummaryDefaultMethods(nextDefaultMethods);
+
+    const fieldRowsForConfig = buildBasicSummaryFieldMethodRows(
+      dynamicFormQuery.data,
+      {},
+      nextDefaultMethods,
+    );
+    setBasicSummaryFieldMethods(buildFieldSummaryMethodsFromRules(fieldRowsForConfig, config.rules));
+    setTemplateSummaryMethods(
+      buildTemplateSummaryMethodsFromRules(
+        resolvedSupportedDynamicFormExcelBlock,
+        templateDataTypeMethodRows,
+        config.rules,
+      ),
+    );
+    setBasicSummaryResult(null);
+  }, [
+    basicSummaryConfigQuery.data,
+    dynamicFormQuery.data,
+    resolvedSupportedDynamicFormExcelBlock,
+    templateDataTypeMethodRows,
+  ]);
+  const selectedAggregateMetricOptions = React.useMemo(() => {
+    if (!resolvedSupportedDynamicFormExcelBlock) return [];
+    if (!filter.metricKeys.length) return resolvedSupportedDynamicFormExcelBlock.metricOptions;
+    const selected = new Set(filter.metricKeys);
+    return resolvedSupportedDynamicFormExcelBlock.metricOptions.filter((option) =>
+      selected.has(option.metricKey),
+    );
+  }, [filter.metricKeys, resolvedSupportedDynamicFormExcelBlock]);
+  const previewDynamicFormExcelBlock = React.useMemo(
+    () =>
+      resolvedSupportedDynamicFormExcelBlock
+        ? {
+            ...resolvedSupportedDynamicFormExcelBlock,
+            metricOptions: selectedAggregateMetricOptions,
+          }
+        : null,
+    [resolvedSupportedDynamicFormExcelBlock, selectedAggregateMetricOptions],
+  );
+  const dynamicFormPreviewHighlights = React.useMemo(
+    () =>
+      previewDynamicFormExcelBlock
+        ? buildMetricPreviewHighlights(previewDynamicFormExcelBlock, templateRect)
+        : [],
+    [previewDynamicFormExcelBlock, templateRect]
+  );
   const resultRect = React.useMemo(
     () => resolveResultRect(result, templateRect),
     [result, templateRect]
@@ -1365,18 +3225,14 @@ const WorkAggregationTab: React.FC<Props> = ({
   const loading =
     aggregateState.isLoading ||
     dynamicFormAggregateState.isLoading ||
+    basicSummaryState.isLoading ||
     fieldStatisticState.isLoading ||
     fieldTextConcatState.isLoading ||
-    applyDynamicFormAggregateDraftState.isLoading ||
-    previewDynamicFormAggregateDraftState.isLoading ||
-    createUserCreatedReportState.isLoading ||
     fieldTextConcatExporting ||
     templateQuery.isFetching ||
     dynamicFormQuery.isFetching ||
-    assignmentReportsQuery.isFetching ||
     scopeOptionsQuery.isFetching ||
     selectedAssignmentQuery.isFetching;
-  const hasDynamicFormSeed = Boolean(seedDynamicFormTemplateId);
   const dynamicFormResolutionPending =
     Boolean(effectiveParentAssignmentId) &&
     hasDynamicFormSeed &&
@@ -1394,100 +3250,28 @@ const WorkAggregationTab: React.FC<Props> = ({
   const dynamicFormUnsupportedMessage = formatUnsupportedDynamicFormBlockMessage(
     resolvedDynamicFormExcelBlock
   );
-  React.useEffect(() => {
-    if (
-      createdDraftReportOption &&
-      assignmentReportsQuery.data?.some((row) => row.id === createdDraftReportOption.id)
-    ) {
-      setCreatedDraftReportOption(null);
-    }
-  }, [assignmentReportsQuery.data, createdDraftReportOption]);
-
-  const assignmentReportRows = React.useMemo(() => {
-    const rows = assignmentReportsQuery.data ?? [];
-    if (
-      !createdDraftReportOption ||
-      createdDraftReportOption.workAssignmentId !== effectiveParentAssignmentId ||
-      rows.some((row) => row.id === createdDraftReportOption.id)
-    ) {
-      return rows;
-    }
-    return [createdDraftReportOption, ...rows];
-  }, [assignmentReportsQuery.data, createdDraftReportOption, effectiveParentAssignmentId]);
-
-  const templateDraftReports = React.useMemo(
-    () =>
-      assignmentReportRows.filter((row) => {
-        const sameTemplate =
-          !seedDynamicFormTemplateId ||
-          row.dynamicFormTemplateId === seedDynamicFormTemplateId;
-        return (
-          sameTemplate &&
-          row.status === WorkAssignmentReportStatus.Draft &&
-          row.isActive !== false
-        );
-      }),
-    [assignmentReportRows, seedDynamicFormTemplateId]
-  );
-  const targetDraftReports = React.useMemo(
-    () =>
-      templateDraftReports.filter((row) =>
-        currentUserId
-          ? row.assigneeUserId === currentUserId || row.id === createdDraftReportOption?.id
-          : true
-      ),
-    [createdDraftReportOption?.id, currentUserId, templateDraftReports]
-  );
-  const hasReadOnlyDraftReports =
-    templateDraftReports.length > 0 && targetDraftReports.length === 0;
-  const selectedTargetDraftReport = React.useMemo(
-    () => targetDraftReports.find((row) => row.id === targetDraftReportId) ?? null,
-    [targetDraftReportId, targetDraftReports]
-  );
-
-  React.useEffect(() => {
-    if (!supportsDynamicFormAggregate) {
-      setTargetDraftReportId("");
-      return;
-    }
-
-    if (
-      targetDraftReportId &&
-      targetDraftReports.some((row) => row.id === targetDraftReportId)
-    ) {
-      return;
-    }
-
-    setTargetDraftReportId(targetDraftReports[0]?.id ?? "");
-  }, [supportsDynamicFormAggregate, targetDraftReportId, targetDraftReports]);
-
-  React.useEffect(() => {
-    setMappedPreviewReport(null);
-  }, [
-    aggregateDraftClearExisting,
-    aggregateDraftDataOrigin,
-    aggregateDraftValueSelector,
-    lastDynamicFormAggregateRequest,
-    targetDraftReportId,
-  ]);
+  const selectedBlockStatisticsDisabled =
+    Boolean(resolvedSupportedDynamicFormExcelBlock?.statisticsDisabled);
+  const selectedBlockStatisticsDisabledReason = resolvedSupportedDynamicFormExcelBlock
+    ? resolvedSupportedDynamicFormExcelBlock.statisticsDisabledReason ?? getLargeTableStatisticMessage(
+        resolvedSupportedDynamicFormExcelBlock.statisticsInputCellCount,
+        resolvedSupportedDynamicFormExcelBlock.statisticsInputCellLimit,
+      )
+    : null;
 
   const handleReset = React.useCallback(() => {
     setFilter(createDefaultFilter(effectiveDynamicExcelId, seedPeriodDate));
     setResult(null);
     setDynamicFormResult(null);
-    setLastDynamicFormAggregateRequest(null);
+    setBasicSummaryResult(null);
     setFieldStatisticResult(null);
     setFieldTextConcatResult(null);
     setFieldTextConcatRequest(null);
-    setTargetDraftReportId("");
-    setCreatedDraftReportOption(null);
-    setMappedPreviewReport(null);
   }, [effectiveDynamicExcelId, seedPeriodDate]);
 
   const validateFilter = React.useCallback(() => {
     if (dynamicFormUnsupported) return dynamicFormUnsupportedMessage;
     if (!effectiveParentAssignmentId) return "Thiếu công việc gốc để tổng hợp.";
-    if (selectedScopeIsRoot) return "Assignment root không ghi tổng hợp lên báo cáo cấp trên.";
     const aggregateDynamicExcelId =
       filter.dynamicExcelId.trim() || effectiveDynamicExcelId || "";
     if (!seedDynamicFormTemplateId && !aggregateDynamicExcelId) {
@@ -1496,6 +3280,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     if (
       seedDynamicFormTemplateId &&
       resolvedSupportedDynamicFormExcelBlock &&
+      !resolvedSupportedDynamicFormExcelBlock.statisticsDisabled &&
       resolvedSupportedDynamicFormExcelBlock.tableMode !== "SUMMARY_TEMPLATE" &&
       resolvedSupportedDynamicFormExcelBlock.metricOptions.length === 0
     ) {
@@ -1522,7 +3307,6 @@ const WorkAggregationTab: React.FC<Props> = ({
     filter,
     resolvedSupportedDynamicFormExcelBlock,
     seedDynamicFormTemplateId,
-    selectedScopeIsRoot,
   ]);
 
   const handleRunAggregate = React.useCallback(async () => {
@@ -1547,11 +3331,11 @@ const WorkAggregationTab: React.FC<Props> = ({
       try {
         const request: DynamicFormAggregateRequest = {
           scopeAssignmentId: effectiveParentAssignmentId ?? "",
-          scopeMode: filter.scopeMode,
+          scopeMode: "DIRECT_CHILDREN",
           dynamicFormTemplateId: seedDynamicFormTemplateId,
           blockId: resolvedSupportedDynamicFormExcelBlock.blockId,
           tableMode: resolvedSupportedDynamicFormExcelBlock.tableMode,
-          metricKeys: filter.metricKeys.length > 0 ? filter.metricKeys : null,
+          metricKeys: null,
           periodScopeMode: filter.periodScopeMode,
           periodKey:
             filter.periodScopeMode === "SINGLE_PERIOD"
@@ -1566,14 +3350,14 @@ const WorkAggregationTab: React.FC<Props> = ({
               : null,
           sourceStatusMode: "APPROVED_ONLY",
           selectedUnitIds,
+          aggregateConfigId: aggregateConfigQuery.data?.id ?? null,
+          identityColumns: stackIdentityColumns,
         };
         const response = await getDynamicFormAggregateTable(request).unwrap();
 
         setDynamicFormResult(response);
-        setLastDynamicFormAggregateRequest(request);
         setResult(null);
       } catch (err: unknown) {
-        setLastDynamicFormAggregateRequest(null);
         showMessage(getErrorMessage(err, "Không tổng hợp được chỉ số của biểu mẫu động."));
       }
       return;
@@ -1605,7 +3389,6 @@ const WorkAggregationTab: React.FC<Props> = ({
 
       setResult(response);
       setDynamicFormResult(null);
-      setLastDynamicFormAggregateRequest(null);
     } catch (err: unknown) {
       showMessage(getErrorMessage(err, "Không tổng hợp được dữ liệu."));
     }
@@ -1615,178 +3398,144 @@ const WorkAggregationTab: React.FC<Props> = ({
     effectiveDynamicExcelId,
     getAggregateTable,
     getDynamicFormAggregateTable,
+    aggregateConfigQuery.data?.id,
     resolvedSupportedDynamicFormExcelBlock,
     seedDynamicFormTemplateId,
     showMessage,
+    stackIdentityColumns,
     validateFilter,
   ]);
 
-  const handleAggregateDraftDataOriginChange = React.useCallback((next: WorkReportDataOrigin) => {
-    setAggregateDraftDataOrigin(next);
-    setAggregateDraftClearExisting(getAggregateDraftDefaultClearExisting(next));
-  }, []);
-
-  const handleCreateAggregateDraftReport = React.useCallback(async () => {
+  const handleRunBasicSummary = React.useCallback(async (
+    forceRefresh: boolean,
+    sourceViewOverride = basicSummarySourceView,
+  ) => {
     if (!effectiveParentAssignmentId) {
-      showMessage("Thiếu công việc để tạo bản nháp tổng hợp.");
+      showMessage("Thiếu công việc để tải thống kê cơ bản.");
       return;
     }
-    if (selectedScopeIsRoot) {
-      showMessage("Assignment root không tạo bản nháp tổng hợp để báo cáo cấp trên.");
+    if (selectedScopeOption?.assignmentType !== "ONCE") {
+      showMessage("Thống kê cơ bản hiện chỉ áp dụng cho công việc giao một lần.");
       return;
     }
-
-    const periodKey =
-      normalizeDayKeyInput(filter.periodDate) ||
-      normalizeDayKeyInput(filter.periodDateTo) ||
-      normalizeDayKeyInput(filter.periodDateFrom) ||
-      new Date().toISOString().slice(0, 10);
-    const periodDate = dayKeyToDateInput(periodKey) || periodKey;
-    const periodDateUtc = `${periodDate}T00:00:00.000Z`;
-    const periodDueAtUtc = `${periodDate}T23:59:59.999Z`;
-    const normalizedPeriodDay = normalizeDayKeyInput(periodKey) || normalizeDayKeyInput(periodDate);
-    const todayDay = normalizeDayKeyInput(new Date().toISOString().slice(0, 10));
-    const isHistoricalPeriod = Boolean(normalizedPeriodDay && todayDay && normalizedPeriodDay < todayDay);
+    if (!seedDynamicFormTemplateId) {
+      showMessage("Thiếu biểu mẫu động để tải thống kê cơ bản.");
+      return;
+    }
 
     try {
-      const created = await createUserCreatedReport({
-        workAssignmentId: effectiveParentAssignmentId,
-        data: {
-          periodKey,
-          reportDate: periodDateUtc,
-          startedDate: periodDateUtc,
-          completedDate: isHistoricalPeriod ? periodDateUtc : null,
-          periodStart: periodDateUtc,
-          periodEnd: periodDateUtc,
-          dueAtUtc: periodDueAtUtc,
-          reportTitle: `Báo cáo tổng hợp ${periodKey}`,
+      const response = await getWorkAssignmentBasicSummary({
+        scopeAssignmentId: effectiveParentAssignmentId,
+        dynamicFormTemplateId: seedDynamicFormTemplateId,
+        selectedUnitIds: null,
+        defaultMethods: basicSummaryDefaultMethods,
+        rules: basicSummaryRules.length ? basicSummaryRules : null,
+        sourceView: {
+          q: sourceViewOverride.q || null,
+          periodKey: sourceViewOverride.periodKey || null,
+          unitId: sourceViewOverride.unitId || null,
+          assigneeUserId: sourceViewOverride.assigneeUserId || null,
+          page: sourceViewOverride.page,
+          pageSize: sourceViewOverride.pageSize,
         },
+        forceRefresh,
+        includeSourceRows: true,
+        maxTextChars: 12000,
       }).unwrap();
-
-      setCreatedDraftReportOption(created);
-      setTargetDraftReportId(created.id);
-      void assignmentReportsQuery.refetch();
-      showMessage("Đã tạo bản nháp báo cáo tổng hợp.");
+      setBasicSummaryResult(response);
     } catch (err: unknown) {
-      showMessage(getErrorMessage(err, "Không tạo được bản nháp báo cáo tổng hợp."));
+      showMessage(getErrorMessage(err, "Không tải được thống kê cơ bản."));
     }
   }, [
-    assignmentReportsQuery,
-    createUserCreatedReport,
+    basicSummaryDefaultMethods,
     effectiveParentAssignmentId,
-    filter.periodDate,
-    filter.periodDateFrom,
-    filter.periodDateTo,
-    selectedScopeIsRoot,
+    basicSummarySourceView,
+    basicSummaryRules,
+    getWorkAssignmentBasicSummary,
+    seedDynamicFormTemplateId,
+    selectedScopeOption?.assignmentType,
     showMessage,
   ]);
 
-  const handleApplyDynamicFormAggregateDraft = React.useCallback(async () => {
-    if (selectedScopeIsRoot) {
-      showMessage("Assignment root không ghi tổng hợp lên báo cáo cấp trên.");
-      return;
-    }
-    if (!targetDraftReportId) {
-      showMessage("Chọn một bản nháp báo cáo để ghi kết quả tổng hợp.");
-      return;
-    }
-    if (!lastDynamicFormAggregateRequest || !dynamicFormResult) {
-      showMessage("Chạy tổng hợp biểu mẫu động trước khi ghi vào bản nháp.");
-      return;
-    }
-    try {
-      await applyDynamicFormAggregateDraft({
-        id: targetDraftReportId,
-        data: {
-          aggregateRequest: lastDynamicFormAggregateRequest,
-          dataOrigin: aggregateDraftDataOrigin,
-          targetBlockId: dynamicFormResult.meta.blockId,
-          valueSelector: aggregateDraftValueSelector,
-          clearExistingValues: aggregateDraftClearExisting,
-        },
-      }).unwrap();
+  const handleApplyBasicSummarySourceView = React.useCallback(() => {
+    const nextView = { ...basicSummarySourceView, page: 0 };
+    setBasicSummarySourceView(nextView);
+    void handleRunBasicSummary(false, nextView);
+  }, [basicSummarySourceView, handleRunBasicSummary]);
 
-      void assignmentReportsQuery.refetch();
-      showMessage(
-        (dynamicFormResult.rows ?? []).length > 0
-          ? "Đã ghi kết quả tổng hợp vào bản nháp."
-          : "Đã lưu cấu hình tổng hợp; báo cáo chưa duyệt sẽ tự cộng khi được duyệt.",
-      );
-      setApplyConfirmOpen(false);
-    } catch (err: unknown) {
-      showMessage(getErrorMessage(err, "Không ghi được kết quả tổng hợp vào bản nháp."));
-    }
-  }, [
-    aggregateDraftClearExisting,
-    aggregateDraftDataOrigin,
-    aggregateDraftValueSelector,
-    applyDynamicFormAggregateDraft,
-    assignmentReportsQuery,
-    dynamicFormResult,
-    lastDynamicFormAggregateRequest,
-    selectedScopeIsRoot,
-    showMessage,
-    targetDraftReportId,
-  ]);
+  const handleBasicSummarySourcePageChange = React.useCallback((page: number, pageSize: number) => {
+    const nextView = { ...basicSummarySourceView, page, pageSize };
+    setBasicSummarySourceView(nextView);
+    void handleRunBasicSummary(false, nextView);
+  }, [basicSummarySourceView, handleRunBasicSummary]);
 
-  const handlePreviewDynamicFormAggregateDraft = React.useCallback(async () => {
-    if (selectedScopeIsRoot) {
-      showMessage("Assignment root không preview ghi tổng hợp lên báo cáo cấp trên.");
-      return;
-    }
-    if (!targetDraftReportId) {
-      showMessage("Chọn một bản nháp báo cáo để preview sau khi gán.");
-      return;
-    }
-    if (!lastDynamicFormAggregateRequest || !dynamicFormResult) {
-      showMessage("Chạy tổng hợp biểu mẫu động trước khi preview sau khi gán.");
+  const handleSaveBasicSummaryConfig = React.useCallback(async () => {
+    if (!effectiveParentAssignmentId || !seedDynamicFormTemplateId) {
+      showMessage("Thiếu ngữ cảnh để lưu cấu hình thống kê cơ bản.");
       return;
     }
 
     try {
-      const response = await previewDynamicFormAggregateDraft({
-        id: targetDraftReportId,
+      await saveWorkAssignmentBasicSummaryConfig({
+        assignmentId: effectiveParentAssignmentId,
+        dynamicFormTemplateId: seedDynamicFormTemplateId,
         data: {
-          aggregateRequest: lastDynamicFormAggregateRequest,
-          dataOrigin: aggregateDraftDataOrigin,
-          targetBlockId: dynamicFormResult.meta.blockId,
-          valueSelector: aggregateDraftValueSelector,
-          clearExistingValues: aggregateDraftClearExisting,
+          defaultMethods: basicSummaryDefaultMethods,
+          rules: basicSummaryRules,
         },
       }).unwrap();
-
-      setMappedPreviewReport(response);
+      await basicSummaryConfigQuery.refetch();
+      showMessage("Đã lưu cấu hình thống kê cơ bản.");
     } catch (err: unknown) {
-      showMessage(getErrorMessage(err, "Không preview được report sau khi gán tổng hợp."));
+      showMessage(getErrorMessage(err, "Không lưu được cấu hình thống kê cơ bản."));
     }
   }, [
-    aggregateDraftClearExisting,
-    aggregateDraftDataOrigin,
-    aggregateDraftValueSelector,
-    dynamicFormResult,
-    lastDynamicFormAggregateRequest,
-    previewDynamicFormAggregateDraft,
-    selectedScopeIsRoot,
+    basicSummaryConfigQuery,
+    basicSummaryDefaultMethods,
+    basicSummaryRules,
+    effectiveParentAssignmentId,
+    saveWorkAssignmentBasicSummaryConfig,
+    seedDynamicFormTemplateId,
     showMessage,
-    targetDraftReportId,
   ]);
 
-  const handleRequestApplyDynamicFormAggregateDraft = React.useCallback(() => {
-    if (selectedScopeIsRoot) {
-      showMessage("Assignment root không ghi tổng hợp lên báo cáo cấp trên.");
-      return;
-    }
-    if (!targetDraftReportId) {
-      showMessage("Chọn một bản nháp báo cáo để ghi kết quả tổng hợp.");
-      return;
-    }
-    if (!lastDynamicFormAggregateRequest || !dynamicFormResult) {
-      showMessage("Chạy tổng hợp biểu mẫu động trước khi ghi vào bản nháp.");
+  const handleSaveAggregateConfig = React.useCallback(async () => {
+    if (!effectiveParentAssignmentId || !seedDynamicFormTemplateId || !resolvedSupportedDynamicFormExcelBlock) {
+      showMessage("Thiếu ngữ cảnh để lưu cấu hình tổng hợp.");
       return;
     }
 
-    setApplyConfirmOpen(true);
-  }, [dynamicFormResult, lastDynamicFormAggregateRequest, selectedScopeIsRoot, showMessage, targetDraftReportId]);
+    try {
+      await saveWorkAssignmentAggregateConfig({
+        assignmentId: effectiveParentAssignmentId,
+        data: {
+          sourceDynamicFormTemplateId: seedDynamicFormTemplateId,
+          sourceBlockId: resolvedSupportedDynamicFormExcelBlock.blockId,
+          sourceTableMode: resolvedSupportedDynamicFormExcelBlock.tableMode,
+          targetDynamicFormTemplateId: seedDynamicFormTemplateId,
+          targetBlockId: resolvedSupportedDynamicFormExcelBlock.blockId,
+          aggregateKind: "MANUAL_MAP",
+          identityColumns: stackIdentityColumns,
+          periodAggregationRule: "STACK_SINGLE_PERIOD_SUM_RANGE",
+          metricMappingsJson: JSON.stringify({
+            sourceDynamicExcelTemplateId: resolvedSupportedDynamicFormExcelBlock.dynamicExcelId ?? null,
+            sourceBlockId: resolvedSupportedDynamicFormExcelBlock.blockId,
+            metricKeys: null,
+          }),
+        },
+      }).unwrap();
+      showMessage("Đã lưu cấu hình tổng hợp cho công việc hiện tại.");
+    } catch (err: unknown) {
+      showMessage(getErrorMessage(err, "Không lưu được cấu hình tổng hợp."));
+    }
+  }, [
+    effectiveParentAssignmentId,
+    resolvedSupportedDynamicFormExcelBlock,
+    saveWorkAssignmentAggregateConfig,
+    seedDynamicFormTemplateId,
+    showMessage,
+    stackIdentityColumns,
+  ]);
 
   const handleRunFieldStatistics = React.useCallback(async () => {
     if (!workId) {
@@ -1969,6 +3718,16 @@ const WorkAggregationTab: React.FC<Props> = ({
 
     return buildWorkbookVerticalByUser(result.rows ?? [], resultRect, templateSpec, templateWorkbook);
   }, [filter.aggregateMode, result, resultRect, templateSpec, templateWorkbook]);
+  const dynamicFormAggregateWorkbookPreview = React.useMemo(
+    () =>
+      buildDynamicFormAggregateTemplateWorkbook(
+        dynamicFormResult,
+        resolvedSupportedDynamicFormExcelBlock,
+        templateWorkbook,
+        templateRect,
+      ),
+    [dynamicFormResult, resolvedSupportedDynamicFormExcelBlock, templateRect, templateWorkbook],
+  );
 
   const periodSummary = React.useMemo(() => {
     if (!result) return "Chưa có dữ liệu";
@@ -1981,6 +3740,45 @@ const WorkAggregationTab: React.FC<Props> = ({
     }
     return formatDayKeyLabel(result.periodKey);
   }, [result]);
+  const metricLabelByKey = React.useMemo(() => {
+    const map = new Map<string, string>();
+    (resolvedSupportedDynamicFormExcelBlock?.metricOptions ?? []).forEach((option) => {
+      map.set(option.metricKey, resolveMetricDisplayLabel(option));
+    });
+    return map;
+  }, [resolvedSupportedDynamicFormExcelBlock?.metricOptions]);
+  const metricOptionByKey = React.useMemo(() => {
+    const map = new Map<string, AggregateMetricOption>();
+    (resolvedSupportedDynamicFormExcelBlock?.metricOptions ?? []).forEach((option) => {
+      map.set(option.metricKey, option);
+    });
+    return map;
+  }, [resolvedSupportedDynamicFormExcelBlock?.metricOptions]);
+  const formatDynamicFormMetricLabel = React.useCallback(
+    (row: DynamicFormAggregateResponse["rows"][number]) => {
+      const mapped =
+        metricLabelByKey.get(row.sourceMetricKey ?? "") ??
+        metricLabelByKey.get(row.metricKey);
+      if (mapped) return mapped;
+
+      const rowLabel = normalizeOptionalText(row.label);
+      if (
+        rowLabel &&
+        rowLabel !== row.metricKey &&
+        !/row_\d+|col_\d+/i.test(rowLabel)
+      ) {
+        return rowLabel;
+      }
+
+      const option =
+        metricOptionByKey.get(row.sourceMetricKey ?? "") ??
+        metricOptionByKey.get(row.metricKey) ??
+        null;
+      const cell = resolveDynamicFormAggregateCell(row, option, templateRect);
+      return cell ? `Ô ${formatExcelCellRef(cell.r, cell.c)}` : `Chỉ tiêu ${row.index + 1}`;
+    },
+    [metricLabelByKey, metricOptionByKey, templateRect]
+  );
 
   const lockDynamicExcel = Boolean(effectiveDynamicExcelId);
   const selectedTemplateLabel = React.useMemo(() => {
@@ -1995,22 +3793,64 @@ const WorkAggregationTab: React.FC<Props> = ({
   ]);
   const isSummaryTemplateResult =
     dynamicFormResult?.meta.tableMode === "SUMMARY_TEMPLATE";
+  const dynamicFormSourceSlot = hasDynamicFormSeed && dynamicFormExcelBlocks.length > 0 ? (
+    <Autocomplete
+      size="small"
+      options={dynamicFormExcelBlocks}
+      value={resolvedDynamicFormExcelBlock}
+      getOptionLabel={getDynamicFormBlockDisplayLabel}
+      isOptionEqualToValue={(option, selected) => option.blockId === selected.blockId}
+      onChange={(_, next) => {
+        setSelectedDynamicFormBlockId(next?.blockId ?? "");
+        setFilter((prev) => ({
+          ...prev,
+          dynamicExcelId: next?.dynamicExcelId ?? "",
+          metricKeys: [],
+        }));
+        setResult(null);
+        setDynamicFormResult(null);
+      }}
+      renderOption={(props, option) => (
+        <li {...props}>
+          <Box sx={{ minWidth: 0, py: 0.25 }}>
+            <Typography variant="body2">
+              {option.dynamicExcelCode || option.blockId}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {[option.dynamicExcelName, formatTableModeLabel(option.tableMode), formatBlockMetricSummary(option)]
+                .filter(Boolean)
+                .join(" - ")}
+            </Typography>
+          </Box>
+        </li>
+      )}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Template / vùng dữ liệu"
+          helperText="Block hoặc template cần cấu hình trong biểu mẫu động."
+        />
+      )}
+    />
+  ) : undefined;
 
   return (
     <Box sx={{ height: "100%", minHeight: 0 }}>
       <Stack spacing={2} sx={{ height: "100%", minHeight: 0 }}>
         <Stack spacing={0.5}>
           <Typography variant="h6" sx={{ fontWeight: 800 }}>
-            Tổng hợp theo công việc được giao
+            Tập hợp dữ liệu theo công việc được giao
           </Typography>
           <Typography variant="body2" sx={{ opacity: 0.72 }}>
-            Ngữ cảnh tổng hợp lấy từ dòng giao việc đã chọn; báo cáo nguồn và bản nháp đích được xem trước trước khi ghi dữ liệu.
+            {selectedScopeIsRoot
+              ? "Công việc gốc dùng màn này để xem trước và xuất bảng tổng hợp từ các công việc con; muốn ghi dữ liệu thì mở báo cáo đích và dùng Gán dữ liệu tổng hợp."
+              : "Màn này dùng để tập hợp dữ liệu, xem trước snapshot và lưu cấu hình tổng hợp; muốn ghi vào báo cáo thì mở báo cáo đích và dùng Gán dữ liệu tổng hợp."}
           </Typography>
         </Stack>
 
         {!effectiveParentAssignmentId && !scopeOptionsQuery.isFetching && (
           <Alert severity="info">
-            Mở tổng hợp từ một dòng giao việc để hệ thống có đủ ngữ cảnh biểu mẫu, báo cáo và nguồn dữ liệu. Màn này không cho chọn lại công việc cha.
+            Mở tổng hợp từ một dòng giao việc để hệ thống có đủ ngữ cảnh biểu mẫu và báo cáo. Màn này không cho chọn lại công việc cha.
           </Alert>
         )}
 
@@ -2018,7 +3858,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           (scopeOptionsQuery.isFetching || selectedAssignmentQuery.isFetching) &&
           !selectedTemplateLabel && (
           <Alert severity="info">
-            Đang tải ngữ cảnh công việc được giao để xác định biểu mẫu và nguồn tổng hợp.
+            Đang tải ngữ cảnh công việc được giao để xác định biểu mẫu và vùng tổng hợp.
           </Alert>
         )}
 
@@ -2028,21 +3868,82 @@ const WorkAggregationTab: React.FC<Props> = ({
           !selectedAssignmentQuery.isFetching &&
           selectedAssignmentQuery.error && (
           <Alert severity="error">
-            Không tải được ngữ cảnh công việc được giao. Hãy mở tổng hợp từ dòng giao việc phù hợp hoặc kiểm tra quyền truy cập assignment.
+            Không tải được ngữ cảnh công việc được giao. Hãy mở tổng hợp từ dòng giao việc phù hợp hoặc kiểm tra quyền truy cập công việc.
           </Alert>
         )}
 
-        {effectiveParentAssignmentId && selectedTemplateLabel && (
+        {effectiveParentAssignmentId && selectedTemplateLabel && !supportsDynamicFormAggregate && (
           <Alert severity="info">
             Đang tổng hợp cho biểu mẫu: <b>{selectedTemplateLabel}</b>
           </Alert>
         )}
 
         {effectiveParentAssignmentId && selectedScopeIsRoot && !scopeOptionsQuery.isFetching && (
-          <Alert severity="warning">
-            Assignment root không ghi tổng hợp vào report cấp trên. Hãy mở tổng hợp từ assignment của reviewer ở cấp trung gian.
+          <Alert severity="info">
+            Bạn đang ở công việc gốc. Luồng này chỉ xem trước và xuất bảng tổng hợp từ các công việc con; muốn ghi dữ liệu vào báo cáo, mở báo cáo đích rồi dùng <b>Gán dữ liệu tổng hợp</b>.
           </Alert>
         )}
+
+        {effectiveParentAssignmentId && (
+          <Tabs
+            value={summaryMode}
+            onChange={(_, next) => setSummaryMode(next)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              minHeight: 40,
+              borderBottom: 1,
+              borderColor: "divider",
+              "& .MuiTab-root": {
+                minHeight: 40,
+                textTransform: "none",
+                fontWeight: 700,
+              },
+            }}
+          >
+            <Tab
+              value="BASIC"
+              icon={<SummarizeOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              label="Cơ bản"
+            />
+            <Tab
+              value="ADVANCED"
+              icon={<TuneOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              label="Nâng cao"
+            />
+          </Tabs>
+        )}
+
+        {summaryMode === "BASIC" && effectiveParentAssignmentId && (
+            <BasicSummaryPanel
+              assignmentType={selectedScopeOption?.assignmentType}
+              scopeAssignmentId={effectiveParentAssignmentId}
+              dynamicFormTemplateId={seedDynamicFormTemplateId}
+              dynamicFormDetail={dynamicFormQuery.data ?? null}
+              result={basicSummaryResult}
+              loading={basicSummaryState.isLoading}
+              configLoading={basicSummaryConfigQuery.isFetching}
+              configSaving={saveBasicSummaryConfigState.isLoading}
+              defaultMethods={basicSummaryDefaultMethods}
+              fieldMethodRows={basicSummaryFieldMethodRows}
+              rangeMethodRows={templateDataTypeMethodRows}
+              sourceView={basicSummarySourceView}
+              onDefaultMethodsChange={handleBasicSummaryDefaultMethodsChange}
+              onFieldMethodChange={handleBasicSummaryFieldMethodChange}
+              onRangeMethodChange={handleTemplateSummaryMethodChange}
+              onSaveConfig={() => void handleSaveBasicSummaryConfig()}
+              onLoad={(forceRefresh) => void handleRunBasicSummary(forceRefresh)}
+              onSourceViewChange={setBasicSummarySourceView}
+              onApplySourceView={handleApplyBasicSummarySourceView}
+              onSourcePageChange={handleBasicSummarySourcePageChange}
+              onPreviewReport={setPreviewReportId}
+            />
+        )}
+
+        {summaryMode === "ADVANCED" && (
+          <>
 
         {dynamicFormResolutionPending && (
           <Alert severity="info">
@@ -2050,27 +3951,116 @@ const WorkAggregationTab: React.FC<Props> = ({
           </Alert>
         )}
 
-        {Boolean(effectiveParentAssignmentId) && supportsDynamicFormAggregate && (
-          <Alert severity="success">
-            Đã xác định bảng {formatTableModeLabel(resolvedSupportedDynamicFormExcelBlock?.tableMode)} của biểu mẫu động.
+        {selectedBlockStatisticsDisabled && selectedBlockStatisticsDisabledReason && (
+          <Alert severity="warning">
+            {selectedBlockStatisticsDisabledReason}
           </Alert>
         )}
 
         {Boolean(effectiveParentAssignmentId) &&
           supportsDynamicFormAggregate &&
-          resolvedSupportedDynamicFormExcelBlock?.metricOptions.length === 0 &&
-          resolvedSupportedDynamicFormExcelBlock?.tableMode !== "SUMMARY_TEMPLATE" && (
-            <Alert severity="warning">
-              Bảng này chưa cấu hình chỉ tiêu thống kê. Hệ thống sẽ không tự sinh chỉ tiêu cho toàn bộ ô trong vùng dữ liệu.
-            </Alert>
+          resolvedSupportedDynamicFormExcelBlock && (
+            <DynamicFormAggregatePreviewPanel
+              block={previewDynamicFormExcelBlock ?? resolvedSupportedDynamicFormExcelBlock}
+              workbook={templateWorkbook}
+              templateRect={templateRect}
+              templateSpec={templateSpec}
+              selectedTemplateLabel={selectedTemplateLabel}
+              previewHighlights={dynamicFormPreviewHighlights}
+              loading={templateQuery.isFetching}
+              title="Template reporter"
+              description="Bảng bên dưới dùng cùng layout với người nhập báo cáo. Vùng dữ liệu và ô/chỉ tiêu đang đọc được tô màu trực tiếp trên template."
+            />
           )}
 
         {Boolean(effectiveParentAssignmentId) &&
           supportsDynamicFormAggregate &&
-          Boolean(resolvedSupportedDynamicFormExcelBlock?.metricOptions.length) && (
-            <Alert severity="info">
-              Đã có {resolvedSupportedDynamicFormExcelBlock?.metricOptions.length} chỉ tiêu thống kê được cấu hình trong biểu mẫu động.
-            </Alert>
+          (resolvedSupportedDynamicFormExcelBlock?.tableMode === "APPEND_ROWS" ||
+            resolvedSupportedDynamicFormExcelBlock?.tableMode === "APPEND_COLUMNS") && (
+            <Box
+              sx={{
+                p: 2,
+                border: 1,
+                borderColor: "divider",
+                borderRadius: 1,
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  justifyContent="space-between"
+                  alignItems={{ xs: "stretch", sm: "center" }}
+                  spacing={1}
+                >
+                  <Stack spacing={0.25}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                      Chọn chỉ tiêu và định danh nguồn
+                    </Typography>
+                    <Typography variant="body2" sx={{ opacity: 0.72 }}>
+                      {resolvedSupportedDynamicFormExcelBlock?.tableMode === "APPEND_COLUMNS"
+                        ? "Bảng thêm cột dùng hàng định danh nguồn để mô tả từng cột phát sinh."
+                        : "Bảng thêm dòng dùng cột định danh nguồn để mô tả từng dòng phát sinh."}
+                      {" Cấu hình này chỉ lưu cho công việc đang tổng hợp, không sửa biểu mẫu động dùng chung."}
+                    </Typography>
+                  </Stack>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<VisibilityOutlinedIcon fontSize="small" />}
+                      onClick={() => setStackIdentityPreviewOpen(true)}
+                    >
+                      Xem trước định danh
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => void handleSaveAggregateConfig()}
+                      disabled={saveAggregateConfigState.isLoading}
+                    >
+                      {saveAggregateConfigState.isLoading ? "Đang lưu..." : "Lưu cấu hình"}
+                    </Button>
+                  </Stack>
+                </Stack>
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={STACK_IDENTITY_COLUMN_OPTIONS}
+                  value={STACK_IDENTITY_COLUMN_OPTIONS.filter((option) =>
+                    stackIdentityColumns.includes(option.value)
+                  )}
+                  getOptionLabel={(option) => option.label}
+                  isOptionEqualToValue={(option, selected) => option.value === selected.value}
+                  onChange={(_, next) => {
+                    setStackIdentityColumns(next.map((item) => item.value));
+                    setStackIdentityPreviewOpen(true);
+                  }}
+                  renderOption={(props, option) => (
+                    <li {...props}>
+                      <Tooltip
+                        title={`${option.label}: ${option.description}`}
+                        placement="right"
+                        arrow
+                      >
+                        <Box sx={{ width: "100%", py: 0.25 }}>
+                          <Typography variant="body2">{option.label}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.description}
+                          </Typography>
+                        </Box>
+                      </Tooltip>
+                    </li>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={getStackIdentityAxisLabel(resolvedSupportedDynamicFormExcelBlock?.tableMode)}
+                      helperText={getStackIdentityHelperText(resolvedSupportedDynamicFormExcelBlock?.tableMode)}
+                    />
+                  )}
+                />
+              </Stack>
+            </Box>
           )}
 
         {Boolean(effectiveParentAssignmentId) &&
@@ -2093,7 +4083,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           </Alert>
         )}
 
-        {effectiveParentAssignmentId && !selectedScopeIsRoot && (
+        {effectiveParentAssignmentId && (
           <AggregateFilterBar
             value={filter}
             defaultDynamicExcelCode={effectiveDynamicExcelCode}
@@ -2103,14 +4093,38 @@ const WorkAggregationTab: React.FC<Props> = ({
             showAggregateMode={!hasDynamicFormSeed}
             showMetricFilter={supportsDynamicFormAggregate}
             metricOptions={resolvedSupportedDynamicFormExcelBlock?.metricOptions ?? []}
+            metricSummaryText={
+              resolvedSupportedDynamicFormExcelBlock
+                ? formatBlockMetricSummary(resolvedSupportedDynamicFormExcelBlock)
+                : undefined
+            }
+            metricHelperText={formatBlockMetricHelper(resolvedSupportedDynamicFormExcelBlock)}
+            unitOptions={aggregateUnitOptions}
             loading={loading}
+            primaryDisabled={false}
+            sourceSlot={dynamicFormSourceSlot}
+            extraActions={
+              effectiveParentAssignmentId && workId
+                ? [
+                    {
+                      key: "field-statistics",
+                      label: "Thống kê trường Dynamic Form",
+                      tooltip: "Xem thống kê các trường Dynamic Form theo cùng khoảng thời gian và đơn vị",
+                      icon: CalculateOutlinedIcon,
+                      onClick: () => void handleRunFieldStatistics(),
+                      disabled: fieldStatisticState.isLoading,
+                      color: "primary",
+                    },
+                  ]
+                : []
+            }
             onChange={setFilter}
             onRun={() => void handleRunAggregate()}
             onReset={handleReset}
           />
         )}
 
-        {effectiveParentAssignmentId && !selectedScopeIsRoot && workId && (
+        {effectiveParentAssignmentId && workId && fieldStatisticResult && (
           <Box
             sx={{
               p: 2,
@@ -2120,32 +4134,16 @@ const WorkAggregationTab: React.FC<Props> = ({
             }}
           >
             <Stack spacing={1.5}>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                justifyContent="space-between"
-                alignItems={{ xs: "stretch", sm: "center" }}
-                spacing={1}
-              >
-                <Stack spacing={0.25}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    Thống kê trường dữ liệu
-                  </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.72 }}>
-                    Xem nhanh các trường dữ liệu đã bật hiển thị chi tiết.
-                  </Typography>
-                </Stack>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => void handleRunFieldStatistics()}
-                  disabled={fieldStatisticState.isLoading}
-                >
-                  {fieldStatisticState.isLoading ? "Đang tải..." : "Xem thống kê trường dữ liệu"}
-                </Button>
+              <Stack spacing={0.25}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Thống kê trường Dynamic Form
+                </Typography>
+                <Typography variant="body2" sx={{ opacity: 0.72 }}>
+                  Kết quả dùng cùng khoảng thời gian, đơn vị và phạm vi đã chọn ở bộ lọc tập hợp.
+                </Typography>
               </Stack>
 
-              {fieldStatisticResult && (
-                <>
+              <>
                   <Stack direction="row" flexWrap="wrap" gap={1}>
                     <Chip
                       label={`Dòng: ${fieldStatisticResult.totalRows}`}
@@ -2227,8 +4225,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                       </TableBody>
                     </Table>
                   </TableContainer>
-                </>
-              )}
+              </>
             </Stack>
           </Box>
         )}
@@ -2272,7 +4269,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                 variant="outlined"
               />
               <Chip
-                label={`Khối: ${dynamicFormResult.meta.blockId}`}
+                label={`Phần bảng: ${dynamicFormResult.meta.blockId}`}
                 variant="outlined"
               />
               <Chip
@@ -2283,7 +4280,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                 size="small"
                 variant="outlined"
                 startIcon={<FileDownloadOutlinedIcon fontSize="small" />}
-                onClick={() => downloadDynamicFormAggregateCsv(dynamicFormResult)}
+                onClick={() => downloadDynamicFormAggregateCsv(dynamicFormResult, metricLabelByKey)}
               >
                 Xuất CSV
               </Button>
@@ -2291,7 +4288,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                 size="small"
                 variant="outlined"
                 startIcon={<FileDownloadOutlinedIcon fontSize="small" />}
-                onClick={() => void downloadDynamicFormAggregateXlsx(dynamicFormResult)}
+                onClick={() => void downloadDynamicFormAggregateXlsx(dynamicFormResult, metricLabelByKey)}
               >
                 Xuất XLSX
               </Button>
@@ -2300,7 +4297,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                   size="small"
                   variant="outlined"
                   startIcon={<FileDownloadOutlinedIcon fontSize="small" />}
-                  onClick={() => void downloadSummaryTemplateWorkbookXlsx(dynamicFormResult)}
+                  onClick={() => void downloadSummaryTemplateWorkbookXlsx(dynamicFormResult, metricLabelByKey)}
                 >
                   Xuất XLSX theo biểu mẫu
                 </Button>
@@ -2314,183 +4311,45 @@ const WorkAggregationTab: React.FC<Props> = ({
             ))}
 
             <Alert severity="info">
-              Phần tổng hợp dùng các chỉ số đã cấu hình trong biểu mẫu. Bản xem trước tổng hợp đọc dữ liệu từ bảng nguồn đã chọn.
+              Phần tổng hợp dùng các chỉ số đã cấu hình trong biểu mẫu. Bản xem trước đọc dữ liệu từ template/vùng đã chọn.
             </Alert>
 
-            <Box
-              sx={{
-                p: 2,
-                border: 1,
-                borderColor: "divider",
-                borderRadius: 1,
-              }}
-            >
-              <Stack spacing={1.5}>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: {
-                      xs: "1fr",
-                      md: "repeat(2, minmax(0, 1fr))",
-                      xl: "minmax(300px, 1.4fr) max-content max-content minmax(170px, 0.8fr) minmax(140px, 0.7fr) minmax(130px, 0.6fr)",
-                    },
-                    gap: 1,
-                    alignItems: "center",
-                    "& .MuiButton-root": {
-                      minHeight: 40,
-                      whiteSpace: "nowrap",
-                    },
-                  }}
-                >
-                  <TextField
-                    select
-                    size="small"
-                    label="Bản nháp báo cáo"
-                    value={targetDraftReportId}
-                    onChange={(event) => setTargetDraftReportId(event.target.value)}
-                    sx={{ minWidth: 0 }}
-                  >
-                    {targetDraftReports.length === 0 && (
-                      <MenuItem value="" disabled>
-                        Chưa có bản nháp phù hợp
-                      </MenuItem>
-                    )}
-                    {targetDraftReports.map((row) => (
-                      <MenuItem key={row.id} value={row.id}>
-                        {formatDraftReportOptionLabel(row)}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+            <Alert severity="info">
+              Tab tổng hợp chỉ lưu cấu hình và xem trước snapshot. Muốn ghi dữ liệu vào báo cáo, mở báo cáo đích rồi dùng <b>Gán dữ liệu tổng hợp</b> để chọn template, vùng đích và khoảng ngày.
+            </Alert>
 
-                  <Button
-                    variant="outlined"
-                    onClick={() => setPreviewReportId(targetDraftReportId)}
-                    disabled={!targetDraftReportId}
-                  >
-                    Xem report hiện có
-                  </Button>
-
-                  <Button
-                    variant="outlined"
-                    onClick={() => void handlePreviewDynamicFormAggregateDraft()}
-                    disabled={
-                      selectedScopeIsRoot ||
-                      !targetDraftReportId ||
-                      !lastDynamicFormAggregateRequest ||
-                      previewDynamicFormAggregateDraftState.isLoading
-                    }
-                  >
-                    {previewDynamicFormAggregateDraftState.isLoading
-                      ? "Đang preview..."
-                      : "Preview sau khi gán"}
-                  </Button>
-
-                  <TextField
-                    select
-                    size="small"
-                    label="Nguồn dữ liệu"
-                    value={aggregateDraftDataOrigin}
-                    onChange={(event) =>
-                      handleAggregateDraftDataOriginChange(event.target.value as WorkReportDataOrigin)
-                    }
-                    sx={{ minWidth: 0 }}
-                  >
-                    {AGGREGATE_DRAFT_DATA_ORIGINS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-
-                  <TextField
-                    select
-                    size="small"
-                    label="Giá trị"
-                    value={aggregateDraftValueSelector}
-                    onChange={(event) =>
-                      setAggregateDraftValueSelector(event.target.value as AggregateDraftValueSelector)
-                    }
-                    sx={{ minWidth: 0 }}
-                  >
-                    {AGGREGATE_DRAFT_VALUE_SELECTORS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-
-                  <TextField
-                    select
-                    size="small"
-                    label="Ghi đè"
-                    value={aggregateDraftClearExisting ? "YES" : "NO"}
-                    onChange={(event) =>
-                      setAggregateDraftClearExisting(event.target.value === "YES")
-                    }
-                    sx={{ minWidth: 0 }}
-                  >
-                    <MenuItem value="NO">Giữ ô cũ</MenuItem>
-                    <MenuItem value="YES">Xóa ô cũ</MenuItem>
-                  </TextField>
-                </Box>
-
-                <Alert severity="info">
-                  {formatAggregateDraftContributionPolicy(aggregateDraftDataOrigin, aggregateDraftClearExisting)}
-                </Alert>
-
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                  <Button
-                    variant="contained"
-                    onClick={handleRequestApplyDynamicFormAggregateDraft}
-                    disabled={
-                      selectedScopeIsRoot ||
-                      !targetDraftReportId ||
-                      !lastDynamicFormAggregateRequest ||
-                      applyDynamicFormAggregateDraftState.isLoading
-                    }
-                  >
-                    {applyDynamicFormAggregateDraftState.isLoading
-                      ? "Đang ghi..."
-                      : "Ghi vào bản nháp"}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => void handleCreateAggregateDraftReport()}
-                    disabled={
-                      createUserCreatedReportState.isLoading ||
-                      !effectiveParentAssignmentId ||
-                      selectedScopeIsRoot
-                    }
-                  >
-                    {createUserCreatedReportState.isLoading
-                      ? "Đang tạo..."
-                      : "Tạo bản nháp chủ động"}
-                  </Button>
-                </Stack>
-
-                {hasReadOnlyDraftReports && (
-                  <Alert severity="info">
-                    Công việc này có bản nháp cùng biểu mẫu nhưng thuộc người báo cáo khác. Màn tổng hợp chỉ cho ghi vào bản nháp của chính người đang nhập báo cáo; người duyệt vẫn xem được dữ liệu tổng hợp ở phần xem trước.
-                  </Alert>
-                )}
-
-                {targetDraftReports.length === 0 && !hasReadOnlyDraftReports && (
-                  <Alert severity="warning">
-                    Chưa có bản nháp báo cáo phù hợp trong công việc này; có thể tạo bản nháp chủ động nếu công việc cho phép.
-                  </Alert>
-                )}
-              </Stack>
-            </Box>
+            {dynamicFormAggregateWorkbookPreview && (
+              <AggregateWorkbookPreview
+                title="Report tổng hợp theo template reporter"
+                workbook={dynamicFormAggregateWorkbookPreview.workbook}
+                previewRect={dynamicFormAggregateWorkbookPreview.previewRect}
+                spec={templateSpec}
+              />
+            )}
 
             <Stack spacing={0.75}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                Sau khi tổng hợp/gán
+                {dynamicFormResult.stackedTable
+                  ? "Bảng gộp tổng hợp"
+                  : "Bảng xem trước tổng hợp"}
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.72 }}>
-                Đây là kết quả xem trước theo nguồn đã duyệt và bộ lọc hiện tại. Dữ liệu chỉ được ghi khi bấm ghi vào bản nháp.
+                {dynamicFormResult.stackedTable
+                  ? `Bảng ${formatTableModeLabel(dynamicFormResult.meta.tableMode).toLowerCase()} được chuyển thành bảng 2 chiều có ${getStackIdentityAxisLowerLabel(
+                      normalizeTableMode(dynamicFormResult.meta.tableMode),
+                    )}. Nếu chọn khoảng kỳ, hệ thống cộng các ô số và đếm các ô không phải số có dữ liệu trước khi hiển thị.`
+                  : "Đây là kết quả xem trước từ báo cáo đã duyệt và bộ lọc hiện tại; chưa ghi vào báo cáo nào."}
               </Typography>
             </Stack>
 
+            {dynamicFormResult.stackedTable && (
+              <StackedAggregatePreview
+                table={dynamicFormResult.stackedTable}
+                metricLabelByKey={metricLabelByKey}
+              />
+            )}
+
+            {!dynamicFormResult.stackedTable && (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
@@ -2498,9 +4357,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                     {isSummaryTemplateResult && <TableCell align="right">{uiText(UITextKey.TextOutputRow)}</TableCell>}
                     {isSummaryTemplateResult && <TableCell>{uiText(UITextKey.TextGroup)}</TableCell>}
                     {isSummaryTemplateResult && <TableCell>{uiText(UITextKey.TextUnit)}</TableCell>}
-                    <TableCell>{uiText(UITextKey.TextMetricKey)}</TableCell>
-                    <TableCell>{uiText(UITextKey.TextRow)}</TableCell>
-                    <TableCell>{uiText(UITextKey.TextColumn)}</TableCell>
+                    <TableCell>Chỉ tiêu</TableCell>
                     <TableCell align="right">{uiText(UITextKey.TextCount)}</TableCell>
                     {isSummaryTemplateResult && <TableCell align="right">{uiText(UITextKey.TextReports)}</TableCell>}
                     <TableCell align="right">{uiText(UITextKey.TextSum)}</TableCell>
@@ -2521,11 +4378,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                       {isSummaryTemplateResult && (
                         <TableCell>{row.unitShortName || row.unitSymbol || "-"}</TableCell>
                       )}
-                      <TableCell sx={{ maxWidth: 360, wordBreak: "break-all" }}>
-                        {row.metricKey}
-                      </TableCell>
-                      <TableCell>{row.rowKey}</TableCell>
-                      <TableCell>{row.columnKey}</TableCell>
+                      <TableCell>{formatDynamicFormMetricLabel(row)}</TableCell>
                       <TableCell align="right">{row.count}</TableCell>
                       {isSummaryTemplateResult && (
                         <TableCell align="right">{row.reportCount ?? 0}</TableCell>
@@ -2539,6 +4392,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                 </TableBody>
               </Table>
             </TableContainer>
+            )}
 
             <AggregateSourceTable
               rows={dynamicFormResult.sources ?? []}
@@ -2594,68 +4448,9 @@ const WorkAggregationTab: React.FC<Props> = ({
             <AggregateSourceTable rows={result.sources ?? []} onPreviewReport={setPreviewReportId} />
           </>
         )}
+          </>
+        )}
       </Stack>
-
-      <Dialog
-        open={applyConfirmOpen}
-        onClose={() => setApplyConfirmOpen(false)}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Xác nhận ghi vào bản nháp</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={1.5}>
-            <Alert severity="warning">
-              Chỉ bản nháp được cập nhật. Báo cáo đã duyệt không bị ghi đè.
-            </Alert>
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Bản nháp đích
-              </Typography>
-              <Typography fontWeight={700}>
-                {selectedTargetDraftReport
-                  ? formatDraftReportOptionLabel(selectedTargetDraftReport)
-                  : targetDraftReportId || "-"}
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`${dynamicFormResult?.rows?.length ?? 0} chỉ số`}
-              />
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`${dynamicFormResult?.sources?.length ?? 0} báo cáo nguồn`}
-              />
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Giá trị: ${aggregateDraftValueSelector}`}
-              />
-              <Chip
-                size="small"
-                variant="outlined"
-                label={aggregateDraftClearExisting ? "Xóa ô cũ" : "Giữ ô cũ"}
-              />
-            </Stack>
-            <Alert severity="info">
-              {formatAggregateDraftContributionPolicy(aggregateDraftDataOrigin, aggregateDraftClearExisting)}
-            </Alert>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setApplyConfirmOpen(false)}>Hủy</Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleApplyDynamicFormAggregateDraft()}
-            disabled={applyDynamicFormAggregateDraftState.isLoading}
-          >
-            {applyDynamicFormAggregateDraftState.isLoading ? "Đang ghi..." : "Ghi vào bản nháp"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog
         open={Boolean(previewReportId)}
@@ -2663,7 +4458,7 @@ const WorkAggregationTab: React.FC<Props> = ({
         fullWidth
         maxWidth="xl"
       >
-        <DialogTitle>Preview báo cáo</DialogTitle>
+        <DialogTitle>Xem trước báo cáo</DialogTitle>
         <DialogContent dividers sx={{ height: "78vh", p: 0 }}>
           {previewReportId && workId ? (
             <Box sx={{ height: "100%", p: 2 }}>
@@ -2682,27 +4477,35 @@ const WorkAggregationTab: React.FC<Props> = ({
       </Dialog>
 
       <Dialog
-        open={Boolean(mappedPreviewReport)}
-        onClose={() => setMappedPreviewReport(null)}
+        open={stackIdentityPreviewOpen}
+        onClose={() => setStackIdentityPreviewOpen(false)}
         fullWidth
-        maxWidth="xl"
+        maxWidth="lg"
       >
-        <DialogTitle>Preview report sau khi gán tổng hợp</DialogTitle>
-        <DialogContent dividers sx={{ height: "78vh", p: 0 }}>
-          {mappedPreviewReport && workId ? (
-            <Box sx={{ height: "100%", p: 2 }}>
-              <WorkReportEditorPage
-                workId={workId}
-                reportId={mappedPreviewReport.id}
-                previewData={mappedPreviewReport}
-                forceReadOnly
-                onBack={() => setMappedPreviewReport(null)}
-              />
-            </Box>
-          ) : null}
+        <DialogTitle>
+          Xem trước chỉ tiêu và {getStackIdentityAxisLowerLabel(resolvedSupportedDynamicFormExcelBlock?.tableMode)}
+        </DialogTitle>
+        <DialogContent dividers>
+          {resolvedSupportedDynamicFormExcelBlock ? (
+            <StackIdentityPreviewDialogContent
+              block={previewDynamicFormExcelBlock ?? resolvedSupportedDynamicFormExcelBlock}
+              identityColumns={stackIdentityColumns}
+              workbook={templateWorkbook}
+              templateRect={templateRect}
+              templateSpec={templateSpec}
+              previewHighlights={dynamicFormPreviewHighlights}
+              loading={templateQuery.isFetching}
+              periodScopeMode={filter.periodScopeMode}
+              selectedTemplateLabel={selectedTemplateLabel}
+            />
+          ) : (
+            <Alert severity="warning">
+              Chưa xác định được template/vùng của biểu mẫu động để xem trước định danh.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setMappedPreviewReport(null)}>Đóng</Button>
+          <Button onClick={() => setStackIdentityPreviewOpen(false)}>Đóng</Button>
         </DialogActions>
       </Dialog>
 
@@ -2743,7 +4546,7 @@ const WorkAggregationTab: React.FC<Props> = ({
 
               {fieldTextConcatResult.hasMoreReportsThanScanLimit && (
                 <Alert severity="warning">
-                  Result is capped by scanLimit. Narrow the period or status filter for a fuller read.
+                  Kết quả đang bị giới hạn bởi số dòng quét tối đa. Hãy thu hẹp kỳ hoặc bộ lọc trạng thái để đọc đầy đủ hơn.
                 </Alert>
               )}
 

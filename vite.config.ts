@@ -1,5 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+const localNodeModules = path.resolve(dirname, "node_modules");
+
+function localPackage(packageName: string) {
+  return path.resolve(localNodeModules, packageName);
+}
 
 function manualChunks(id: string) {
   const normalizedId = id.replace(/\\/g, "/");
@@ -51,6 +60,23 @@ function manualChunks(id: string) {
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: [
+      "react",
+      "react-dom",
+      "@emotion/react",
+      "@emotion/styled",
+      "@emotion/cache",
+      "@mui/material",
+      "@mui/system",
+      "@mui/styled-engine",
+    ],
+    alias: {
+      "@emotion/react": localPackage("@emotion/react"),
+      "@emotion/styled": localPackage("@emotion/styled"),
+      "@emotion/cache": localPackage("@emotion/cache"),
+    },
+  },
   build: {
     // Fortune Sheet ships its core as one large ESM bundle. We isolate it behind lazy routes
     // and keep the warning threshold aligned with that unavoidable lazy vendor chunk.

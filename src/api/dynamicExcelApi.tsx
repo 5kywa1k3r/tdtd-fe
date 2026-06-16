@@ -55,6 +55,13 @@ export type CreateDynamicExcelReq = {
 
 export type UpdateDynamicExcelReq = {
   name: string;
+  tableMode?: DynamicExcelTableMode | null;
+  contractVersion?: number | null;
+  rawWorkbookDataJson?: string | null;
+  specJson?: string | null;
+  dataRect?: { r0: number; c0: number; r1: number; c1: number } | null;
+  w?: number | null;
+  h?: number | null;
 };
 
 export const dynamicExcelApi = baseApi.injectEndpoints({

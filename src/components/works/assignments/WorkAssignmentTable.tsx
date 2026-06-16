@@ -18,6 +18,8 @@ import { UITextKey, uiText } from '../../../constants/uiText';
 
 export interface AssignmentTableRow {
   id: string;
+  code?: string | null;
+  name?: string | null;
   dynamicExcelId?: string | null;
   dynamicExcelCode?: string | null;
   dynamicExcelName?: string | null;
@@ -66,10 +68,12 @@ export interface AssignmentTableRow {
   parentAssignmentId?: string | null;
   rootAssignmentId?: string | null;
   level?: number | null;
+  path?: string | null;
 }
 
 interface WorkAssignmentTableProps {
   rows: AssignmentTableRow[];
+  readOnly?: boolean;
   onViewDetail?: (row: AssignmentTableRow) => void;
   onPreviewTemplate?: (row: AssignmentTableRow) => void;
   onOpenAggregate?: (row: AssignmentTableRow) => void;
@@ -87,6 +91,10 @@ function getTemplateLabel(row: AssignmentTableRow) {
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
   if (code && name) return `${code} - ${name}`;
   return code || name || row.id;
+}
+
+function getAssignmentName(row: AssignmentTableRow) {
+  return row.name?.trim() || row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim() || row.id;
 }
 
 function getAssigneeSummary(row: AssignmentTableRow) {
@@ -133,6 +141,7 @@ function isAssignmentCompleted(row: AssignmentTableRow) {
 
 const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
   rows,
+  readOnly = false,
   onViewDetail,
   onPreviewTemplate,
   onEvaluate,
@@ -149,7 +158,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
       {
         field: "actions",
         header: "Thao tác",
-        width: 330,
+        width: 370,
         align: "center",
         sortable: false,
         render: (row) => (
@@ -197,7 +206,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={!row.evaluationTemplateId}
+                  disabled={readOnly || !row.evaluationTemplateId}
                   onClick={(e) => {
                     e.stopPropagation();
                     onEvaluate?.(row);
@@ -211,14 +220,13 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
             <Tooltip
               title={
                 isRootAssignment(row)
-                  ? "Assignment root không ghi tổng hợp lên báo cáo cấp trên"
+                  ? "Tổng hợp bảng từ các assignment đã giao"
                   : uiText(UITextKey.TextTongHop)
               }
             >
               <span>
                 <IconButton
                   size="small"
-                  disabled={isRootAssignment(row)}
                   onClick={(e) => {
                     e.stopPropagation();
                     onOpenAggregate?.(row);
@@ -239,7 +247,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={!row.dynamicFormTemplateId}
+                  disabled={readOnly || !row.dynamicFormTemplateId}
                   onClick={(e) => {
                     e.stopPropagation();
                     onConfigureSourceRules?.(row);
@@ -260,7 +268,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={!row.dynamicFormTemplateId}
+                  disabled={readOnly || !row.dynamicFormTemplateId}
                   color={row.autoApproveConditionJson ? "success" : "default"}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -273,22 +281,25 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
             </Tooltip>
 
             <Tooltip title={row.isActive ? "Ngừng hiệu lực" : "Kích hoạt lại"}>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleActive?.(row);
-                }}
-              >
-                <PowerSettingsNewIcon fontSize="small" />
-              </IconButton>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={readOnly}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleActive?.(row);
+                  }}
+                >
+                  <PowerSettingsNewIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
 
             <Tooltip title={isAssignmentCompleted(row) ? completedActionLabel : completeActionLabel}>
               <span>
                 <IconButton
                   size="small"
-                  disabled={isAssignmentCompleted(row)}
+                  disabled={readOnly || isAssignmentCompleted(row)}
                   color={isAssignmentCompleted(row) ? "success" : "default"}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -303,10 +314,28 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         ),
       },
       {
+        field: "name",
+        header: "Công việc",
+        sortable: true,
+        width: "20%",
+        getSortValue: (row) => `${row.code || ""} ${getAssignmentName(row)}`.toLowerCase(),
+        render: (row) => (
+          <Stack spacing={0.45} sx={{ minWidth: 0 }}>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={row.code || "Chưa có mã"}
+              sx={{ width: "fit-content", maxWidth: "100%" }}
+            />
+            <CommonLabelText text={getAssignmentName(row)} fontWeight={700} />
+          </Stack>
+        ),
+      },
+      {
         field: "dynamicFormTemplateCode",
         header: "Biểu mẫu",
         sortable: true,
-        width: "22%",
+        width: "18%",
         getSortValue: (row) => getTemplateLabel(row).toLowerCase(),
         render: (row) => (
           <CommonLabelText
@@ -403,7 +432,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         render: (row) => (
           <Stack spacing={0.25}>
             <CommonDateText value={row.startDate} />
-            <CommonDateText value={row.dueDate} />
+            {row.assignmentType !== "ONCE" ? <CommonDateText value={row.dueDate} /> : null}
           </Stack>
         ),
       },
@@ -452,6 +481,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
       onPreviewTemplate,
       onToggleActive,
       onViewDetail,
+      readOnly,
     ]
   );
 

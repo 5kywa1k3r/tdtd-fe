@@ -45,17 +45,12 @@ const SOURCE_RULE_OPTIONS: Array<{ value: DynamicFormDataSourceRuleType; label: 
   {
     value: "MANUAL",
     label: "Nhập tay",
-    help: "Reporter nhập trực tiếp phần này.",
-  },
-  {
-    value: "AGGREGATE_CHILDREN",
-    label: "Tự tổng hợp từ cấp dưới",
-    help: "Lấy dữ liệu từ báo cáo đã duyệt của công việc con trực tiếp.",
+    help: "Người báo cáo nhập trực tiếp phần này.",
   },
   {
     value: "MAP_CHILD",
     label: "Gắn một phần từ cấp dưới",
-    help: "Map dữ liệu từ section/field/block của công việc con trực tiếp.",
+    help: "Gắn dữ liệu từ phần, trường hoặc khối của công việc con trực tiếp.",
   },
   {
     value: "MIXED",
@@ -66,7 +61,7 @@ const SOURCE_RULE_OPTIONS: Array<{ value: DynamicFormDataSourceRuleType; label: 
 
 function normalizeSourceRule(value: unknown): DynamicFormDataSourceRuleType {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
-  if (normalized === "AGGREGATE_CHILDREN" || normalized === "MAP_CHILD" || normalized === "MIXED") {
+  if (normalized === "MAP_CHILD" || normalized === "MIXED") {
     return normalized;
   }
   return "MANUAL";
@@ -185,8 +180,6 @@ const WorkAssignmentSourceRulesDialog: React.FC<Props> = ({
     [dynamicForm?.sections, rulesJson]
   );
 
-  const allSectionsAutomatic =
-    sectionRules.length > 0 && sectionRules.every((rule) => rule.sourceRule === "AGGREGATE_CHILDREN");
   const hasNonManualSection = sectionRules.some((rule) => rule.sourceRule !== "MANUAL");
 
   const updateRule = React.useCallback(
@@ -239,9 +232,7 @@ const WorkAssignmentSourceRulesDialog: React.FC<Props> = ({
           ) : null}
 
           <Stack direction="row" spacing={1} alignItems="center">
-            {allSectionsAutomatic ? (
-              <Chip size="small" color="info" label="Report tự tổng hợp" />
-            ) : hasNonManualSection ? (
+            {hasNonManualSection ? (
               <Chip size="small" variant="outlined" label="Có phần lấy từ cấp dưới" />
             ) : (
               <Chip size="small" variant="outlined" label="Nhập tay" />
@@ -253,8 +244,9 @@ const WorkAssignmentSourceRulesDialog: React.FC<Props> = ({
           ) : !dynamicForm ? (
             <Alert severity="warning">Chưa tải được cấu trúc biểu mẫu để cấu hình theo phần.</Alert>
           ) : (
-            <Stack spacing={1.25}>
-              {dynamicForm.sections.map((section, index) => {
+            <Box sx={{ maxHeight: { xs: 320, md: 420 }, overflowY: "auto", pr: 0.5, scrollbarGutter: "stable" }}>
+              <Stack spacing={1.25}>
+                {dynamicForm.sections.map((section, index) => {
                 const rule = sectionRules.find((item) => item.sectionId === section.id);
                 const sourceRule = rule?.sourceRule ?? "MANUAL";
                 const selectedIds = rule?.sourceAssignmentIds ?? [];
@@ -308,6 +300,7 @@ const WorkAssignmentSourceRulesDialog: React.FC<Props> = ({
                         <Autocomplete
                           multiple
                           size="small"
+                          limitTags={3}
                           options={options}
                           value={selectedOptions}
                           disableCloseOnSelect
@@ -325,8 +318,8 @@ const WorkAssignmentSourceRulesDialog: React.FC<Props> = ({
                               label="Công việc con làm nguồn"
                               helperText={
                                 selectedIds.length === 0
-                                  ? "Để trống nghĩa là chưa chốt nguồn cụ thể; hệ thống chưa materialize tự động từ rule này."
-                                  : "BE chỉ chấp nhận công việc con trực tiếp của công việc đang cấu hình."
+                                  ? "Để trống nghĩa là chưa chốt nguồn cụ thể; gắn chi tiết sẽ cấu hình thủ công ở bước sau."
+                                  : "Hệ thống chỉ chấp nhận công việc con trực tiếp của công việc đang cấu hình."
                               }
                             />
                           )}
@@ -335,14 +328,15 @@ const WorkAssignmentSourceRulesDialog: React.FC<Props> = ({
                     </Stack>
                   </React.Fragment>
                 );
-              })}
-            </Stack>
+                })}
+              </Stack>
+            </Box>
           )}
 
           {hasNonManualSection ? (
-            <Alert severity="info">
-              `Tự tổng hợp` và `Gắn một phần` hiện lưu contract theo section và danh sách công việc con. Mapping sâu theo field/block và preview dữ liệu sẽ nối tiếp ở bước sau.
-            </Alert>
+          <Alert severity="info">
+              `Gắn một phần` hiện chỉ lưu cấu hình theo phần và danh sách công việc con. Bước gắn sâu theo trường/khối và xem trước dữ liệu sẽ được nối tiếp sau.
+          </Alert>
           ) : null}
         </Stack>
       </DialogContent>

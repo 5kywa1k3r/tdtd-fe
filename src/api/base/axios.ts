@@ -11,6 +11,16 @@ function isAuthRequest(url: string, path: string): boolean {
   return url === path || url.endsWith(path) || url.includes(path);
 }
 
+function getErrorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+
+  const responseStatus = (error as { response?: { status?: unknown } }).response?.status;
+  if (typeof responseStatus === 'number') return responseStatus;
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
 // main api
 export const api = axios.create({
   baseURL,
@@ -93,7 +103,9 @@ api.interceptors.response.use(
 
         return api.request(original);
       } catch (e) {
-        performLogout();
+        if (getErrorStatus(e) === 401) {
+          performLogout();
+        }
         return Promise.reject(normalizeApiError(e));
       }
     }

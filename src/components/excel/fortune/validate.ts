@@ -1,6 +1,13 @@
 // src/components/excel/fortune/validate.ts
 import type { Anchor, HeaderCell, HeaderSpec, ValidationIssue } from "./types";
 import { computeRegions, getTableRect, type Rect } from "./regions";
+import {
+  buildInputCellRefs,
+  getSpecialRanges,
+  isCellInRect as isCellInSpecialRect,
+  rectContainsRect,
+  validateSpecialRanges,
+} from "./specialRanges";
 
 /* ================= helpers ================= */
 
@@ -89,7 +96,7 @@ export function validateHeader(params: {
         }
       : null;
 
-  // MATRIX: vùng giao “góc trên trái” được phép để trống
+  // MATRIX: goc tren trai la header/layout. No co the de trong, nhung neu co text/merge thi van hop le.
   const cornerGap: Rect | null =
     spec.kind === "MATRIX"
       ? {
@@ -101,15 +108,17 @@ export function validateHeader(params: {
       : null;
 
   const isInHeader = (r: number, c: number) => {
+    if (getSpecialRanges(spec).some((range) => isCellInSpecialRect(r, c, range))) return true;
+
     if (spec.kind === "TOP") return !!top && inRect(r, c, top);
     if (spec.kind === "LEFT") return !!left && inRect(r, c, left);
 
-    // MATRIX = union(top,left) trừ cornerGap
+    // MATRIX = union(top,left,corner)
     const inTop = !!top && inRect(r, c, top);
     const inLeft = !!left && inRect(r, c, left);
     const inGap = !!cornerGap && inRect(r, c, cornerGap);
 
-    return (inTop || inLeft) && !inGap;
+    return inTop || inLeft || inGap;
   };
 
   const overlapsHeaderUnion = (R: Rect) => {
@@ -216,10 +225,12 @@ export type DesignerLimitIssue = {
 };
 
 export const DESIGNER_LIMITS = {
-  MAX_DATA_CELLS: 250,     // values1D length
+  MAX_DATA_CELLS: 10000,   // values1D length
+  MAX_TABLE_STATISTIC_INPUT_CELLS: 250, // background per-cell statistic projection
+  MAX_DIRECT_AGGREGATE_INPUT_CELLS: 10000,
   MAX_HEADER_ROWS: 30,     // headerRect height
   MAX_HEADER_COLS: 30,     // headerRect width
-  MAX_SHEET_CELLS: 5000,   // max render cells (tableRect)
+  MAX_SHEET_CELLS: 20000,  // max render cells (tableRect)
 } as const;
 
 export function validateSpecLimits(spec: HeaderSpec) {
@@ -230,14 +241,15 @@ export function validateSpecLimits(spec: HeaderSpec) {
   const sheetCols = rectCols(table);
   const sheetCells = sheetRows * sheetCols;
 
-  const headerRows = rectRows(headerRect);
-  const headerCols = rectCols(headerRect);
+  const headerRows = spec.kind === "LEFT" ? 1 : rectRows(headerRect);
+  const headerCols = spec.kind === "TOP" ? 1 : spec.kind === "LEFT" ? spec.leftCols : spec.leftCols;
 
   const dataRows = rectRows(dataRect);
   const dataCols = rectCols(dataRect);
-  const dataCells = dataRows * dataCols;
+  const specialIssues = validateSpecialRanges(spec, dataRect);
+  const dataCells = buildInputCellRefs(dataRect, spec).length;
 
-  const issues: DesignerLimitIssue[] = [];
+  const issues: Array<DesignerLimitIssue | ReturnType<typeof validateSpecialRanges>[number]> = [...specialIssues];
 
   if (sheetCells > DESIGNER_LIMITS.MAX_SHEET_CELLS) {
     issues.push({
@@ -256,16 +268,17 @@ export function validateSpecLimits(spec: HeaderSpec) {
   if (dataCells > DESIGNER_LIMITS.MAX_DATA_CELLS) {
     issues.push({
       code: "DATA_TOO_LARGE",
-      message: `Vùng dữ liệu quá lớn (${dataCols}x${dataRows} = ${dataCells} ô). Giới hạn values1D: ${DESIGNER_LIMITS.MAX_DATA_CELLS} ô.`,
+      message: `Vung du lieu co ${dataCells} o nhap trong dataRect ${dataCols}x${dataRows}. Gioi han values1D: ${DESIGNER_LIMITS.MAX_DATA_CELLS} o.`,
     });
   }
 
   return { ok: issues.length === 0, issues, table, headerRect, dataRect };
 }
 
-export function validateNoMergeInDataRange(merge: Record<string, any>, dataRect: Rect) {
+export function validateNoMergeInDataRange(merge: Record<string, any>, dataRect: Rect, spec?: HeaderSpec | null) {
   const issues: any[] = [];
   const mm = merge ?? {};
+  const specialRanges = getSpecialRanges(spec);
 
   for (const m of Object.values<any>(mm)) {
     const r0 = Number(m?.r ?? -1);
@@ -285,6 +298,10 @@ export function validateNoMergeInDataRange(merge: Record<string, any>, dataRect:
       c1 >= dataRect.c0;
 
     if (intersect) {
+      const mergeRect = { r0, c0, r1, c1 };
+      const coveredBySpecial = specialRanges.some((range) => rectContainsRect(range, mergeRect));
+      if (coveredBySpecial) continue;
+
       issues.push({
         code: "DATA_MERGE_NOT_ALLOWED",
         message: `Không cho phép merge trong vùng dữ liệu. Merge tại ô ${toExcel(r0, c0)}.`,

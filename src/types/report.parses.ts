@@ -8,6 +8,8 @@ import type {
   ParsedWorkAssignmentReportDetail,
   ReportCellValue,
 } from "./report.helper";
+import type { HeaderSpec } from "../components/excel/fortune/types";
+import { buildCellRefsForValues } from "../components/excel/fortune/specialRanges";
 
 export function safeParseJson<T>(input?: string | null, fallback?: T): T | undefined {
   if (!input) return fallback;
@@ -37,6 +39,9 @@ export function parseMyReportTemplateDetail(
 }
 
 function safeClone<T>(x: T): T {
+  if (typeof structuredClone === "function") {
+    return structuredClone(x);
+  }
   return JSON.parse(JSON.stringify(x));
 }
 
@@ -186,11 +191,12 @@ export function applyValues1DToWorkbook(
     c0: number;
     w: number;
     h: number;
+    spec?: HeaderSpec | null;
   }
 ): any[] {
   if (!Array.isArray(workbook) || workbook.length === 0) return workbook;
 
-  const { values1D, r0, c0, w, h } = input;
+  const { values1D, r0, c0, w, h, spec } = input;
   if (!Array.isArray(values1D) || w <= 0 || h <= 0) return workbook;
 
   const next = safeClone(workbook);
@@ -200,6 +206,9 @@ export function applyValues1DToWorkbook(
 
   const rowCount = Math.max(sheet.row ?? 0, r0 + h, 1);
   const colCount = Math.max(sheet.column ?? 0, c0 + w, 1);
+  const dataRect = { r0, c0, r1: r0 + h - 1, c1: c0 + w - 1 };
+  const cellRefs = buildCellRefsForValues(dataRect, spec, values1D.length);
+  if (cellRefs.length !== values1D.length) return next;
 
   const data = Array.isArray(sheet.data)
     ? safeClone(sheet.data)
@@ -215,23 +224,16 @@ export function applyValues1DToWorkbook(
     }
   }
 
-  for (let rr = 0; rr < h; rr++) {
-    for (let cc = 0; cc < w; cc++) {
-      const idx = rr * w + cc;
-      const row = r0 + rr;
-      const col = c0 + cc;
-      const raw = values1D[idx];
+  let celldata = Array.isArray(sheet.celldata) ? safeClone(sheet.celldata) : [];
 
-      const displayValue = Array.isArray(raw) ? raw.join("; ") : String(raw);
+  for (let idx = 0; idx < cellRefs.length; idx += 1) {
+    const { r: row, c: col } = cellRefs[idx];
+    const raw = values1D[idx];
+    const existing = data[row]?.[col] ?? findCelldataValue(celldata, row, col);
+    const nextCell = buildOverlayCell(existing, raw);
 
-      data[row][col] =
-        raw == null || raw === "" || (Array.isArray(raw) && raw.length === 0)
-          ? null
-          : {
-              v: displayValue,
-              m: displayValue,
-            };
-    }
+    data[row][col] = nextCell;
+    celldata = upsertCelldataCell(celldata, row, col, nextCell);
   }
 
   sheet.id = sheetId;
@@ -240,9 +242,51 @@ export function applyValues1DToWorkbook(
   sheet.row = rowCount;
   sheet.column = colCount;
   sheet.data = data;
-  sheet.celldata = buildCelldataFromData(data);
+  sheet.celldata = celldata;
 
   return next;
+}
+
+function findCelldataValue(celldata: any[], r: number, c: number) {
+  return celldata.find((item) => Number(item?.r) === r && Number(item?.c) === c)?.v ?? null;
+}
+
+function buildOverlayCell(existing: any, raw: ReportCellValue) {
+  if (isBlankReportCellValue(raw)) {
+    if (!existing || typeof existing !== "object") return null;
+    const next = { ...existing };
+    delete next.v;
+    delete next.m;
+    delete next.ct;
+    return Object.keys(next).length > 0 ? next : null;
+  }
+
+  const displayValue = Array.isArray(raw) ? raw.join("; ") : String(raw);
+  return existing && typeof existing === "object"
+    ? { ...existing, v: displayValue, m: displayValue }
+    : { v: displayValue, m: displayValue };
+}
+
+function upsertCelldataCell(celldata: any[], r: number, c: number, cell: any) {
+  const index = celldata.findIndex((item) => Number(item?.r) === r && Number(item?.c) === c);
+  if (cell == null) {
+    return index >= 0 ? celldata.filter((_item, itemIndex) => itemIndex !== index) : celldata;
+  }
+
+  const nextItem = { r, c, v: cell };
+  if (index >= 0) {
+    const next = celldata.slice();
+    next[index] = nextItem;
+    return next;
+  }
+
+  return [...celldata, nextItem];
+}
+
+function isBlankReportCellValue(value: ReportCellValue | undefined) {
+  return value == null ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0);
 }
 
 export function parseReportDetail(
@@ -265,6 +309,7 @@ export function parseReportDetail(
     c0: report.dataRectC0,
     w: report.w,
     h: report.h,
+    spec,
   });
 
   return {

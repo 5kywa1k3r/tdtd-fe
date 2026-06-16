@@ -10,6 +10,7 @@ export type ReviewStatusBucket =
 
 export interface ReviewSummarySearchRequest {
   workId: string;
+  scopeAssignmentId?: string | null;
   q?: string | null;
   dynamicExcelId?: string | null;
   periodKey?: string | null;
@@ -62,6 +63,7 @@ export interface ReviewSummaryRowDto {
 export interface ReviewReportFlatSearchRequest {
   workId: string;
   assignmentId: string;
+  scopeAssignmentId?: string | null;
   q?: string | null;
   dynamicExcelId?: string | null;
   periodKey?: string | null;

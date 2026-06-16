@@ -29,6 +29,7 @@ import HistoryIcon from "@mui/icons-material/History";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import TableViewOutlinedIcon from "@mui/icons-material/TableViewOutlined";
 
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import CommonDateText from "../../common/CommonDateText";
@@ -53,6 +54,7 @@ import {
 import DynamicFormPreview from "../../../features/dynamicForms/components/DynamicFormPreview";
 
 import WorkAssignmentTable, { type AssignmentTableRow } from "./WorkAssignmentTable";
+import { getAssignmentDisplayName, getAssignmentLabel, toAssignmentRow } from "./AssignmentBranchTree";
 import WorkAssignmentCreateDialog, {
   defaultAssignmentCreateValue,
   type AssignmentCreateValue,
@@ -80,6 +82,10 @@ type Props = {
   onOpenAggregation?: (row: AssignmentTableRow) => void;
   onOpenReports?: () => void;
   onOpenReview?: () => void;
+  selectedBranch?: AssignmentTableRow | null;
+  branchRows?: AssignmentTableRow[];
+  branchLoading?: boolean;
+  branchError?: boolean;
 };
 
 type AssignSection = "LIST" | "ACTIONS" | "NOTIFICATIONS" | "HANDOVER";
@@ -103,6 +109,8 @@ function getAssignmentSearchText(row: AssignmentTableRow) {
     .join(" ");
 
   return [
+    row.code,
+    row.name,
     template,
     assignees,
     row.evaluationTemplateCode,
@@ -114,12 +122,129 @@ function getAssignmentSearchText(row: AssignmentTableRow) {
     .join(" ");
 }
 
-function getAssignmentLabel(row?: AssignmentTableRow | null) {
-  if (!row) return "";
-  const code = row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
-  const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
-  const label = [code, name].filter(Boolean).join(" - ");
-  return label || row.id;
+export function AssignmentBranchTree({
+  rootRows,
+  childrenByParentId,
+  activeId,
+  pathIds,
+  onSelectRoot,
+  onSelectNode,
+}: {
+  rootRows: AssignmentTableRow[];
+  childrenByParentId: Record<string, AssignmentTableRow[]>;
+  activeId: string | null;
+  pathIds: string[];
+  onSelectRoot: () => void;
+  onSelectNode: (id: string) => void;
+}) {
+  const renderNode = (
+    row: AssignmentTableRow,
+    depth: number,
+    visited: Set<string> = new Set()
+  ): React.ReactNode => {
+    if (!row.id || visited.has(row.id)) return null;
+
+    const nextVisited = new Set(visited);
+    nextVisited.add(row.id);
+    const isActive = row.id === activeId;
+    const children = (childrenByParentId[row.id] ?? []).filter(
+      (child) => child.id && !nextVisited.has(child.id)
+    );
+    const expanded = pathIds.includes(row.id);
+
+    return (
+      <Box key={row.id}>
+        <Box
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelectNode(row.id)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") onSelectNode(row.id);
+          }}
+          sx={{
+            ml: depth * 1.5,
+            px: 1,
+            py: 0.8,
+            borderRadius: "8px",
+            cursor: "pointer",
+            bgcolor: isActive ? alpha("#2563eb", 0.1) : "transparent",
+            border: "1px solid",
+            borderColor: isActive ? alpha("#2563eb", 0.28) : "transparent",
+            "&:hover": { bgcolor: alpha("#2563eb", 0.08) },
+          }}
+        >
+          <Stack spacing={0.45} sx={{ minWidth: 0 }}>
+            <Chip
+              size="small"
+              variant={isActive ? "filled" : "outlined"}
+              color={isActive ? "primary" : "default"}
+              label={row.code || "Chưa có mã"}
+              sx={{ width: "fit-content", maxWidth: "100%" }}
+            />
+            <Typography variant="caption" sx={{ fontWeight: isActive ? 800 : 600 }} noWrap>
+              {getAssignmentDisplayName(row)}
+            </Typography>
+          </Stack>
+        </Box>
+        {expanded && children.length > 0 ? (
+          <Stack spacing={0.4} sx={{ mt: 0.4 }}>
+            {children.map((child) => renderNode(child, depth + 1, nextVisited))}
+          </Stack>
+        ) : null}
+      </Box>
+    );
+  };
+
+  return (
+    <Box
+      sx={{
+        width: { xs: "100%", lg: 280 },
+        flex: { xs: "0 0 auto", lg: "0 0 280px" },
+        maxHeight: { xs: 260, lg: "100%" },
+        minHeight: 0,
+        overflow: "auto",
+        border: "1px solid #e2e8f0",
+        borderRadius: "8px",
+        bgcolor: "#fff",
+        p: 1,
+      }}
+    >
+      <Stack spacing={0.6}>
+        <Box
+          role="button"
+          tabIndex={0}
+          onClick={onSelectRoot}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") onSelectRoot();
+          }}
+          sx={{
+            px: 1,
+            py: 0.8,
+            borderRadius: "8px",
+            cursor: "pointer",
+            bgcolor: activeId ? "transparent" : alpha("#2563eb", 0.1),
+            border: "1px solid",
+            borderColor: activeId ? "transparent" : alpha("#2563eb", 0.28),
+            "&:hover": { bgcolor: alpha("#2563eb", 0.08) },
+          }}
+        >
+          <Stack spacing={0.45}>
+            <Chip
+              size="small"
+              color={activeId ? "default" : "primary"}
+              variant={activeId ? "outlined" : "filled"}
+              label="WORK"
+              sx={{ width: "fit-content" }}
+            />
+            <Typography variant="caption" sx={{ fontWeight: activeId ? 600 : 800 }} noWrap>
+              Danh sách giao việc
+            </Typography>
+          </Stack>
+        </Box>
+        {rootRows.map((row) => renderNode(row, 0))}
+      </Stack>
+    </Box>
+  );
 }
 
 function getCompletionCopy(isWorkOwner: boolean, workType: "TASK" | "INDICATOR") {
@@ -148,6 +273,27 @@ function dayKeyToApiDate(dayKey?: string | null) {
   const normalized = String(dayKey ?? "").replace(/\D/g, "").slice(0, 8);
   if (normalized.length !== 8) return null;
   return `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}T00:00:00.000Z`;
+}
+
+function resolveInheritedAssignmentDueDayKey(
+  parent: {
+    dueDate?: string | null;
+    completedDate?: string | null;
+    completedAtUtc?: string | null;
+    dueAtUtc?: string | null;
+    latestDueAtUtc?: string | null;
+  } | null | undefined,
+  workBoundaryEndDay: string
+) {
+  if (!parent) return workBoundaryEndDay;
+
+  return (
+    toDayKey(parent.dueDate) ||
+    (!parent.completedAtUtc ? toDayKey(parent.completedDate) : "") ||
+    toDayKey(parent.dueAtUtc) ||
+    toDayKey(parent.latestDueAtUtc) ||
+    workBoundaryEndDay
+  );
 }
 
 function dayKeyToInputDate(dayKey?: string | null) {
@@ -197,50 +343,11 @@ function getHandoverResultLabel(result?: string | null): string {
   return result || "-";
 }
 
-function toAssignmentRow(x: WorkAssignmentListResponse): AssignmentTableRow {
-  return {
-    id: String(x?.id ?? ""),
-    dynamicExcelId: x?.dynamicExcelId ?? null,
-    dynamicExcelCode: x?.dynamicExcelCode ?? null,
-    dynamicExcelName: x?.dynamicExcelName ?? null,
-    dynamicFormTemplateId: x?.dynamicFormTemplateId ?? null,
-    dynamicFormTemplateCode: x?.dynamicFormTemplateCode ?? null,
-    dynamicFormTemplateName: x?.dynamicFormTemplateName ?? null,
-    dynamicFormDataSourceRulesJson: x?.dynamicFormDataSourceRulesJson ?? null,
-    autoApproveConditionJson: x?.autoApproveConditionJson ?? null,
-    assignmentType: x?.assignmentType ?? null,
-    aggregationType: x?.aggregationType ?? null,
-    assignees: x?.assignees ?? [],
-    isActive: x?.isActive ?? true,
-    createdAtUtc: x?.createdAtUtc ?? null,
-    updatedAtUtc: x?.updatedAtUtc ?? null,
-    progressStatus: x?.progressStatus ?? 0,
-    progressStatusUpdatedAtUtc: x?.progressStatusUpdatedAtUtc ?? null,
-    latestPeriodKey: x?.latestPeriodKey ?? null,
-    latestDueAtUtc: x?.latestDueAtUtc ?? null,
-    hasAnyDuePeriod: x?.hasAnyDuePeriod ?? false,
-    hasOverduePeriod: x?.hasOverduePeriod ?? false,
-    startDate: x?.startDate ?? null,
-    dueDate: x?.dueDate ?? null,
-    completedDate: x?.completedDate ?? null,
-    completedAtUtc: x?.completedAtUtc ?? null,
-    completedByUserId: x?.completedByUserId ?? null,
-    evaluationTemplateId: x?.evaluationTemplateId ?? null,
-    evaluationTemplateCode: x?.evaluationTemplateCode ?? null,
-    evaluationTemplateLabel: x?.evaluationTemplateLabel ?? null,
-    evaluationCode: x?.evaluationCode ?? null,
-    evaluationLabel: x?.evaluationLabel ?? null,
-    evaluatedAssignmentCount: x?.evaluatedAssignmentCount ?? 0,
-    worstEvaluationCode: x?.worstEvaluationCode ?? null,
-    worstEvaluationLabel: x?.worstEvaluationLabel ?? null,
-    dueAtUtc: x?.dueAtUtc ?? null,
-  };
-}
-
 function toDetailDialogValue(x: WorkAssignmentResponse): AssignmentCreateValue {
   const draft = toAssignmentDraft(x);
 
   return {
+    name: draft.name ?? "",
     createMode: draft.createMode ?? "root",
     parentAssignmentId: draft.parentAssignmentId ?? null,
 
@@ -287,6 +394,10 @@ const WorkAssignTab: React.FC<Props> = ({
   onOpenAggregation,
   onOpenReports,
   onOpenReview,
+  selectedBranch = null,
+  branchRows = [],
+  branchLoading = false,
+  branchError = false,
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, isFetching, error, refetch } = useGetWorkAssignmentsByWorkQuery(
@@ -312,8 +423,8 @@ const WorkAssignTab: React.FC<Props> = ({
     if (rawTab === "NOTIFICATIONS" || rawSection === "NOTIFICATIONS") return "NOTIFICATIONS";
     return "LIST";
   }, [searchParams]);
-  const queryAssignmentId = React.useMemo(
-    () => (searchParams.get("assignmentId") || "").trim(),
+  const queryDetailAssignmentId = React.useMemo(
+    () => (searchParams.get("detailAssignmentId") || "").trim(),
     [searchParams]
   );
 
@@ -353,6 +464,18 @@ const WorkAssignTab: React.FC<Props> = ({
     () => ((data ?? []) as WorkAssignmentListResponse[]).map(toAssignmentRow),
     [data]
   );
+  const currentParent = selectedBranch ?? null;
+  const isDrillView = Boolean(currentParent);
+
+  const entryRows = React.useMemo(() => {
+    const visibleIds = new Set(rows.map((row) => row.id));
+    return rows.filter((row) => {
+      const parentId = row.parentAssignmentId?.trim();
+      return !parentId || !visibleIds.has(parentId);
+    });
+  }, [rows]);
+
+  const visibleRows = currentParent ? branchRows : entryRows;
 
   React.useEffect(() => {
     if (handoverAssignmentId && rows.some((row) => row.id === handoverAssignmentId)) return;
@@ -376,7 +499,7 @@ const WorkAssignTab: React.FC<Props> = ({
         nextParams.delete("section");
       }
       if (next !== "LIST") {
-        nextParams.delete("assignmentId");
+        nextParams.delete("detailAssignmentId");
       }
       setSearchParams(nextParams, { replace: true });
     },
@@ -391,7 +514,7 @@ const WorkAssignTab: React.FC<Props> = ({
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("tab", "ASSIGN");
       nextParams.delete("section");
-      nextParams.set("assignmentId", assignmentId);
+      nextParams.set("detailAssignmentId", assignmentId);
       setSearchParams(nextParams, { replace: true });
     },
     [searchParams, setSearchParams]
@@ -400,21 +523,21 @@ const WorkAssignTab: React.FC<Props> = ({
   const closeAssignmentDetail = React.useCallback(() => {
     setDetailId(null);
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("assignmentId");
+    nextParams.delete("detailAssignmentId");
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
   const clearAssignmentFocus = React.useCallback(() => {
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("assignmentId");
+    nextParams.delete("detailAssignmentId");
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
   React.useEffect(() => {
-    if (section !== "LIST" || !queryAssignmentId) return;
-    if (detailId === queryAssignmentId) return;
-    setDetailId(queryAssignmentId);
-  }, [detailId, queryAssignmentId, section]);
+    if (section !== "LIST" || !queryDetailAssignmentId) return;
+    if (detailId === queryDetailAssignmentId) return;
+    setDetailId(queryDetailAssignmentId);
+  }, [detailId, queryDetailAssignmentId, section]);
 
   const selectedHandoverAssignment = React.useMemo(
     () => rows.find((row) => row.id === handoverAssignmentId) ?? null,
@@ -430,7 +553,7 @@ const WorkAssignTab: React.FC<Props> = ({
   const filteredRows = React.useMemo(() => {
     const keyword = normalizeVi(filterValue.q || "");
 
-    return rows.filter((row) => {
+    return visibleRows.filter((row) => {
       if (keyword) {
         const haystack = normalizeVi(getAssignmentSearchText(row));
         if (!haystack.includes(keyword)) return false;
@@ -454,7 +577,7 @@ const WorkAssignTab: React.FC<Props> = ({
 
       return true;
     });
-  }, [filterValue, rows]);
+  }, [filterValue, visibleRows]);
 
   const { data: parentCandidatesData, isFetching: parentCandidatesLoading } =
     useGetMyParentCandidatesQuery({ workId }, { skip: !workId || (!createOpen && !detailId) });
@@ -463,10 +586,17 @@ const WorkAssignTab: React.FC<Props> = ({
     () =>
       ((parentCandidatesData ?? []) as WorkAssignmentListResponse[]).map((x) => ({
         id: String(x?.id ?? ""),
+        code: x?.code ?? null,
+        name: x?.name ?? null,
         dynamicFormTemplateCode: x?.dynamicFormTemplateCode ?? null,
         dynamicFormTemplateName: x?.dynamicFormTemplateName ?? null,
         dynamicExcelCode: x?.dynamicExcelCode ?? null,
         dynamicExcelName: x?.dynamicExcelName ?? null,
+        dueDate: x?.dueDate ?? null,
+        completedDate: x?.completedDate ?? null,
+        completedAtUtc: x?.completedAtUtc ?? null,
+        dueAtUtc: x?.dueAtUtc ?? null,
+        latestDueAtUtc: x?.latestDueAtUtc ?? null,
       })),
     [parentCandidatesData]
   );
@@ -507,8 +637,28 @@ const WorkAssignTab: React.FC<Props> = ({
     [detailData]
   );
 
+  const detailAssigneeItems = React.useMemo(
+    () =>
+      ((detailData as WorkAssignmentResponse | undefined)?.assignees ?? [])
+        .map(getAssigneeLabel)
+        .filter(Boolean),
+    [detailData]
+  );
+
+  const detailLeaderWatcherItems = React.useMemo(() => {
+    const watcherLabels = ((detailData as WorkAssignmentResponse | undefined)?.leaderWatchers ?? [])
+      .map(getUserRefLabel)
+      .filter((label) => label && label !== "-");
+    if (watcherLabels.length > 0) return watcherLabels;
+
+    return Array.isArray(detailValue.leaderWatcherUserIds)
+      ? detailValue.leaderWatcherUserIds.filter(Boolean)
+      : [];
+  }, [detailData, detailValue.leaderWatcherUserIds]);
+
   const busy =
     isFetching ||
+    branchLoading ||
     createState.isLoading ||
     deactivateState.isLoading ||
     activateState.isLoading ||
@@ -541,17 +691,42 @@ const WorkAssignTab: React.FC<Props> = ({
     setSnackbar({ open: true, message });
   }, []);
 
+  const blockDrillMutation = React.useCallback(() => {
+    if (!isDrillView) return false;
+    showMessage("Đang xem nhánh công việc con: chỉ được xem, không thể chỉnh sửa.");
+    return true;
+  }, [isDrillView, showMessage]);
+
+  React.useEffect(() => {
+    if (!isDrillView) return;
+    setCreateOpen(false);
+    setSourceRulesTargetId(null);
+    setAutoApproveTargetId(null);
+    setEvaluateTarget(null);
+    setCompleteTarget(null);
+    setConfirmHandoverOpen(false);
+  }, [isDrillView]);
+
   const openCreateRoot = React.useCallback(() => {
+    if (blockDrillMutation()) return;
     setCreateValue({
       ...defaultAssignmentCreateValue(),
       createMode: isWorkOwner ? "root" : "child",
       parentAssignmentId: null,
     });
     setCreateOpen(true);
-  }, [isWorkOwner]);
+  }, [blockDrillMutation, isWorkOwner]);
 
   const handleSubmitCreate = async () => {
+    if (blockDrillMutation()) return;
+
     const mustChooseParent = !isWorkOwner || createValue.createMode === "child";
+    const assignmentName = createValue.name?.trim() ?? "";
+
+    if (!assignmentName) {
+      showMessage("Bắt buộc nhập tên công việc được giao.");
+      return;
+    }
 
     if (!createValue.dynamicFormTemplateId) {
       showMessage("Bắt buộc chọn biểu mẫu động.");
@@ -568,6 +743,10 @@ const WorkAssignTab: React.FC<Props> = ({
     const startDay = toDayKey(createValue.startDate);
     const completedDay = toDayKey(createValue.completedDate);
     const dueDay = toDayKey(createValue.dueAtUtc);
+    const isOnceAssignment = createValue.assignmentType === "ONCE";
+    const selectedParentCandidate = parentCandidates.find((x) => x.id === createValue.parentAssignmentId) ?? null;
+    const inheritedAssignmentDueDay = resolveInheritedAssignmentDueDayKey(selectedParentCandidate, workEndDay);
+    const assignmentDueDay = isOnceAssignment ? inheritedAssignmentDueDay : completedDay;
     const scheduleStartDay = toDayKey(createValue.schedule?.startDate);
 
     if (workStartDay && startDay && startDay < workStartDay) {
@@ -580,18 +759,18 @@ const WorkAssignTab: React.FC<Props> = ({
       return;
     }
 
-    if (workStartDay && completedDay && completedDay < workStartDay) {
-      showMessage("Hạn nộp nhiệm vụ không được trước ngày bắt đầu công việc.");
+    if (!isOnceAssignment && workStartDay && completedDay && completedDay < workStartDay) {
+      showMessage("Hạn nộp của nhiệm vụ không được trước ngày bắt đầu công việc.");
       return;
     }
 
-    if (workEndDay && completedDay && completedDay > workEndDay) {
-      showMessage("Hạn nộp nhiệm vụ không được sau ngày kết thúc công việc.");
+    if (!isOnceAssignment && workEndDay && completedDay && completedDay > workEndDay) {
+      showMessage("Hạn nộp của nhiệm vụ không được sau ngày kết thúc công việc.");
       return;
     }
 
-    if (startDay && completedDay && completedDay < startDay) {
-      showMessage("Hạn nộp nhiệm vụ không được trước ngày bắt đầu nhiệm vụ.");
+    if (!isOnceAssignment && startDay && completedDay && completedDay < startDay) {
+      showMessage("Hạn nộp của nhiệm vụ không được trước ngày bắt đầu nhiệm vụ.");
       return;
     }
 
@@ -600,29 +779,29 @@ const WorkAssignTab: React.FC<Props> = ({
       return;
     }
 
-    if (createValue.assignmentType === "ONCE" && !createValue.dueAtUtc) {
-      showMessage("Công việc giao một lần bắt buộc phải có hạn nộp.");
+    if (isOnceAssignment && !createValue.dueAtUtc) {
+      showMessage("Nhiệm vụ giao một lần bắt buộc phải có hạn nộp báo cáo.");
       return;
     }
 
-    if (createValue.assignmentType === "ONCE") {
+    if (isOnceAssignment) {
       if (workStartDay && dueDay && dueDay < workStartDay) {
-        showMessage("Hạn nộp không được trước ngày bắt đầu công việc.");
+        showMessage("Hạn nộp báo cáo không được trước ngày bắt đầu công việc.");
         return;
       }
 
       if (workEndDay && dueDay && dueDay > workEndDay) {
-        showMessage("Hạn nộp không được sau ngày kết thúc công việc.");
+        showMessage("Hạn nộp báo cáo không được sau ngày kết thúc công việc.");
         return;
       }
 
       if (startDay && dueDay && dueDay < startDay) {
-        showMessage("Hạn nộp không được trước ngày bắt đầu nhiệm vụ.");
+        showMessage("Hạn nộp báo cáo không được trước ngày bắt đầu nhiệm vụ.");
         return;
       }
 
-      if (completedDay && dueDay && dueDay > completedDay) {
-        showMessage("Hạn nộp báo cáo không được sau hạn nộp nhiệm vụ.");
+      if (assignmentDueDay && dueDay && dueDay > assignmentDueDay) {
+        showMessage("Hạn nộp báo cáo không được sau hạn nộp kế thừa của nhiệm vụ.");
         return;
       }
     }
@@ -634,14 +813,14 @@ const WorkAssignTab: React.FC<Props> = ({
 
     if (createValue.assignmentType === "PERIODIC_REPORT" && scheduleStartDay) {
       const minScheduleStartDay = startDay || workStartDay;
-      const maxScheduleStartDay = completedDay || workEndDay;
+      const maxScheduleStartDay = assignmentDueDay || workEndDay;
       if (minScheduleStartDay && scheduleStartDay < minScheduleStartDay) {
         showMessage("Ngày bắt đầu áp dụng lịch không được trước ngày bắt đầu nhiệm vụ.");
         return;
       }
 
       if (maxScheduleStartDay && scheduleStartDay > maxScheduleStartDay) {
-        showMessage("Ngày bắt đầu áp dụng lịch không được sau hạn nộp nhiệm vụ.");
+        showMessage("Ngày bắt đầu áp dụng lịch không được sau hạn nộp của nhiệm vụ.");
         return;
       }
     }
@@ -650,6 +829,7 @@ const WorkAssignTab: React.FC<Props> = ({
       await createWorkAssignment({
         workId,
         body: {
+          name: assignmentName,
           parentAssignmentId:
             createValue.createMode === "root" && isWorkOwner
               ? null
@@ -660,7 +840,7 @@ const WorkAssignTab: React.FC<Props> = ({
           assignmentType: createValue.assignmentType,
           aggregationType: createValue.aggregationType,
           startDate: createValue.startDate ?? null,
-          dueDate: createValue.completedDate ?? null,
+          dueDate: createValue.assignmentType === "ONCE" ? null : createValue.completedDate ?? null,
           completedDate: null,
           assigneeUserIds: createValue.assigneeUserIds ?? [],
           assigneeUnitIds: createValue.assigneeUnitIds,
@@ -684,6 +864,8 @@ const WorkAssignTab: React.FC<Props> = ({
   };
 
   const handleToggleActive = async (row: AssignmentTableRow) => {
+    if (blockDrillMutation()) return;
+
     try {
       if (row.isActive) {
         await deactivateWorkAssignment({ id: row.id, workId }).unwrap();
@@ -702,12 +884,15 @@ const WorkAssignTab: React.FC<Props> = ({
   };
 
   const handleOpenComplete = React.useCallback((row: AssignmentTableRow) => {
+    if (blockDrillMutation()) return;
+
     setCompleteTarget(row);
     setCompleteDate(toDayKey(row.completedDate) || toDayKey(new Date().toISOString()));
     setCompleteNote("");
-  }, []);
+  }, [blockDrillMutation]);
 
   const handleSubmitComplete = async () => {
+    if (blockDrillMutation()) return;
     if (!completeTarget) return;
     if (!completeDate) {
       showMessage("Bắt buộc nhập ngày hoàn thành.");
@@ -747,6 +932,8 @@ const WorkAssignTab: React.FC<Props> = ({
 
   const handleOpenSourceRules = React.useCallback(
     (row: AssignmentTableRow) => {
+      if (blockDrillMutation()) return;
+
       if (!row.dynamicFormTemplateId) {
         showMessage("Công việc chưa có biểu mẫu động để cấu hình nguồn dữ liệu.");
         return;
@@ -754,11 +941,12 @@ const WorkAssignTab: React.FC<Props> = ({
 
       setSourceRulesTargetId(row.id);
     },
-    [showMessage]
+    [blockDrillMutation, showMessage]
   );
 
   const handleSaveSourceRules = React.useCallback(
     async (dynamicFormDataSourceRulesJson: string | null) => {
+      if (blockDrillMutation()) return;
       if (!sourceRulesTargetId) return;
 
       try {
@@ -777,11 +965,13 @@ const WorkAssignTab: React.FC<Props> = ({
         );
       }
     },
-    [refetch, showMessage, sourceRulesTargetId, updateDataSourceRules, workId]
+    [blockDrillMutation, refetch, showMessage, sourceRulesTargetId, updateDataSourceRules, workId]
   );
 
   const handleOpenAutoApprove = React.useCallback(
     (row: AssignmentTableRow) => {
+      if (blockDrillMutation()) return;
+
       if (!row.dynamicFormTemplateId) {
         showMessage("Công việc chưa có biểu mẫu động để cấu hình tự duyệt.");
         return;
@@ -789,11 +979,12 @@ const WorkAssignTab: React.FC<Props> = ({
 
       setAutoApproveTargetId(row.id);
     },
-    [showMessage]
+    [blockDrillMutation, showMessage]
   );
 
   const handleSaveAutoApprove = React.useCallback(
     async (autoApproveConditionJson: string | null) => {
+      if (blockDrillMutation()) return;
       if (!autoApproveTargetId) return;
 
       try {
@@ -804,7 +995,7 @@ const WorkAssignTab: React.FC<Props> = ({
         }).unwrap();
 
         setAutoApproveTargetId(null);
-        showMessage("Đã lưu điều kiện tự duyệt.");
+        showMessage("Đã lưu cấu hình tự duyệt.");
         await refetch();
       } catch (err: any) {
         showMessage(
@@ -812,11 +1003,13 @@ const WorkAssignTab: React.FC<Props> = ({
         );
       }
     },
-    [autoApproveTargetId, refetch, showMessage, updateAutoApproveCondition, workId]
+    [autoApproveTargetId, blockDrillMutation, refetch, showMessage, updateAutoApproveCondition, workId]
   );
 
   const handleOpenEvaluate = React.useCallback(
     (row: AssignmentTableRow) => {
+      if (blockDrillMutation()) return;
+
       if (!row.evaluationTemplateId) {
         showMessage("Công việc chưa được gắn bộ tiêu chí đánh giá.");
         return;
@@ -824,10 +1017,12 @@ const WorkAssignTab: React.FC<Props> = ({
 
       setEvaluateTarget(row);
     },
-    [showMessage]
+    [blockDrillMutation, showMessage]
   );
 
   const handleRequestHandover = React.useCallback(() => {
+    if (blockDrillMutation()) return;
+
     if (!selectedHandoverAssignment) {
       showMessage("Chưa chọn công việc để bàn giao.");
       return;
@@ -846,9 +1041,10 @@ const WorkAssignTab: React.FC<Props> = ({
     }
 
     setConfirmHandoverOpen(true);
-  }, [fromAssigneeUserId, selectedHandoverAssignment, showMessage, toAssigneeUserIds]);
+  }, [blockDrillMutation, fromAssigneeUserId, selectedHandoverAssignment, showMessage, toAssigneeUserIds]);
 
   const handleConfirmHandover = async () => {
+    if (blockDrillMutation()) return;
     if (!selectedHandoverAssignment || !fromAssigneeUserId || !toAssigneeUserIds[0]) return;
 
     try {
@@ -945,6 +1141,10 @@ const WorkAssignTab: React.FC<Props> = ({
     ],
     []
   );
+  const currentViewTitle = currentParent ? getAssignmentLabel(currentParent) : "Danh sách giao việc";
+  const currentViewSubtitle = currentParent
+    ? "Đang xem các công việc con trực tiếp của nhánh được chọn."
+    : "Quản lý người được giao, biểu mẫu báo cáo, kỳ hạn và tiến độ thực hiện.";
 
   return (
     <Box sx={{ height: "100%", minHeight: 0 }}>
@@ -1021,13 +1221,24 @@ const WorkAssignTab: React.FC<Props> = ({
                   <AssignmentOutlinedIcon fontSize="small" />
                 </Box>
                 <Stack spacing={0.2} sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 850, color: "#0f172a" }}>
+                  {isDrillView ? (
+                    <Typography variant="subtitle1" sx={{ fontWeight: 850, color: "#0f172a" }}>
+                      {currentViewTitle}
+                    </Typography>
+                  ) : null}
+                  {isDrillView ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {currentViewSubtitle}
+                    </Typography>
+                  ) : null}
+                  <Typography variant="subtitle1" sx={{ display: isDrillView ? "none" : undefined, fontWeight: 850, color: "#0f172a" }}>
                     Danh sách giao việc
                   </Typography>
                   <Typography
                     variant="body2"
                     color="text.secondary"
                     sx={{
+                      display: isDrillView ? "none" : undefined,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: { xs: "normal", md: "nowrap" },
@@ -1038,11 +1249,30 @@ const WorkAssignTab: React.FC<Props> = ({
                 </Stack>
               </Stack>
 
+              {isDrillView ? (
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<TableViewOutlinedIcon />}
+                    onClick={() => currentParent && handleOpenAggregate(currentParent)}
+                    disabled={!currentParent?.dynamicFormTemplateId}
+                    sx={{ borderRadius: "8px", bgcolor: "#fff" }}
+                  >
+                    Tổng hợp nhánh
+                  </Button>
+                </Stack>
+              ) : null}
+
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={openCreateRoot}
-                sx={{ borderRadius: "8px", minWidth: 120, boxShadow: "0 8px 18px rgba(37,99,235,0.22)" }}
+                sx={{
+                  display: isDrillView ? "none" : "inline-flex",
+                  borderRadius: "8px",
+                  minWidth: 120,
+                  boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
+                }}
               >
                 Giao việc
               </Button>
@@ -1057,12 +1287,17 @@ const WorkAssignTab: React.FC<Props> = ({
             />
 
             {error && <Alert severity="error">{uiText(UITextKey.TextKhongTaiDuocDanhSachAssignment)}</Alert>}
+            {branchError && (
+              <Alert severity="error">Không tải được công việc con của nhánh này.</Alert>
+            )}
 
             <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-              {busy && rows.length === 0 ? (
+              {busy && visibleRows.length === 0 ? (
                 <Box sx={{ py: 6, display: "flex", justifyContent: "center" }}>
                   <CircularProgress />
                 </Box>
+              ) : isDrillView && visibleRows.length === 0 ? (
+                <Alert severity="info">Nhánh này chưa có công việc con.</Alert>
               ) : rows.length === 0 ? (
                 <Box
                   sx={{
@@ -1114,6 +1349,7 @@ const WorkAssignTab: React.FC<Props> = ({
               ) : (
                 <WorkAssignmentTable
                   rows={filteredRows}
+                  readOnly={isDrillView}
                   onViewDetail={(row) => openAssignmentDetail(row.id)}
                   onPreviewTemplate={(row) => {
                     if (!row.dynamicFormTemplateId) {
@@ -1144,7 +1380,7 @@ const WorkAssignTab: React.FC<Props> = ({
         ) : section === "NOTIFICATIONS" ? (
           <WorkAssignmentNotificationTab
             workId={workId}
-            focusedAssignmentId={queryAssignmentId || null}
+            focusedAssignmentId={queryDetailAssignmentId || null}
             onClearAssignmentFocus={clearAssignmentFocus}
             onOpenAssignment={openAssignmentDetail}
             onOpenActions={() => handleSetSection("ACTIONS")}
@@ -1343,33 +1579,10 @@ const WorkAssignTab: React.FC<Props> = ({
         mode="view"
         title={uiText(UITextKey.TextChiTietAssignment)}
         hideSubmit
-        viewAssigneeDisplay={
-          Array.isArray((detailData as any)?.assignees) && (detailData as any).assignees.length > 0
-            ? (detailData as any).assignees
-                .map((x: any) =>
-                  [
-                    x?.fullName || x?.username || x?.userId,
-                    x?.unitShortName || x?.unitName || x?.unitId,
-                  ]
-                    .filter(Boolean)
-                    .join(" - ")
-                )
-                .filter(Boolean)
-                .join(", ")
-            : "-"
-        }
-        viewLeaderWatcherDisplay={
-          Array.isArray((detailData as any)?.leaderWatchers) &&
-          (detailData as any).leaderWatchers.length > 0
-            ? (detailData as any).leaderWatchers
-                .map((x: any) => x?.fullName || x?.username || x?.userId)
-                .filter(Boolean)
-                .join(", ")
-            : Array.isArray(detailValue.leaderWatcherUserIds) &&
-                detailValue.leaderWatcherUserIds.length > 0
-              ? detailValue.leaderWatcherUserIds.join(", ")
-            : "-"
-        }
+        viewAssigneeItems={detailAssigneeItems}
+        viewAssigneeDisplay={detailAssigneeItems.length > 0 ? detailAssigneeItems.join(", ") : "-"}
+        viewLeaderWatcherItems={detailLeaderWatcherItems}
+        viewLeaderWatcherDisplay={detailLeaderWatcherItems.length > 0 ? detailLeaderWatcherItems.join(", ") : "-"}
       />
 
       <Dialog

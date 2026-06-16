@@ -51,7 +51,7 @@ export function computeRegions(spec: HeaderSpec, table: Rect) {
   const topRows = spec.topRows;
   const leftCols = spec.leftCols;
 
-  // góc giao (được phép trống) -> KHÔNG mark
+  // Goc giao cua MATRIX van la header/layout. O nay co the trong, nhung khong duoc mat khi mark/preview.
   const cornerRect = rect(0, 0, topRows - 1, leftCols - 1);
 
   // phần header trên (trừ góc)
@@ -67,7 +67,7 @@ export function computeRegions(spec: HeaderSpec, table: Rect) {
 
   return {
     headerRect,
-    headerRects: [topHeaderRect, leftHeaderRect],
+    headerRects: [cornerRect, topHeaderRect, leftHeaderRect],
     cornerRect,
     topHeaderRect,
     leftHeaderRect,

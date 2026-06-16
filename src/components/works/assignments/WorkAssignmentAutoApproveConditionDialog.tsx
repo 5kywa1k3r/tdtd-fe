@@ -59,7 +59,7 @@ const WorkAssignmentAutoApproveConditionDialog: React.FC<Props> = ({
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="md">
-      <DialogTitle>Cấu hình tự duyệt</DialogTitle>
+      <DialogTitle>Cấu hình tự duyệt báo cáo</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
           <Box>
@@ -67,12 +67,12 @@ const WorkAssignmentAutoApproveConditionDialog: React.FC<Props> = ({
               {getAssignmentLabel(assignment) || "Công việc"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Điều kiện chỉ áp dụng cho các lần reporter nộp báo cáo sau khi lưu cấu hình.
+              Cấu hình này chỉ áp dụng cho các lần reporter nộp báo cáo sau khi lưu.
             </Typography>
           </Box>
 
           <Alert severity="info">
-            Chỉ cấu hình tự duyệt cho field Số, Chọn một hoặc Chọn nhiều của biểu mẫu động.
+            Chỉ cấu hình điều kiện theo field Số, Chọn một hoặc Chọn nhiều; nếu không có field phù hợp thì bật tự duyệt sẽ không áp điều kiện.
           </Alert>
 
           {dynamicFormQuery.isLoading || dynamicFormQuery.isFetching ? (

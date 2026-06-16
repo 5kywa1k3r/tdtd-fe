@@ -13,14 +13,31 @@ type Props = {
   rows: WorkReportPeriodRow[];
   showAssignment?: boolean;
   getAssignmentLabel?: (row: WorkReportPeriodRow) => string;
+  getAssignmentType?: (row: WorkReportPeriodRow) => string | null | undefined;
+  canOpen?: (row: WorkReportPeriodRow) => boolean;
   onOpen?: (row: WorkReportPeriodRow) => void;
   onRowDoubleClick?: (row: WorkReportPeriodRow) => void;
 };
+
+function getReportKindLabel(
+  row: WorkReportPeriodRow,
+  getAssignmentType?: (row: WorkReportPeriodRow) => string | null | undefined
+) {
+  if (row.periodKind === "USER_CREATED") return "Chủ động";
+
+  const assignmentType = row.assignmentType || getAssignmentType?.(row);
+  if (assignmentType === "ONCE") return "Một lần";
+  if (assignmentType === "PERIODIC_REPORT") return "Định kỳ";
+
+  return row.periodKind === "SCHEDULED" ? "Bắt buộc" : row.periodKind || "-";
+}
 
 export default function WorkReportPeriodTable({
   rows,
   showAssignment = false,
   getAssignmentLabel,
+  getAssignmentType,
+  canOpen,
   onOpen,
   onRowDoubleClick,
 }: Props) {
@@ -41,7 +58,7 @@ export default function WorkReportPeriodTable({
                   e.stopPropagation();
                   onOpen?.(row);
                 }}
-                disabled={!onOpen}
+                disabled={!onOpen || canOpen?.(row) === false}
               >
                 Mở
               </Button>
@@ -68,9 +85,8 @@ export default function WorkReportPeriodTable({
           width: 110,
           align: "center",
           sortable: true,
-          getSortValue: (row) => row.periodKind || "",
-          render: (row) =>
-            row.periodKind === "USER_CREATED" ? "Chủ động" : "Định kỳ",
+          getSortValue: (row) => getReportKindLabel(row, getAssignmentType),
+          render: (row) => getReportKindLabel(row, getAssignmentType),
         },
         {
           field: "periodKey",
@@ -191,7 +207,7 @@ export default function WorkReportPeriodTable({
 
       return result;
     },
-    [getAssignmentLabel, onOpen, showAssignment]
+    [canOpen, getAssignmentLabel, getAssignmentType, onOpen, showAssignment]
   );
 
   return (

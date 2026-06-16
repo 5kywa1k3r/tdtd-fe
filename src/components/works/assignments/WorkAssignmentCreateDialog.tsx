@@ -1,5 +1,8 @@
 import React from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -18,6 +21,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { LazyUnitMultiSelect } from "../../common/LazyUnitMultiSelect";
 import { HybridUnitUserPicker } from "../../pickers/HybridUnitUserPicker";
@@ -43,13 +47,21 @@ import type {
 
 export interface ParentCandidateOption {
   id: string;
+  code?: string | null;
+  name?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
   dynamicExcelCode?: string | null;
   dynamicExcelName?: string | null;
+  dueDate?: string | null;
+  completedDate?: string | null;
+  completedAtUtc?: string | null;
+  dueAtUtc?: string | null;
+  latestDueAtUtc?: string | null;
 }
 
 export interface AssignmentCreateValue {
+  name: string;
   createMode: "root" | "child";
   parentAssignmentId: string | null;
 
@@ -85,6 +97,7 @@ export interface AssignmentCreateValue {
 
 export function defaultAssignmentCreateValue(): AssignmentCreateValue {
   return {
+    name: "",
     createMode: "root",
     parentAssignmentId: null,
 
@@ -140,13 +153,19 @@ interface Props {
 
   viewAssigneeDisplay?: string;
   viewLeaderWatcherDisplay?: string;
+  viewAssigneeItems?: string[];
+  viewLeaderWatcherItems?: string[];
 }
 
 function getParentLabel(x: ParentCandidateOption) {
-  const code = x.dynamicFormTemplateCode?.trim() || x.dynamicExcelCode?.trim();
-  const name = x.dynamicFormTemplateName?.trim() || x.dynamicExcelName?.trim();
+  const code = x.code?.trim() || x.dynamicFormTemplateCode?.trim() || x.dynamicExcelCode?.trim();
+  const name = x.name?.trim() || x.dynamicFormTemplateName?.trim() || x.dynamicExcelName?.trim();
   if (code && name) return `${code} - ${name}`;
   return code || name || x.id;
+}
+
+function getTemplateFallbackName(value: AssignmentCreateValue) {
+  return value.dynamicFormTemplateName?.trim() || value.dynamicExcelName?.trim() || "";
 }
 
 function getTemplateLabel(value: AssignmentCreateValue) {
@@ -181,33 +200,45 @@ function minDayKey(...values: Array<string | null | undefined>) {
     .sort()[0] ?? "";
 }
 
+function formatDayKey(dayKey: string) {
+  const normalized = normalizeDayKey(dayKey);
+  if (normalized.length !== 8) return "";
+  return `${normalized.slice(6, 8)}/${normalized.slice(4, 6)}/${normalized.slice(0, 4)}`;
+}
+
+function resolveInheritedDueDayKey(parent: ParentCandidateOption | null, workEndDayKey: string) {
+  if (!parent) return workEndDayKey;
+
+  return (
+    isoToDayKey(parent.dueDate) ||
+    (!parent.completedAtUtc ? isoToDayKey(parent.completedDate) : "") ||
+    isoToDayKey(parent.dueAtUtc) ||
+    isoToDayKey(parent.latestDueAtUtc) ||
+    workEndDayKey
+  );
+}
+
 const SOURCE_RULE_OPTIONS: Array<{ value: DynamicFormDataSourceRuleType; label: string; help: string }> = [
   {
     value: "MANUAL",
     label: "Nhập tay",
-    help: "Reporter nhập dữ liệu trực tiếp trong phần này.",
-  },
-  {
-    value: "AGGREGATE_CHILDREN",
-    label: "Tự tổng hợp từ cấp dưới",
-    help: "Hệ thống lấy dữ liệu từ các báo cáo con đã được duyệt.",
+    help: "Người báo cáo nhập dữ liệu trực tiếp trong phần này.",
   },
   {
     value: "MAP_CHILD",
-    label: "Map từ cấp dưới",
-    help: "Dữ liệu được map từ phần tương ứng của công việc con.",
+    label: "Gắn từ cấp dưới",
+    help: "Dữ liệu được gắn từ phần tương ứng của công việc con.",
   },
   {
     value: "MIXED",
     label: "Kết hợp",
-    help: "Một phần lấy từ cấp dưới, phần còn lại reporter nhập tay.",
+    help: "Một phần lấy từ cấp dưới, phần còn lại người báo cáo nhập tay.",
   },
 ];
 
 function normalizeSourceRule(value: unknown): DynamicFormDataSourceRuleType {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (
-    normalized === "AGGREGATE_CHILDREN" ||
     normalized === "MAP_CHILD" ||
     normalized === "MIXED"
   ) {
@@ -268,7 +299,138 @@ function sourceRuleLabel(value: DynamicFormDataSourceRuleType) {
   return SOURCE_RULE_OPTIONS.find((item) => item.value === value)?.label ?? value;
 }
 
+function normalizeReadonlyItems(items?: string[], fallback?: string) {
+  const directItems = (items ?? []).map((item) => item.trim()).filter(Boolean);
+  if (directItems.length > 0) return directItems;
+
+  const text = fallback?.trim();
+  if (!text || text === "-") return [];
+
+  return text
+    .split(/\r?\n|,\s*/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function ReadonlyListDropdown({
+  label,
+  items,
+  fallback,
+}: {
+  label: string;
+  items?: string[];
+  fallback?: string;
+}) {
+  const values = normalizeReadonlyItems(items, fallback);
+  const preview = values.slice(0, 3).join(", ");
+
+  return (
+    <Accordion
+      disableGutters
+      variant="outlined"
+      sx={{
+        borderRadius: 1,
+        "&:before": { display: "none" },
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon fontSize="small" />}
+        sx={{
+          minHeight: 48,
+          "& .MuiAccordionSummary-content": {
+            my: 1,
+            minWidth: 0,
+          },
+        }}
+      >
+        <Stack spacing={0.25} sx={{ minWidth: 0, width: "100%" }}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {label}
+            </Typography>
+            <Chip size="small" variant="outlined" label={`${values.length} mục`} />
+          </Stack>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {preview || "-"}
+            {values.length > 3 ? `, +${values.length - 3}` : ""}
+          </Typography>
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails sx={{ pt: 0 }}>
+        {values.length > 0 ? (
+          <Box sx={{ maxHeight: 240, overflowY: "auto", pr: 0.5, scrollbarGutter: "stable" }}>
+            <Stack spacing={0.5}>
+              {values.map((item, index) => (
+                <Box
+                  key={`${label}_${index}_${item}`}
+                  sx={{
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.75,
+                  }}
+                >
+                  <Typography variant="body2">{item}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            -
+          </Typography>
+        )}
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
+function ReadonlyTextDropdown({ label, value }: { label: string; value?: string | null }) {
+  const text = value?.trim() || "-";
+  const preview = text.length > 160 ? `${text.slice(0, 160)}...` : text;
+
+  return (
+    <Accordion
+      disableGutters
+      variant="outlined"
+      sx={{
+        borderRadius: 1,
+        "&:before": { display: "none" },
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon fontSize="small" />}
+        sx={{
+          minHeight: 48,
+          "& .MuiAccordionSummary-content": {
+            my: 1,
+            minWidth: 0,
+          },
+        }}
+      >
+        <Stack spacing={0.25} sx={{ minWidth: 0, width: "100%" }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {label}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {preview}
+          </Typography>
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails sx={{ pt: 0 }}>
+        <Box sx={{ maxHeight: 180, overflowY: "auto", pr: 0.5, scrollbarGutter: "stable" }}>
+          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+            {text}
+          </Typography>
+        </Box>
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
 const AUTO_APPROVE_OPERATOR_LABELS: Record<WorkAssignmentAutoApproveConditionOperator, string> = {
+  always: "Không điều kiện",
   eq: "Bằng",
   neq: "Khác",
   contains: "Có chứa",
@@ -317,6 +479,7 @@ function parseAutoApproveCondition(json?: string | null): WorkAssignmentAutoAppr
 
 function normalizeAutoApproveOperator(value: unknown): WorkAssignmentAutoApproveConditionOperator {
   const raw = typeof value === "string" ? value : "";
+  if (raw === "always") return "always";
   if (raw === "neq" || raw === "contains" || raw === "gt" || raw === "gte" || raw === "lt" || raw === "lte" || raw === "notEmpty") {
     return raw;
   }
@@ -349,7 +512,19 @@ function buildAutoApproveConditionJson(
   operator: WorkAssignmentAutoApproveConditionOperator,
   value: string | number | boolean | null,
 ) {
-  if (!enabled || !field?.id) return null;
+  if (!enabled) return null;
+
+  if (!field?.id) {
+    return JSON.stringify({
+      version: 1,
+      enabled: true,
+      fieldId: null,
+      fieldKey: null,
+      fieldType: null,
+      operator: "always",
+      value: null,
+    } satisfies WorkAssignmentAutoApproveConditionDocument);
+  }
 
   return JSON.stringify({
     version: 1,
@@ -391,9 +566,25 @@ export function AutoApproveConditionEditor({
     : operatorOptions[0] ?? "eq";
 
   React.useEffect(() => {
-    if (!value?.trim() || !condition.enabled || fields.length === 0 || selectedField) return;
+    if (!value?.trim() || !condition.enabled || selectedField) return;
+    if (selectableFields.length === 0) {
+      if (!condition.fieldId && !condition.fieldKey) return;
+      if (fields.length > 0) {
+        onChange(buildAutoApproveConditionJson(true, null, "always", null));
+      }
+      return;
+    }
     onChange(null);
-  }, [condition.enabled, fields.length, onChange, selectedField, value]);
+  }, [
+    condition.enabled,
+    condition.fieldId,
+    condition.fieldKey,
+    fields.length,
+    onChange,
+    selectableFields.length,
+    selectedField,
+    value,
+  ]);
 
   const emit = React.useCallback(
     (
@@ -458,14 +649,14 @@ export function AutoApproveConditionEditor({
               Tự duyệt báo cáo
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Khi reporter nộp báo cáo và field thỏa điều kiện, hệ thống tự chuyển sang đã duyệt.
+              Khi người báo cáo nộp báo cáo và trường dữ liệu thỏa điều kiện, hệ thống tự chuyển sang đã duyệt.
             </Typography>
           </Box>
           <FormControlLabel
             control={
               <Switch
                 checked={condition.enabled}
-                disabled={disabled || selectableFields.length === 0}
+                disabled={disabled}
                 onChange={(event) => {
                   const firstField = selectedField ?? selectableFields[0] ?? null;
                   emit({
@@ -482,7 +673,9 @@ export function AutoApproveConditionEditor({
         </Stack>
 
         {selectableFields.length === 0 ? (
-          <Alert severity="info">Biểu mẫu chưa có field phù hợp để cấu hình tự duyệt.</Alert>
+          <Alert severity="info">
+            Biểu mẫu không có field phù hợp; khi bật tự duyệt, hệ thống không áp điều kiện và báo cáo nộp lên sẽ tự duyệt luôn.
+          </Alert>
         ) : condition.enabled ? (
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} alignItems={{ xs: "stretch", md: "flex-start" }}>
             <TextField
@@ -550,6 +743,8 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   hideSubmit = false,
   viewAssigneeDisplay = "",
   viewLeaderWatcherDisplay = "",
+  viewAssigneeItems = [],
+  viewLeaderWatcherItems = [],
 }) => {
   const isView = mode === "view";
   const readonly = disabled || isView;
@@ -569,9 +764,6 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
     () => buildSectionRules(selectedDynamicForm?.sections ?? [], value.dynamicFormDataSourceRulesJson),
     [selectedDynamicForm?.sections, value.dynamicFormDataSourceRulesJson]
   );
-  const allSectionsAutomatic =
-    sectionSourceRules.length > 0 &&
-    sectionSourceRules.every((rule) => rule.sourceRule === "AGGREGATE_CHILDREN");
   const hasNonManualSection = sectionSourceRules.some((rule) => rule.sourceRule !== "MANUAL");
 
   const selectedParent = React.useMemo(() => {
@@ -582,14 +774,17 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   const startDayKey = isoToDayKey(value.startDate);
   const completedDayKey = isoToDayKey(value.completedDate);
   const dueDayKey = isoToDayKey(value.dueAtUtc);
+  const isOnceAssignment = value.assignmentType === "ONCE";
+  const inheritedDueDayKey = resolveInheritedDueDayKey(selectedParent, workEndDayKey);
+  const assignmentDueDayKey = isOnceAssignment ? inheritedDueDayKey : completedDayKey;
+  const inheritedDueLabel = formatDayKey(inheritedDueDayKey);
   const startMaxDayKey = minDayKey(
     workEndDayKey,
-    completedDayKey,
-    value.assignmentType === "ONCE" ? dueDayKey : ""
+    isOnceAssignment ? dueDayKey : completedDayKey
   );
   const completedMinDayKey = maxDayKey(workStartDayKey, startDayKey);
   const dueMinDayKey = maxDayKey(workStartDayKey, startDayKey);
-  const dueMaxDayKey = minDayKey(workEndDayKey, completedDayKey);
+  const dueMaxDayKey = minDayKey(workEndDayKey, assignmentDueDayKey);
 
   const emitChange = React.useCallback(
     (patch: Partial<AssignmentCreateValue>) => {
@@ -622,6 +817,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   const handleTemplateChange = React.useCallback(
     (item: { id: string; code: string; name: string } | null) => {
       emitChange({
+        name: value.name?.trim() ? value.name : item?.name ?? "",
         dynamicFormTemplateId: item?.id ?? "",
         dynamicFormTemplateCode: item?.code ?? "",
         dynamicFormTemplateName: item?.name ?? "",
@@ -631,6 +827,13 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
         dynamicExcelCode: "",
         dynamicExcelName: "",
       });
+    },
+    [emitChange, value.name]
+  );
+
+  const handleNameChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      emitChange({ name: e.target.value });
     },
     [emitChange]
   );
@@ -653,13 +856,14 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
       emitChange({
         assignmentType: nextType,
         dueAtUtc: nextType === "ONCE" ? value.dueAtUtc ?? null : null,
+        completedDate: nextType === "ONCE" ? null : value.completedDate ?? null,
         schedule:
           nextType === "ONCE"
             ? null
             : value.schedule ?? { cycleType: "WEEKLY" },
       });
     },
-    [emitChange, value.dueAtUtc, value.schedule]
+    [emitChange, value.completedDate, value.dueAtUtc, value.schedule]
   );
 
   const handleAssigneeUnitsChange = React.useCallback(
@@ -750,6 +954,17 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               </TextField>
             ))}
 
+          <TextField
+            size="small"
+            label="Tên công việc được giao"
+            value={value.name || (isView ? getTemplateFallbackName(value) : "")}
+            disabled={readonly}
+            onChange={handleNameChange}
+            fullWidth
+            required={!isView}
+            InputProps={isView ? { readOnly: true } : undefined}
+          />
+
           {isView ? (
             <TextField
               size="small"
@@ -769,47 +984,57 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
           )}
 
           {value.dynamicFormTemplateId ? (
-            <Box
+            <Accordion
+              disableGutters
+              variant="outlined"
               sx={{
-                border: 1,
-                borderColor: "divider",
                 borderRadius: 1,
-                p: 1.5,
+                "&:before": { display: "none" },
               }}
             >
-              <Stack spacing={1.25}>
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={1}
-                  alignItems={{ xs: "flex-start", sm: "center" }}
-                  justifyContent="space-between"
-                >
-                  <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon fontSize="small" />}
+                sx={{
+                  minHeight: 48,
+                  "& .MuiAccordionSummary-content": {
+                    my: 1,
+                    minWidth: 0,
+                  },
+                }}
+              >
+                <Stack spacing={0.25} sx={{ minWidth: 0, width: "100%" }}>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
                       Nguồn dữ liệu theo phần
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Cấu hình này thuộc về lần giao việc, không phụ thuộc vào bản thân dynamic form.
-                    </Typography>
-                  </Box>
-                  {allSectionsAutomatic ? (
-                    <Chip size="small" color="info" label="Report tự tổng hợp" />
-                  ) : hasNonManualSection ? (
-                    <Chip size="small" variant="outlined" label="Có phần lấy từ cấp dưới" />
-                  ) : (
-                    <Chip size="small" variant="outlined" label="Nhập tay" />
-                  )}
+                    <Chip size="small" variant="outlined" label={`${sectionSourceRules.length} phần`} />
+                    {hasNonManualSection ? (
+                      <Chip size="small" variant="outlined" label="Có phần lấy từ cấp dưới" />
+                    ) : (
+                      <Chip size="small" variant="outlined" label="Nhập tay" />
+                    )}
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    Cấu hình theo section của lần giao việc này
+                  </Typography>
                 </Stack>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                <Stack spacing={1.25}>
+                  <Typography variant="caption" color="text.secondary">
+                    Cấu hình này thuộc về lần giao việc, không phụ thuộc vào bản thân biểu mẫu động.
+                  </Typography>
 
                 {selectedDynamicFormQuery.isLoading || selectedDynamicFormQuery.isFetching ? (
-                  <Alert severity="info">Đang tải cấu trúc dynamic form...</Alert>
+                  <Alert severity="info">Đang tải cấu trúc biểu mẫu động...</Alert>
                 ) : !selectedDynamicForm ? (
                   <Alert severity="warning">
-                    Chưa tải được cấu trúc dynamic form để cấu hình theo section.
+                    Chưa tải được cấu trúc biểu mẫu động để cấu hình theo section.
                   </Alert>
                 ) : (
-                  <Stack spacing={1}>
-                    {selectedDynamicForm.sections.map((section, index) => {
+                  <Box sx={{ maxHeight: { xs: 300, md: 360 }, overflowY: "auto", pr: 0.5, scrollbarGutter: "stable" }}>
+                    <Stack spacing={1}>
+                      {selectedDynamicForm.sections.map((section, index) => {
                       const rule = sectionSourceRules.find((item) => item.sectionId === section.id);
                       const sourceRule = rule?.sourceRule ?? "MANUAL";
                       const optionHelp =
@@ -868,23 +1093,19 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
                           </Stack>
                         </React.Fragment>
                       );
-                    })}
-                  </Stack>
+                      })}
+                    </Stack>
+                  </Box>
                 )}
 
-                {allSectionsAutomatic ? (
+                {hasNonManualSection ? (
                   <Alert severity="info">
-                    Khi toàn bộ section là tự tổng hợp, report sẽ mặc định khóa phần nhập dữ liệu và
-                    dùng dữ liệu từ báo cáo cấp dưới đã duyệt.
-                  </Alert>
-                ) : hasNonManualSection ? (
-                  <Alert severity="info">
-                    Map/tổng hợp theo từng phần đã được lưu vào assignment. Phần nhập tay vẫn cho
-                    reporter bổ sung dữ liệu đi kèm.
+                    Gắn theo từng phần được lưu vào nhiệm vụ giao để dùng cho bước gắn dữ liệu thủ công sau này. Phần nhập tay vẫn cho người báo cáo bổ sung dữ liệu đi kèm.
                   </Alert>
                 ) : null}
-              </Stack>
-            </Box>
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
           ) : null}
 
           {value.dynamicFormTemplateId ? (
@@ -914,54 +1135,6 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
               {!isView && <MenuItem value="ONCE">{uiText(UITextKey.TextGiaoMotLan)}</MenuItem>}
               {!isView && <MenuItem value="PERIODIC_REPORT">{uiText(UITextKey.TextDinhKyBaoCao)}</MenuItem>}
             </TextField>
-            {value.assignmentType === "ONCE" && (isView ? (
-              <SingleDayKeyField
-                label={uiText(UITextKey.TextHanNop)}
-                value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
-                disabled
-                fullWidth
-                minDayKey={dueMinDayKey}
-                maxDayKey={dueMaxDayKey}
-                sx={{ flex: { md: "1 1 180px" } }}
-              />
-            ) : (
-              <SingleDayKeyField
-                label={uiText(UITextKey.TextHanNop)}
-                value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
-                disabled={readonly}
-                fullWidth
-                minDayKey={dueMinDayKey}
-                maxDayKey={dueMaxDayKey}
-                sx={{ flex: { md: "1 1 180px" } }}
-                onChange={(dayKey) =>
-                  emitChange({
-                    dueAtUtc: dayKey ? `${dayKeyToIsoDate(dayKey)}T23:59:59.999Z` : null,
-                  })
-                }
-              />
-            ))}
-
-            <SingleDayKeyField
-              label="Ngày bắt đầu nhiệm vụ"
-              value={isoToDayKey(value.startDate)}
-              disabled={readonly}
-              fullWidth
-              minDayKey={workStartDayKey}
-              maxDayKey={startMaxDayKey}
-              sx={{ flex: { md: "1 1 180px" } }}
-              onChange={(dayKey) => emitChange({ startDate: dayKeyToApiDate(dayKey) })}
-            />
-
-            <SingleDayKeyField
-              label="Hạn nộp nhiệm vụ"
-              value={isoToDayKey(value.completedDate)}
-              disabled={readonly}
-              fullWidth
-              minDayKey={completedMinDayKey}
-              maxDayKey={workEndDayKey}
-              sx={{ flex: { md: "1 1 180px" } }}
-              onChange={(dayKey) => emitChange({ completedDate: dayKeyToApiDate(dayKey, true) })}
-            />
 
             <FormControlLabel
               control={<Switch checked={value.isActive} disabled />}
@@ -985,26 +1158,93 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             />
           </Stack>
 
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+            <Stack spacing={1.25}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                  Thời hạn
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {isOnceAssignment
+                    ? "Giao một lần chỉ nhập hạn nộp báo cáo. Hạn nộp của nhiệm vụ tự kế thừa từ nhiệm vụ cha hoặc work."
+                    : "Hạn nộp là mốc cuối của nhiệm vụ đang giao và giới hạn các kỳ báo cáo định kỳ được sinh."}
+                </Typography>
+              </Box>
+
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={2}
+                alignItems={{ xs: "stretch", md: "flex-start" }}
+              >
+                <SingleDayKeyField
+                  label="Ngày bắt đầu"
+                  value={isoToDayKey(value.startDate)}
+                  disabled={readonly}
+                  fullWidth
+                  minDayKey={workStartDayKey}
+                  maxDayKey={startMaxDayKey}
+                  helperText="Ngày nhiệm vụ bắt đầu được theo dõi."
+                  sx={{ flex: { md: "1 1 180px" } }}
+                  onChange={(dayKey) => emitChange({ startDate: dayKeyToApiDate(dayKey) })}
+                />
+
+                {!isOnceAssignment && (
+                  <SingleDayKeyField
+                    label={uiText(UITextKey.TextHanNop)}
+                    value={isoToDayKey(value.completedDate)}
+                    disabled={readonly}
+                    fullWidth
+                    minDayKey={completedMinDayKey}
+                    maxDayKey={workEndDayKey}
+                    helperText="Mốc cuối của nhiệm vụ; lịch định kỳ không được vượt quá ngày này."
+                    sx={{ flex: { md: "1 1 180px" } }}
+                    onChange={(dayKey) => emitChange({ completedDate: dayKeyToApiDate(dayKey, true) })}
+                  />
+                )}
+
+                {isOnceAssignment && (
+                  <SingleDayKeyField
+                    label="Hạn nộp báo cáo"
+                    value={value.dueAtUtc ? isoDateToDayKey(String(value.dueAtUtc).slice(0, 10)) : ""}
+                    disabled={readonly}
+                    fullWidth
+                    minDayKey={dueMinDayKey}
+                    maxDayKey={dueMaxDayKey}
+                    helperText={
+                      inheritedDueLabel
+                        ? `Không được sau hạn nhiệm vụ kế thừa ${inheritedDueLabel}.`
+                        : "Áp dụng cho report của nhiệm vụ giao một lần."
+                    }
+                    sx={{ flex: { md: "1 1 180px" } }}
+                    onChange={(dayKey) =>
+                      emitChange({
+                        dueAtUtc: dayKey ? `${dayKeyToIsoDate(dayKey)}T23:59:59.999Z` : null,
+                      })
+                    }
+                  />
+                )}
+              </Stack>
+
+              {value.assignmentType === "PERIODIC_REPORT" ? (
+                <Alert severity="info">
+                  Với báo cáo định kỳ, từng kỳ báo cáo lấy hạn theo lịch. Trường Hạn nộp chỉ giới hạn khoảng thời gian nhiệm vụ và các kỳ được sinh.
+                </Alert>
+              ) : null}
+            </Stack>
+          </Box>
+
           {isView ? (
             <>
-              <TextField
-                size="small"
+              <ReadonlyListDropdown
                 label={uiText(UITextKey.TextDonViDuocGiao)}
-                value={viewAssigneeDisplay || "-"}
-                fullWidth
-                multiline
-                minRows={2}
-                InputProps={{ readOnly: true }}
+                items={viewAssigneeItems}
+                fallback={viewAssigneeDisplay}
               />
 
-              <TextField
-                size="small"
+              <ReadonlyListDropdown
                 label={uiText(UITextKey.TextLanhDaoChiHuyTheoDoi)}
-                value={viewLeaderWatcherDisplay || "-"}
-                fullWidth
-                multiline
-                minRows={2}
-                InputProps={{ readOnly: true }}
+                items={viewLeaderWatcherItems}
+                fallback={viewLeaderWatcherDisplay}
               />
             </>
           ) : (
@@ -1043,17 +1283,20 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
             </>
           )}
 
-          <TextField
-            size="small"
-            label={uiText(UITextKey.TextMoTa2)}
-            value={value.description}
-            disabled={readonly}
-            onChange={handleDescriptionChange}
-            fullWidth
-            multiline
-            minRows={2}
-            InputProps={isView ? { readOnly: true } : undefined}
-          />
+          {isView ? (
+            <ReadonlyTextDropdown label={uiText(UITextKey.TextMoTa2)} value={value.description} />
+          ) : (
+            <TextField
+              size="small"
+              label={uiText(UITextKey.TextMoTa2)}
+              value={value.description}
+              disabled={readonly}
+              onChange={handleDescriptionChange}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          )}
 
           {value.assignmentType === "PERIODIC_REPORT" && (
             <PeriodicScheduleEditor

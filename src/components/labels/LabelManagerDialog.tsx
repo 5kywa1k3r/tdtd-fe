@@ -30,6 +30,8 @@ import {
   type LabelScopeType,
   type LabelSearchReq,
   type LabelUsage,
+  type LabelValueOption,
+  type LabelValueSourceType,
   useCreateLabelMutation,
   useDeleteLabelMutation,
   useSearchLabelsMutation,
@@ -46,7 +48,10 @@ import {
   LabelColorPalette,
   LabelColorPreview,
   LabelPreviewChip,
+  LabelValueSourceEditor,
+  labelValueSourceApplies,
   labelUsageUsesDataType,
+  normalizeLabelValueOptions,
 } from "./labelUi";
 
 type LabelFormState = {
@@ -58,6 +63,11 @@ type LabelFormState = {
   groupCode: string;
   usage: LabelUsage;
   dataType: LabelRow["dataType"];
+  valueSourceType: LabelValueSourceType;
+  valueOptions: LabelValueOption[];
+  valueSourceCatalogId: string;
+  valueSourceCatalogCode: string;
+  valueSourceCatalogName: string;
   scopeType: LabelScopeType;
   scopeId: string;
   isActive: boolean;
@@ -71,6 +81,11 @@ const emptyForm = (): LabelFormState => ({
   groupCode: "",
   usage: "CLASSIFICATION",
   dataType: "NUMBER",
+  valueSourceType: "NONE",
+  valueOptions: [],
+  valueSourceCatalogId: "",
+  valueSourceCatalogCode: "",
+  valueSourceCatalogName: "",
   scopeType: "GLOBAL",
   scopeId: "",
   isActive: true,
@@ -152,6 +167,9 @@ export default function LabelManagerDialog({
     form.code.trim().length > 0 &&
     form.name.trim().length > 0 &&
     isValidLabelColor(form.color) &&
+    (form.valueSourceType !== "ENUM_CATALOG" ||
+      !labelValueSourceApplies(form.dataType) ||
+      form.valueSourceCatalogId.trim().length > 0) &&
     (!isSystemAdmin || form.scopeType === "GLOBAL" || form.scopeId.trim().length > 0);
 
   const applySearch = () => {
@@ -181,6 +199,11 @@ export default function LabelManagerDialog({
       groupCode: row.groupCode ?? "",
       usage: row.usage ?? "CLASSIFICATION",
       dataType: row.dataType ?? "NUMBER",
+      valueSourceType: row.valueSourceType ?? "NONE",
+      valueOptions: normalizeLabelValueOptions(row.valueOptions),
+      valueSourceCatalogId: row.valueSourceCatalogId ?? "",
+      valueSourceCatalogCode: row.valueSourceCatalogCode ?? "",
+      valueSourceCatalogName: row.valueSourceCatalogName ?? "",
       scopeType: row.scopeType,
       scopeId: row.scopeId ?? "",
       isActive: row.isActive,
@@ -199,6 +222,18 @@ export default function LabelManagerDialog({
       groupCode: form.groupCode.trim() || null,
       usage: form.usage,
       dataType: form.dataType,
+      valueSourceType:
+        labelUsageUsesDataType(form.usage) && labelValueSourceApplies(form.dataType)
+          ? form.valueSourceType
+          : "NONE",
+      valueOptions:
+        form.valueSourceType === "FIXED_ENUM" && labelValueSourceApplies(form.dataType)
+          ? normalizeLabelValueOptions(form.valueOptions)
+          : [],
+      valueSourceCatalogId:
+        form.valueSourceType === "ENUM_CATALOG" && labelValueSourceApplies(form.dataType)
+          ? form.valueSourceCatalogId.trim() || null
+          : null,
       scopeType: isSystemAdmin ? form.scopeType : null,
       scopeId: isSystemAdmin ? form.scopeId.trim() || null : null,
       isActive: form.isActive,
@@ -216,6 +251,9 @@ export default function LabelManagerDialog({
             groupCode: payload.groupCode,
             usage: payload.usage,
             dataType: payload.dataType,
+            valueSourceType: payload.valueSourceType,
+            valueOptions: payload.valueOptions,
+            valueSourceCatalogId: payload.valueSourceCatalogId,
             isActive: payload.isActive,
           },
         }).unwrap();
@@ -290,7 +328,7 @@ export default function LabelManagerDialog({
                   Tìm
                 </Button>
                 <Button size="small" variant="outlined" startIcon={<ClearIcon />} onClick={clearSearch}>
-                  Reset
+                  Xóa lọc
                 </Button>
               </Stack>
 
@@ -401,7 +439,7 @@ export default function LabelManagerDialog({
                 </Typography>
                 <Stack direction="row" spacing={1}>
                   <Button size="small" variant="outlined" disabled={page === 0} onClick={() => setPage((x) => Math.max(0, x - 1))}>
-                    Truoc
+                    Trước
                   </Button>
                   <Button size="small" variant="outlined" disabled={(page + 1) * pageSize >= total} onClick={() => setPage((x) => x + 1)}>
                     Sau
@@ -466,7 +504,15 @@ export default function LabelManagerDialog({
                 disabled={busy}
                 helperText={labelUsageUsesDataType(form.usage) ? "Kiểu dữ liệu bắt buộc và phải khớp với nơi gắn nhãn." : "Nhãn này chỉ dùng để phân loại, không tham gia thống kê."}
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, usage: event.target.value as LabelUsage }))
+                  setForm((prev) => ({
+                    ...prev,
+                    usage: event.target.value as LabelUsage,
+                    valueSourceType: labelUsageUsesDataType(event.target.value) ? prev.valueSourceType : "NONE",
+                    valueOptions: labelUsageUsesDataType(event.target.value) ? prev.valueOptions : [],
+                    valueSourceCatalogId: labelUsageUsesDataType(event.target.value) ? prev.valueSourceCatalogId : "",
+                    valueSourceCatalogCode: labelUsageUsesDataType(event.target.value) ? prev.valueSourceCatalogCode : "",
+                    valueSourceCatalogName: labelUsageUsesDataType(event.target.value) ? prev.valueSourceCatalogName : "",
+                  }))
                 }
                 InputLabelProps={{ shrink: true }}
               >
@@ -507,7 +553,15 @@ export default function LabelManagerDialog({
                   disabled={busy}
                   helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
+                    setForm((prev) => ({
+                      ...prev,
+                      dataType: event.target.value as LabelRow["dataType"],
+                      valueSourceType: labelValueSourceApplies(event.target.value) ? prev.valueSourceType : "NONE",
+                      valueOptions: labelValueSourceApplies(event.target.value) ? prev.valueOptions : [],
+                      valueSourceCatalogId: labelValueSourceApplies(event.target.value) ? prev.valueSourceCatalogId : "",
+                      valueSourceCatalogCode: labelValueSourceApplies(event.target.value) ? prev.valueSourceCatalogCode : "",
+                      valueSourceCatalogName: labelValueSourceApplies(event.target.value) ? prev.valueSourceCatalogName : "",
+                    }))
                   }
                   InputLabelProps={{ shrink: true }}
                 >
@@ -517,6 +571,38 @@ export default function LabelManagerDialog({
                     </MenuItem>
                   ))}
                 </TextField>
+              )}
+              {labelUsageUsesDataType(form.usage) && (
+                <LabelValueSourceEditor
+                  dataType={form.dataType}
+                  valueSourceType={form.valueSourceType}
+                  valueOptions={form.valueOptions}
+                  valueSourceCatalogId={form.valueSourceCatalogId}
+                  valueSourceCatalogName={form.valueSourceCatalogName}
+                  disabled={busy}
+                  onSourceTypeChange={(valueSourceType) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      valueSourceType,
+                      valueOptions:
+                        valueSourceType === "FIXED_ENUM" && prev.valueOptions.length === 0
+                          ? [{ code: "OPT_1", label: "Lựa chọn 1" }]
+                          : prev.valueOptions,
+                      valueSourceCatalogId: valueSourceType === "ENUM_CATALOG" ? prev.valueSourceCatalogId : "",
+                      valueSourceCatalogCode: valueSourceType === "ENUM_CATALOG" ? prev.valueSourceCatalogCode : "",
+                      valueSourceCatalogName: valueSourceType === "ENUM_CATALOG" ? prev.valueSourceCatalogName : "",
+                    }))
+                  }
+                  onOptionsChange={(valueOptions) => setForm((prev) => ({ ...prev, valueOptions }))}
+                  onCatalogChange={(catalog) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      valueSourceCatalogId: catalog?.id ?? "",
+                      valueSourceCatalogCode: catalog?.code ?? "",
+                      valueSourceCatalogName: catalog?.name ?? "",
+                    }))
+                  }
+                />
               )}
               {isSystemAdmin && !form.id && (
                 <Stack direction="row" spacing={1}>
@@ -577,7 +663,7 @@ export default function LabelManagerDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>
-          Dong
+          Đóng
         </Button>
       </DialogActions>
     </Dialog>

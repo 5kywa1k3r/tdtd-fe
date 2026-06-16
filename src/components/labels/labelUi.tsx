@@ -1,15 +1,32 @@
 import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
   Box,
+  Button,
   ButtonBase,
   Chip,
+  MenuItem,
   Stack,
+  TextField,
   Tooltip,
   Typography,
   type SxProps,
   type Theme,
 } from "@mui/material";
 
-import type { LabelDataType, LabelUsage } from "../../api/labelApi";
+import type {
+  LabelDataType,
+  LabelUsage,
+  LabelValueOption,
+  LabelValueSourceType,
+} from "../../api/labelApi";
+import {
+  type LabelEnumCatalogRow,
+  useSearchLabelEnumCatalogsMutation,
+} from "../../api/labelEnumCatalogApi";
 
 export const LABEL_COLOR_PALETTE = [
   "#2563EB",
@@ -38,6 +55,44 @@ export const LABEL_DATA_TYPE_OPTIONS: Array<{ value: LabelDataType; label: strin
   { value: "STRING_LIST", label: "Danh sách nội dung" },
   { value: "DATE", label: "Ngày" },
   { value: "BOOLEAN", label: "Có/không" },
+];
+
+export const LABEL_VALUE_SOURCE_OPTIONS: Array<{ value: LabelValueSourceType; label: string; description: string }> = [
+  {
+    value: "NONE",
+    label: "Không áp dụng",
+    description: "Nhãn không ép người nhập chọn từ danh mục.",
+  },
+  {
+    value: "FIXED_ENUM",
+    label: "Danh sách cố định",
+    description: "Quản trị viên cấu hình sẵn các mã/lựa chọn.",
+  },
+  {
+    value: "ENUM_CATALOG",
+    label: "Danh mục enum riêng",
+    description: "Chọn danh mục enum do MU/ML quản lý, có phân quyền theo phạm vi.",
+  },
+  {
+    value: "SYSTEM_UNIT",
+    label: "Danh mục đơn vị",
+    description: "Người nhập chọn đơn vị đang có trong hệ thống.",
+  },
+  {
+    value: "SYSTEM_USER",
+    label: "Danh mục người dùng",
+    description: "Người nhập chọn tài khoản/người dùng đang có trong hệ thống.",
+  },
+  {
+    value: "SYSTEM_POSITION",
+    label: "Danh mục chức vụ",
+    description: "Người nhập chọn chức vụ từ catalog hệ thống.",
+  },
+  {
+    value: "SYSTEM_UNIT_TYPE",
+    label: "Danh mục loại đơn vị",
+    description: "Người nhập chọn loại đơn vị từ catalog hệ thống.",
+  },
 ];
 
 export const LABEL_USAGE_OPTIONS: Array<{
@@ -96,6 +151,10 @@ export function formatLabelUsage(usage?: string | null) {
   return LABEL_USAGE_OPTIONS.find((item) => item.value === usage)?.label ?? "Thẻ phân loại";
 }
 
+export function formatLabelValueSourceType(value?: string | null) {
+  return LABEL_VALUE_SOURCE_OPTIONS.find((item) => item.value === value)?.label ?? "Không áp dụng";
+}
+
 export function formatLabelUsageDescription(usage?: string | null) {
   return (
     LABEL_USAGE_OPTIONS.find((item) => item.value === usage)?.description ??
@@ -105,6 +164,236 @@ export function formatLabelUsageDescription(usage?: string | null) {
 
 export function labelUsageUsesDataType(usage?: string | null) {
   return usage === "STATISTIC" || usage === "TABLE_TARGET";
+}
+
+export function labelValueSourceApplies(dataType?: string | null) {
+  return dataType === "SHORT_TEXT" || dataType === "STRING_LIST";
+}
+
+export function normalizeLabelValueOptions(value?: LabelValueOption[] | null) {
+  const seen = new Set<string>();
+  const rows: LabelValueOption[] = [];
+  for (const item of value ?? []) {
+    const code = String(item?.code ?? "").trim();
+    if (!code) continue;
+    const key = code.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const label = String(item?.label ?? "").trim() || code;
+    rows.push({ code, label });
+  }
+  return rows;
+}
+
+export function LabelValueSourceEditor({
+  dataType,
+  valueSourceType,
+  valueOptions,
+  valueSourceCatalogId,
+  valueSourceCatalogName,
+  disabled,
+  onSourceTypeChange,
+  onOptionsChange,
+  onCatalogChange,
+}: {
+  dataType: LabelDataType;
+  valueSourceType: LabelValueSourceType;
+  valueOptions: LabelValueOption[];
+  valueSourceCatalogId?: string | null;
+  valueSourceCatalogName?: string | null;
+  disabled?: boolean;
+  onSourceTypeChange: (value: LabelValueSourceType) => void;
+  onOptionsChange: (value: LabelValueOption[]) => void;
+  onCatalogChange?: (catalog: LabelEnumCatalogRow | null) => void;
+}) {
+  const sourceOptions = labelValueSourceApplies(dataType)
+    ? LABEL_VALUE_SOURCE_OPTIONS
+    : LABEL_VALUE_SOURCE_OPTIONS.filter((item) => item.value === "NONE");
+  const options = valueOptions.length > 0 ? valueOptions : [{ code: "OPT_1", label: "Lựa chọn 1" }];
+
+  return (
+    <Stack spacing={1}>
+      <TextField
+        select
+        size="small"
+        label="Nguồn giá trị"
+        value={labelValueSourceApplies(dataType) ? valueSourceType : "NONE"}
+        disabled={disabled || !labelValueSourceApplies(dataType)}
+        helperText={
+          labelValueSourceApplies(dataType)
+            ? "Nếu chọn nguồn hệ thống, người báo cáo bắt buộc chọn từ select box."
+            : "Nguồn giá trị chỉ áp dụng cho nhãn kiểu nội dung."
+        }
+        onChange={(event) => onSourceTypeChange(event.target.value as LabelValueSourceType)}
+        InputLabelProps={{ shrink: true }}
+      >
+        {sourceOptions.map((option) => (
+          <MenuItem key={option.value} value={option.value}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      {valueSourceType === "FIXED_ENUM" && labelValueSourceApplies(dataType) && (
+        <Stack spacing={0.75}>
+          <Typography variant="caption" color="text.secondary">
+            Danh sách mã cố định dùng để lưu thống kê; tên hiển thị dùng cho UI.
+          </Typography>
+          {options.map((option, index) => (
+            <Box
+              key={index}
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "160px minmax(0, 1fr) auto" },
+                gap: 0.75,
+                alignItems: "start",
+              }}
+            >
+              <TextField
+                size="small"
+                label="Mã"
+                value={option.code}
+                disabled={disabled}
+                onChange={(event) => {
+                  const next = options.slice();
+                  next[index] = { ...next[index], code: event.target.value };
+                  onOptionsChange(next);
+                }}
+              />
+              <TextField
+                size="small"
+                label="Tên hiển thị"
+                value={option.label}
+                disabled={disabled}
+                onChange={(event) => {
+                  const next = options.slice();
+                  next[index] = { ...next[index], label: event.target.value };
+                  onOptionsChange(next);
+                }}
+              />
+              <Button
+                size="small"
+                color="error"
+                disabled={disabled || options.length <= 1}
+                onClick={() => onOptionsChange(options.filter((_item, itemIndex) => itemIndex !== index))}
+                sx={{ minHeight: 40 }}
+              >
+                Xóa
+              </Button>
+            </Box>
+          ))}
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={disabled}
+            onClick={() =>
+              onOptionsChange([
+                ...options,
+                { code: `OPT_${options.length + 1}`, label: `Lựa chọn ${options.length + 1}` },
+              ])
+            }
+          >
+            Thêm lựa chọn
+          </Button>
+        </Stack>
+      )}
+
+      {valueSourceType === "ENUM_CATALOG" && labelValueSourceApplies(dataType) && (
+        <LabelEnumCatalogSelect
+          value={valueSourceCatalogId ?? ""}
+          selectedName={valueSourceCatalogName ?? ""}
+          disabled={disabled}
+          onChange={(catalog) => onCatalogChange?.(catalog)}
+        />
+      )}
+    </Stack>
+  );
+}
+
+export function LabelEnumCatalogSelect({
+  value,
+  selectedName,
+  disabled,
+  helperText = "Chỉ hiển thị danh mục enum trong phạm vi tài khoản được phép sử dụng.",
+  onChange,
+}: {
+  value?: string | null;
+  selectedName?: string | null;
+  disabled?: boolean;
+  helperText?: string;
+  onChange: (catalog: LabelEnumCatalogRow | null) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [search, searchState] = useSearchLabelEnumCatalogsMutation();
+
+  useEffect(() => {
+    search({
+      q: q.trim() || null,
+      isActive: true,
+      page: 0,
+      pageSize: 50,
+      sortField: "name",
+      sortDirection: "asc",
+    });
+  }, [q, search]);
+
+  const rows = searchState.data?.rows ?? [];
+  const options = useMemo(() => {
+    if (!value || rows.some((row) => row.id === value)) return rows;
+    return [
+      {
+        id: value,
+        code: "",
+        name: selectedName || value,
+        description: null,
+        scopeType: "GLOBAL" as const,
+        scopeId: null,
+        scopeUnitCode: null,
+        scopeLevel: null,
+        activeOptionCount: 0,
+        totalOptionCount: 0,
+        isActive: true,
+        canManage: false,
+        createdByUsername: "",
+        createdAtUtc: "",
+        updatedAtUtc: "",
+      },
+      ...rows,
+    ];
+  }, [rows, selectedName, value]);
+
+  return (
+    <Stack spacing={0.75}>
+      <TextField
+        size="small"
+        label="Tìm danh mục enum"
+        value={q}
+        disabled={disabled}
+        placeholder="Nhập mã hoặc tên danh mục"
+        onChange={(event) => setQ(event.target.value)}
+      />
+      <TextField
+        select
+        size="small"
+        label="Danh mục enum"
+        value={value ?? ""}
+        disabled={disabled || searchState.isLoading}
+        helperText={helperText}
+        onChange={(event) => {
+          const selected = options.find((row) => row.id === event.target.value) ?? null;
+          onChange(selected);
+        }}
+        InputLabelProps={{ shrink: true }}
+      >
+        <MenuItem value="">Chưa chọn danh mục enum</MenuItem>
+        {options.map((row) => (
+          <MenuItem key={row.id} value={row.id}>
+            {row.name} ({row.code || row.id})
+          </MenuItem>
+        ))}
+      </TextField>
+    </Stack>
+  );
 }
 
 export function LabelSwatch({

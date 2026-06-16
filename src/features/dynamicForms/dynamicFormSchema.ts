@@ -8,11 +8,13 @@ import type {
   DynamicFormStatisticConfig,
   DynamicFormTableIndexMapItem,
   DynamicFormTableMode,
+  DynamicFormValueSource,
+  DynamicFormValueSourceType,
 } from "./dynamicForm.types";
 
 export const fieldTypeLabels: Record<DynamicFormFieldType, string> = {
   shortText: "Nội dung cố định",
-  longText: "Nội dung (cũ)",
+  longText: "Nội dung",
   stringList: "Danh sách nội dung",
   number: "Số",
   date: "Ngày/kỳ",
@@ -116,7 +118,7 @@ export function getExcelSpecKindFromBlockLike(value: unknown) {
 }
 
 export const MAX_DYNAMIC_FORM_FIELDS = 200;
-export const MAX_DYNAMIC_FORM_TABLE_BLOCKS = 10;
+export const MAX_DYNAMIC_FORM_TABLE_BLOCKS = 30;
 export const MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS = 30;
 
 export function createId(prefix: string) {
@@ -235,6 +237,7 @@ export function normalizeFields(
         minHeight: clampHeight(x.minHeight),
         order: index,
         options: normalizeOptions(type, x.options),
+        valueSource: normalizeValueSource(type, x.valueSource, x.options),
         statisticLabelCodes,
         isStatistic,
         statistic: isStatistic
@@ -404,6 +407,10 @@ function toFieldsJsonPayload(fields: DynamicFormField[]) {
 
     if (field.options) {
       payload.options = field.options;
+    }
+
+    if (field.valueSource) {
+      payload.valueSource = field.valueSource;
     }
 
     if (field.statistic) {
@@ -816,7 +823,7 @@ function validateUniqueLabelStatisticTargets(
 
   for (const field of fields) {
     if (!field.isStatistic && normalizeLabelCodes(field.statisticLabelCodes).length > 0) {
-      throw new Error("Trường gắn nhãn phải được bật thống kê.");
+      throw new Error("Trường gắn nhãn phải được bật làm chỉ số tổng hợp.");
     }
     if (!field.isStatistic) continue;
     const labels = normalizeLabelCodes(field.statisticLabelCodes);
@@ -844,7 +851,7 @@ function validateUniqueLabelStatisticTargets(
 
   if (targetCount > MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS) {
     throw new Error(
-      `Biểu mẫu động chỉ được có tối đa ${MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS} trường hoặc cột gắn nhãn thống kê.`,
+      `Biểu mẫu động chỉ được có tối đa ${MAX_DYNAMIC_FORM_LABEL_STATISTIC_TARGETS} trường hoặc cột gắn nhãn chỉ số tổng hợp.`,
     );
   }
 }
@@ -1106,6 +1113,41 @@ function normalizeOptions(
     code: x.code?.trim() || `OPT_${index + 1}`,
     label: x.label?.trim() || defaultOptionLabelForFieldType(type, index),
   }));
+}
+
+const FIELD_VALUE_SOURCE_TYPES = new Set<DynamicFormValueSourceType>([
+  "FIXED_ENUM",
+  "ENUM_CATALOG",
+  "SYSTEM_UNIT",
+  "SYSTEM_USER",
+  "SYSTEM_POSITION",
+  "SYSTEM_UNIT_TYPE",
+]);
+
+function normalizeValueSource(
+  type: DynamicFormFieldType,
+  valueSource: DynamicFormField["valueSource"],
+  fallbackOptions: DynamicFormField["options"],
+): DynamicFormValueSource | undefined {
+  if (type !== "shortText" && type !== "singleSelect" && type !== "multiSelect") return undefined;
+  if (!valueSource || typeof valueSource !== "object") return undefined;
+
+  const sourceTypeRaw = String(valueSource.sourceType ?? "").trim().toUpperCase();
+  if (!FIELD_VALUE_SOURCE_TYPES.has(sourceTypeRaw as DynamicFormValueSourceType)) return undefined;
+  const sourceType = sourceTypeRaw as DynamicFormValueSourceType;
+  const options = sourceType === "FIXED_ENUM"
+    ? normalizeOptions(type, valueSource.options?.length ? valueSource.options : fallbackOptions)
+    : undefined;
+
+  return {
+    sourceType,
+    labelCode: valueSource.labelCode?.trim() || undefined,
+    labelName: valueSource.labelName?.trim() || undefined,
+    catalogId: valueSource.catalogId?.trim() || undefined,
+    catalogCode: valueSource.catalogCode?.trim() || undefined,
+    catalogName: valueSource.catalogName?.trim() || undefined,
+    options,
+  };
 }
 
 export function defaultOptionsForFieldType(type: DynamicFormFieldType): NonNullable<DynamicFormField["options"]> {

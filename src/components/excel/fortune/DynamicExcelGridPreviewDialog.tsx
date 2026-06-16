@@ -11,12 +11,13 @@ import {
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { Workbook } from "@fortune-sheet/react";
 import type { Sheet } from "@fortune-sheet/core";
 
 import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import { getTableRect } from "./regions";
 import { ensureWorkbookShape } from "./reportWorkbook";
+import LazyFortuneWorkbook from "./LazyFortuneWorkbook";
+import { useFortuneWheelScrollFix } from "./wheelScroll";
 import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
@@ -38,6 +39,7 @@ export default function DynamicExcelGridPreviewDialog({
   dynamicExcelId,
   onClose,
 }: Props) {
+  const sheetWheelRef = useFortuneWheelScrollFix<HTMLDivElement>();
   const { data, isLoading, isError } = useGetDynamicExcelQuery(
     { id: dynamicExcelId ?? "" },
     { skip: !open || !dynamicExcelId }
@@ -151,24 +153,36 @@ export default function DynamicExcelGridPreviewDialog({
           </Stack>
         ) : (
           <Box
+            ref={sheetWheelRef}
             className="tdtdSheet"
             sx={{
               height: 640,
               border: "1px solid rgba(255,255,255,0.12)",
               borderRadius: 2,
               overflow: "hidden",
-              "& .luckysheet-bottom-controll-row": {
-                display: "none !important",
-              },
               "& .fortune-sheettab-button": {
                 display: "none !important",
               },
               "& .fortune-sheettab-container-c": {
                 display: "none !important",
               },
+              "& .fortune-zoom-container": {
+                display: "none !important",
+              },
+              "& #luckysheet-bottom-add-row, & #luckysheet-bottom-add-row-input, & #luckysheet-bottom-return-top": {
+                display: "none !important",
+              },
             }}
           >
-            <Workbook key={renderKey} {...settings} />
+            <LazyFortuneWorkbook
+              key={renderKey}
+              {...settings}
+              fallback={(
+                <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
+                  <CircularProgress size={28} />
+                </Stack>
+              )}
+            />
           </Box>
         )}
       </DialogContent>

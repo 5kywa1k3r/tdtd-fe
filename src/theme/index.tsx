@@ -1,11 +1,11 @@
 // src/theme/index.ts
 import { createTheme } from '@mui/material/styles';
 // ✅ OFFLINE FONT (Inter) - self-host via npm package
-import '@fontsource/inter/400.css';
-import '@fontsource/inter/500.css';
-import '@fontsource/inter/600.css';
-import '@fontsource/inter/700.css';
-import '@fontsource/inter/800.css';
+import '@fontsource/inter/vietnamese-400.css';
+import '@fontsource/inter/vietnamese-500.css';
+import '@fontsource/inter/vietnamese-600.css';
+import '@fontsource/inter/vietnamese-700.css';
+import '@fontsource/inter/vietnamese-800.css';
 
 declare module '@mui/material/styles' {
   interface Theme {

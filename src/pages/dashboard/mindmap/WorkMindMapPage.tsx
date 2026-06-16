@@ -38,6 +38,7 @@ import {
   openReportDrawer,
   openSummary,
   openUnitDrawer,
+  resetMindMapState,
   setExpandedNodes,
   setSelectedWork,
   setSelectedWorkType,
@@ -45,6 +46,7 @@ import {
   toggleExpandedNode,
 } from "../../../stores/dashboardMindMapSlice";
 import type {
+  DashboardMindMapCoverageDto,
   DashboardMindMapNodeDto,
   DashboardMindMapFieldSummaryDto,
   DashboardMindMapLabelSummaryDto,
@@ -323,24 +325,46 @@ function makeMeta(totalRows: number, nextCursor?: string | null): CursorMeta {
 
 function reportText(report: DashboardMindMapReportRowDto) {
   const parts = [
-    report.currentProgressStatus ? `Tiến độ: ${report.currentProgressStatus}` : "",
-    report.reportReason ? `Lý do báo cáo: ${report.reportReason}` : "",
-    report.difficulties ? `Khó khăn: ${report.difficulties}` : "",
-    report.proposedSolution ? `Đề xuất: ${report.proposedSolution}` : "",
     report.lateReason ? `Lý do chậm: ${report.lateReason}` : "",
     report.reviewerComment ? `Nhận xét: ${report.reviewerComment}` : "",
     report.reviewerEvaluation ? `Đánh giá: ${report.reviewerEvaluation}` : "",
   ].filter(Boolean);
 
-  return parts.length ? parts.join(" | ") : "Chưa có nội dung báo cáo tóm tắt.";
+  return parts.length ? parts.join(" | ") : "Chưa có ghi chú duyệt/trễ hạn.";
+}
+
+function getPeriodKindLabel(periodKind?: string | null): string {
+  return (periodKind ?? "").toUpperCase() === "USER_CREATED" ? "Chủ động" : "Bắt buộc";
+}
+
+function buildCoverageChips(coverage?: DashboardMindMapCoverageDto | null): MindMapGraphChip[] {
+  if (!coverage) return [];
+
+  const chips: MindMapGraphChip[] = [];
+  if (coverage.requiredCount > 0) {
+    chips.push({
+      label: `Bắt buộc ${coverage.requiredCount}`,
+      color: coverage.missingCount > 0 ? "warning" : "success",
+      variant: "outlined",
+    });
+  }
+  if (coverage.missingCount > 0) {
+    chips.push({ label: `Thiếu ${coverage.missingCount}`, color: "error", variant: "outlined" });
+  }
+  if (coverage.adHocCount > 0) {
+    chips.push({ label: `Chủ động ${coverage.adHocCount}`, color: "warning", variant: "outlined" });
+  }
+
+  return chips;
 }
 
 type WorkMindMapPageProps = {
   embedded?: boolean;
   canvasOnly?: boolean;
+  scope?: DashboardMindMapScopeRequest;
 };
 
-export default function WorkMindMapPage({ embedded = false, canvasOnly = false }: WorkMindMapPageProps = {}) {
+export default function WorkMindMapPage({ embedded = false, canvasOnly = false, scope }: WorkMindMapPageProps = {}) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -413,6 +437,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
   const reportFilterTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const effectiveWorkType = urlStateReadyRef.current ? selectedWorkType : initialWorkTypeRef.current;
   const currentWorkNodeId = selectedWorkId ? workNodeId(selectedWorkId) : "";
+  const effectiveScope = scope ?? EMPTY_SCOPE;
 
   const { data: worksResponse, isFetching: worksLoading } = useSearchWorksQuery(
     {
@@ -544,8 +569,11 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       Object.values(reportFilterTimeoutsRef.current).forEach(clearTimeout);
       templateUserSearchTimeoutsRef.current = {};
       reportFilterTimeoutsRef.current = {};
+      if (embedded) {
+        dispatch(resetMindMapState());
+      }
     };
-  }, []);
+  }, [dispatch, embedded]);
 
   const workOptions = useMemo(
     () => (worksResponse?.rows ?? []).map(mapWorkOptionFromListRow),
@@ -1161,6 +1189,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         chips: [
           { label: `${group.userCount} người dùng`, color: "primary" },
           { label: `${group.reportCount} báo cáo`, color: "info" },
+          ...buildCoverageChips(group.coverage),
           ...(group.overdueCount > 0 ? [{ label: `${group.overdueCount} chậm`, color: "error" as const }] : []),
         ],
         stackedBar: group.reportBar,
@@ -1192,6 +1221,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         subtitle: `Báo cáo gần nhất: ${formatDateOnly(user.latestDueAtUtc)}`,
         chips: [
           { label: `${user.totalReports} báo cáo`, color: "info" },
+          ...buildCoverageChips(user.coverage),
           ...(user.overdueCount > 0 ? [{ label: `${user.overdueCount} chậm`, color: "error" as const }] : []),
         ],
         stackedBar: user.reportBar,
@@ -1226,6 +1256,11 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         title: getMindMapReportPeriodStatusLabel(report.periodStatus),
         subtitle: reportText(report),
         chips: [
+          {
+            label: getPeriodKindLabel(report.periodKind),
+            color: (report.periodKind ?? "").toUpperCase() === "USER_CREATED" ? "warning" : "default",
+            variant: "outlined",
+          },
           { label: `Hạn ${formatDateOnly(report.dueAtUtc)}`, color: report.bucket === "OVERDUE" ? "error" : "default" },
           ...(report.reportStatus != null
             ? [{ label: getWorkAssignmentReportStatusLabel(report.reportStatus), color: "success" as const }]
@@ -1258,7 +1293,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
       <NodeSummaryPopover
         open={Boolean(summaryNodeId && summaryAnchorPosition)}
         nodeId={summaryNodeId}
-        scope={EMPTY_SCOPE}
+        scope={effectiveScope}
         anchorPosition={summaryAnchorPosition}
         onClose={handleCloseSummary}
         onOpenUnitBucket={(nodeId, bucket) => {
@@ -1288,7 +1323,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         open={unitDrawer.open}
         nodeId={unitDrawer.nodeId}
         bucket={unitDrawer.bucket}
-        scope={EMPTY_SCOPE}
+        scope={effectiveScope}
         onClose={() => dispatch(closeUnitDrawer())}
       />
 
@@ -1297,7 +1332,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         open={reportDrawer.open}
         nodeId={reportDrawer.nodeId}
         bucket={reportDrawer.bucket}
-        scope={EMPTY_SCOPE}
+        scope={effectiveScope}
         onClose={() => dispatch(closeReportDrawer())}
       />
 
@@ -1306,7 +1341,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         open={tableMetricDrawer.open}
         nodeId={tableMetricDrawer.nodeId}
         metric={tableMetricDrawer.metric}
-        scope={EMPTY_SCOPE}
+        scope={effectiveScope}
         onClose={handleCloseTableMetric}
       />
 
@@ -1315,7 +1350,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         open={fieldMetricDrawer.open}
         nodeId={fieldMetricDrawer.nodeId}
         metric={fieldMetricDrawer.metric}
-        scope={EMPTY_SCOPE}
+        scope={effectiveScope}
         onClose={handleCloseFieldMetric}
       />
 
@@ -1324,7 +1359,7 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false }
         open={labelDrawer.open}
         nodeId={labelDrawer.nodeId}
         label={labelDrawer.label}
-        scope={EMPTY_SCOPE}
+        scope={effectiveScope}
         onClose={handleCloseLabel}
       />
     </>

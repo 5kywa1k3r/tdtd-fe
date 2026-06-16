@@ -90,6 +90,48 @@ function upsertCelldata(sheet: any, r: number, c: number, fullCellObj: any, firs
   }
 }
 
+function removeCelldata(sheet: any, r: number, c: number, firstIdx: Map<string, number>) {
+  const cd = ensureCelldata(sheet);
+  const next = cd.filter((it) => !(Number(it?.r) === r && Number(it?.c) === c));
+  sheet.celldata = next;
+  firstIdx.clear();
+  for (let i = 0; i < next.length; i++) {
+    const it = next[i];
+    const rr = Number(it?.r);
+    const cc = Number(it?.c);
+    if (!Number.isFinite(rr) || !Number.isFinite(cc)) continue;
+    const k = keyOf(rr, cc);
+    if (!firstIdx.has(k)) firstIdx.set(k, i);
+  }
+}
+
+function isEmptyCellObject(cell: any) {
+  return cell && typeof cell === "object" && !Array.isArray(cell) && Object.keys(cell).length === 0;
+}
+
+function buildMergeChildSet(sheet: any) {
+  const children = new Set<string>();
+  const merge = sheet?.config?.merge;
+  if (!merge || typeof merge !== "object") return children;
+
+  for (const item of Object.values<any>(merge)) {
+    const r0 = Math.floor(Number(item?.r ?? item?.row ?? item?.r0));
+    const c0 = Math.floor(Number(item?.c ?? item?.col ?? item?.c0));
+    const rs = Math.max(1, Math.floor(Number(item?.rs ?? item?.rowspan ?? item?.rowSpan ?? item?.rows ?? 1)));
+    const cs = Math.max(1, Math.floor(Number(item?.cs ?? item?.colspan ?? item?.colSpan ?? item?.cols ?? 1)));
+    if (!Number.isFinite(r0) || !Number.isFinite(c0) || !Number.isFinite(rs) || !Number.isFinite(cs)) continue;
+
+    for (let r = r0; r < r0 + rs; r++) {
+      for (let c = c0; c < c0 + cs; c++) {
+        if (r === r0 && c === c0) continue;
+        children.add(keyOf(r, c));
+      }
+    }
+  }
+
+  return children;
+}
+
 function backupBg(sheet: any, r: number, c: number, cdMap: Map<string, any>): Backup {
   const cell = getBaseCell(sheet, r, c, cdMap);
   const bg = cell && typeof cell === "object" ? cell.bg : undefined;
@@ -117,6 +159,13 @@ function applyBg(
 
   if (bg === undefined) delete next.bg;
   else next.bg = bg;
+
+  if (isEmptyCellObject(next)) {
+    row[c] = null;
+    removeCelldata(sheet, r, c, firstIdx);
+    cdMap.delete(keyOf(r, c));
+    return;
+  }
 
   row[c] = next;
 
@@ -156,10 +205,12 @@ function applyLocked(
 export function markRect(sheet: any, rect: Rect, color: string, backup: Map<string, Backup>) {
   const cdMap = buildCelldataMap(sheet);
   const firstIdx = buildCelldataFirstIndex(sheet);
+  const mergeChildren = buildMergeChildSet(sheet);
 
   for (let r = rect.r0; r <= rect.r1; r++) {
     for (let c = rect.c0; c <= rect.c1; c++) {
       const k = keyOf(r, c);
+      if (mergeChildren.has(k)) continue;
       if (!backup.has(k)) backup.set(k, backupBg(sheet, r, c, cdMap));
       applyBg(sheet, r, c, color, cdMap, firstIdx);
     }

@@ -276,7 +276,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
                 size="small"
                 type="datetime-local"
                 fullWidth
-                label={uiText(UITextKey.TextHanNop)}
+                label="Hạn nộp báo cáo"
                 value={draft.dueAtUtc ? draft.dueAtUtc.slice(0, 16) : ""}
                 disabled={rowDisabled}
                 onChange={(e) =>

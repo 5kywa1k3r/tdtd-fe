@@ -5,7 +5,6 @@ import {
   Button,
   Checkbox,
   Chip,
-  CircularProgress,
   Divider,
   FormControlLabel,
   Grid,
@@ -47,6 +46,7 @@ import type {
   DynamicFormFieldType,
   DynamicFormSection,
   DynamicFormTableMode,
+  DynamicFormValueSource,
 } from "../dynamicForm.types";
 import {
   createDefaultField,
@@ -75,11 +75,13 @@ import LabelPicker from "../../../components/labels/LabelPicker";
 import LabelManagerDialog from "../../../components/labels/LabelManagerDialog";
 import { DynamicExcelPicker } from "../../../components/works/assignments/DynamicExcelPicker";
 import type { LabelDataType } from "../../../api/labelApi";
-import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
+import { useQuickCreateLabelEnumCatalogMutation } from "../../../api/labelEnumCatalogApi";
 import { dataTypeLabel } from "../../../components/excel/fortune/dataTypes";
 import DynamicExcelConfigDialog from "../../../components/excel/fortune/DynamicExcelConfigDialog";
-import WorkbookDataGrid from "../../../components/excel/fortune/WorkbookDataGrid";
 import { UITextKey, uiText } from '../../../constants/uiText';
+import { LabelEnumCatalogSelect } from "../../../components/labels/labelUi";
+import DynamicFormExcelBlockPreview from "../components/DynamicFormExcelBlockPreview";
+import DynamicFormSectionSelect from "../components/DynamicFormSectionSelect";
 
 type Mode = "create" | "edit" | "view";
 
@@ -125,7 +127,7 @@ function fieldTypeButtonLabel(type: DynamicFormFieldType) {
 function fieldTypeTooltip(type: DynamicFormFieldType) {
   if (type === "date") return "Ngày/kỳ: nhập dd/MM/yyyy, MM/yyyy hoặc yyyy.";
   if (type === "fullDate") return "Ngày đầy đủ: nhập dd/MM/yyyy.";
-  if (type === "longText") return "Nội dung dài một ô, giữ tương thích với kiểu nội dung cũ.";
+  if (type === "longText") return "Nội dung dài một ô.";
   if (type === "stringList") return "Danh sách nội dung: nhập nhiều ý tự do để nối chuỗi, tìm kiếm và xuất dữ liệu.";
   return fieldTypeLabels[type];
 }
@@ -560,21 +562,22 @@ export default function DynamicFormEditor({
                 {sections.length} phần
               </Typography>
 
-              <Stack spacing={0.75}>
-                {sections.map((section) => (
-                  <Button
-                    key={section.id}
-                    variant={section.id === selectedSection?.id ? "contained" : "outlined"}
-                    onClick={() => {
-                      setSelectedSectionId(section.id);
-                      setSelectedFieldId(null);
-                    }}
-                    sx={{ justifyContent: "flex-start", textTransform: "none" }}
-                  >
-                    {getSectionTitleLabel(section)}
-                  </Button>
-                ))}
-              </Stack>
+              <DynamicFormSectionSelect
+                label={uiText(UITextKey.TextSections)}
+                value={selectedSection?.id ?? ""}
+                items={sections.map((section) => ({
+                  section,
+                  fieldCount: fields.filter((field) => field.sectionId === section.id).length,
+                  blockCount: excelBlockJsonList.filter((blockJson) => {
+                    const sectionId = getExcelBlockSectionId(blockJson) ?? sections[0]?.id ?? "";
+                    return sectionId === section.id;
+                  }).length,
+                }))}
+                onChange={(section) => {
+                  setSelectedSectionId(section.id);
+                  setSelectedFieldId(null);
+                }}
+              />
 
               <Divider />
 
@@ -823,73 +826,9 @@ function ExcelBlockCard({
           <Chip size="small" variant="outlined" label={summary.specKindLabel} />
           <Chip size="small" variant="outlined" label={summary.tableModeLabel} />
         </Stack>
-        {preview && <ExcelBlockWorkbookPreview blockJson={blockJson} />}
+        {preview && <DynamicFormExcelBlockPreview blockJson={blockJson} showHeader={false} />}
       </Stack>
     </Paper>
-  );
-}
-
-function ExcelBlockWorkbookPreview({ blockJson }: { blockJson: string }) {
-  const summary = getExcelBlockConfigSummary(blockJson);
-  const dynamicExcelId = summary.dynamicExcelId ?? "";
-  const { data, isLoading, isError } = useGetDynamicExcelQuery(
-    { id: dynamicExcelId },
-    { skip: !dynamicExcelId },
-  );
-
-  const parsed = useMemo(() => {
-    if (!data) return null;
-    const dataRect = summary.dataRect ?? data.dataRect;
-    if (!dataRect) return null;
-
-    return {
-      spec: safeParseJson(data.specJson, null),
-      workbook: safeParseJson<any[]>(data.rawWorkbookDataJson, []) ?? [],
-      dataRect,
-    };
-  }, [data, summary.dataRect]);
-
-  if (!dynamicExcelId) {
-    return (
-      <Alert severity="warning" sx={{ mt: 0.5 }}>
-        Bảng chưa có mã Excel động để xem trước.
-      </Alert>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 160 }}>
-        <CircularProgress size={24} />
-      </Stack>
-    );
-  }
-
-  if (isError || !parsed) {
-    return <Alert severity="error">Không tải được bảng Excel động để xem trước.</Alert>;
-  }
-
-  return (
-    <Box
-      sx={{
-        width: "100%",
-        minHeight: 260,
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 1,
-        overflow: "hidden",
-        bgcolor: "background.paper",
-      }}
-    >
-      <WorkbookDataGrid
-        initialSpec={parsed.spec}
-        initialWorkbookData={parsed.workbook}
-        dataRect={parsed.dataRect}
-        mode="view"
-        readOnly
-        showActions={false}
-      />
-    </Box>
   );
 }
 
@@ -938,7 +877,7 @@ function FieldCard({
               <Chip label="Cần đặt tên" size="small" color="warning" variant="outlined" />
             )}
             {field.required && <Chip label={uiText(UITextKey.TextRequired)} size="small" variant="outlined" />}
-            {field.isStatistic && <Chip label={uiText(UITextKey.TextStat)} size="small" color="primary" variant="outlined" />}
+            {field.isStatistic && <Chip label="Chỉ số tổng hợp" size="small" color="primary" variant="outlined" />}
           </Stack>
 
           {!preview && !readOnly && (
@@ -1157,14 +1096,17 @@ function FieldSettingsPanel({
           onChange={(e: SelectChangeEvent) => {
             const nextType = e.target.value as DynamicFormFieldType;
             const keepStatistic = field.isStatistic && canUseFieldStatistic(nextType);
+            const nextOptions = isChoiceFieldType(nextType)
+              ? field.options?.length
+                ? field.options
+                : defaultOptionsForFieldType(nextType)
+              : undefined;
             onChange({
               type: nextType,
-              options:
-                nextType === "shortText" || nextType === "singleSelect" || nextType === "multiSelect"
-                  ? field.options?.length
-                    ? field.options
-                    : defaultOptionsForFieldType(nextType)
-                  : undefined,
+              options: nextOptions,
+              valueSource: isChoiceFieldType(nextType)
+                ? valueSourceWithChoiceOptions(field.valueSource, nextOptions ?? [], nextType)
+                : undefined,
               isStatistic: keepStatistic,
               statistic: keepStatistic
                 ? { ...defaultStatistic(), aggregateOps: defaultAggregateOps(nextType) }
@@ -1187,7 +1129,7 @@ function FieldSettingsPanel({
           allowedDataTypes={getStatisticLabelDataTypesForField(field.type)}
           label={uiText(UITextKey.TextFieldLabels)}
           placeholder={uiText(UITextKey.TextChonNhanField)}
-          helperText={`${uiText(UITextKey.TextChiFieldDaBatStatisticMoiDuocGanLabel)} Kiểu nhãn phải khớp với kiểu trường.`}
+          helperText="Chỉ trường đã bật làm chỉ số tổng hợp mới được gán nhãn. Kiểu nhãn phải khớp với kiểu trường."
           onChange={(codes) =>
             onChange({
               statisticLabelCodes: codes,
@@ -1248,7 +1190,7 @@ function FieldSettingsPanel({
               }}
             />
           }
-          label={uiText(UITextKey.TextStatistic)}
+          label="Bật làm chỉ số tổng hợp"
         />
 
         {field.isStatistic && canUseCurrentStatistic && (
@@ -1273,10 +1215,10 @@ function FieldSettingsPanel({
               label={
                 <Stack spacing={0.25}>
                   <Typography variant="body2" fontWeight={700}>
-                    Thống kê chi tiết
+                    Đưa vào tổng hợp chi tiết
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Hiển thị trường này trong màn hình tổng hợp chi tiết của công việc để xem số lượng, tổng, nhóm giá trị hoặc nội dung theo từng báo cáo.
+                    Lưu dữ liệu của trường này để dùng trong màn tổng hợp chi tiết của công việc. Người dùng có thể xem số dòng có dữ liệu, tổng với trường số, nhóm theo lựa chọn hoặc nội dung ngắn, và mở danh sách báo cáo nguồn để đối chiếu.
                   </Typography>
                 </Stack>
               }
@@ -1301,10 +1243,10 @@ function FieldSettingsPanel({
               label={
                 <Stack spacing={0.25}>
                   <Typography variant="body2" fontWeight={700}>
-                    Thống kê trên cây
+                    Hiển thị chỉ số nhanh trên màn hình tổng hợp
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    Đưa chỉ số rút gọn của trường này lên từng node trong cây công việc/dashboard. Chỉ nên bật cho các chỉ số thật sự cần theo dõi nhanh.
+                    Đưa kết quả rút gọn của trường này lên màn hình tổng hợp công việc để theo dõi nhanh theo từng nhiệm vụ. Chỉ bật cho vài chỉ số quan trọng; khi cần kiểm tra dữ liệu gốc thì mở phần tổng hợp chi tiết.
                   </Typography>
                 </Stack>
               }
@@ -1316,8 +1258,24 @@ function FieldSettingsPanel({
           <ChoiceOptionsEditor
             fieldType={field.type}
             options={field.options}
+            valueSource={field.valueSource}
             disabled={readOnly}
-            onChange={(options) => onChange({ options })}
+            quickCreateName={`Enum ${getDynamicFormFieldDisplayName(field)}`}
+            quickCreateSourcePath={`dynamic-form:field:${field.id}`}
+            onChange={(options) =>
+              onChange({
+                options,
+                valueSource: valueSourceWithChoiceOptions(field.valueSource, options, field.type),
+              })
+            }
+            onSourceChange={(valueSource) =>
+              onChange({
+                valueSource,
+                options: valueSource?.sourceType === "FIXED_ENUM"
+                  ? valueSource.options ?? field.options
+                  : field.options,
+              })
+            }
           />
         )}
       </Stack>
@@ -1490,19 +1448,39 @@ type ChoiceOption = NonNullable<DynamicFormField["options"]>[number];
 function ChoiceOptionsEditor({
   fieldType,
   options,
+  valueSource,
   disabled,
+  quickCreateName,
+  quickCreateSourcePath,
   onChange,
+  onSourceChange,
 }: {
   fieldType: DynamicFormFieldType;
   options?: DynamicFormField["options"];
+  valueSource?: DynamicFormField["valueSource"];
   disabled: boolean;
+  quickCreateName?: string;
+  quickCreateSourcePath?: string;
   onChange: (options: ChoiceOption[]) => void;
+  onSourceChange: (valueSource: DynamicFormValueSource | null) => void;
 }) {
   const [rows, setRows] = useState<ChoiceOption[]>(() => toChoiceRows(options, fieldType));
+  const [quickCreateCatalog, quickCreateState] = useQuickCreateLabelEnumCatalogMutation();
+  const sourceType = valueSource?.sourceType ?? "FIXED_ENUM";
+  const usesFixedOptions = sourceType === "FIXED_ENUM";
+  const usesEnumCatalog = sourceType === "ENUM_CATALOG";
+  const [catalogDraftName, setCatalogDraftName] = useState(valueSource?.catalogName || quickCreateName || "");
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   useEffect(() => {
     setRows(toChoiceRows(options, fieldType));
   }, [options, fieldType]);
+
+  useEffect(() => {
+    if (usesEnumCatalog && valueSource?.catalogName) {
+      setCatalogDraftName(valueSource.catalogName);
+    }
+  }, [usesEnumCatalog, valueSource?.catalogName]);
 
   const commit = (nextRows: ChoiceOption[]) => {
     const normalized = normalizeChoiceRows(nextRows, fieldType);
@@ -1532,8 +1510,127 @@ function ChoiceOptionsEditor({
     commit(rows.filter((_, rowIndex) => rowIndex !== index));
   };
 
+  const createEnumCatalogFromOptions = async () => {
+    const normalized = normalizeChoiceRows(rows, fieldType);
+    const name = catalogDraftName.trim();
+    if (!name || normalized.length === 0) return;
+
+    try {
+      setCatalogError(null);
+      const catalog = await quickCreateCatalog({
+        name,
+        sourceFeature: "DYNAMIC_FORM",
+        sourcePath: quickCreateSourcePath ?? "dynamic-form",
+        options: normalized,
+      }).unwrap();
+      onChange(normalized);
+      onSourceChange({
+        sourceType: "ENUM_CATALOG",
+        catalogId: catalog.id,
+        catalogCode: catalog.code,
+        catalogName: catalog.name,
+      });
+    } catch {
+      setCatalogError("Không tạo được danh mục enum từ danh sách hiện tại.");
+    }
+  };
+
   return (
     <Stack spacing={1}>
+      <TextField
+        select
+        size="small"
+        label="Nguồn dữ liệu nhập liệu"
+        value={sourceType}
+        disabled={disabled}
+        helperText="UI cấu hình chọn nguồn; người báo cáo luôn chọn từ select box/multiselect và hệ thống lưu mã."
+        onChange={(event) => {
+          const nextSourceType = event.target.value as DynamicFormValueSource["sourceType"];
+          if (nextSourceType === "FIXED_ENUM") {
+            onSourceChange({ sourceType: "FIXED_ENUM", options: normalizeChoiceRows(rows, fieldType) });
+            return;
+          }
+          if (nextSourceType === "ENUM_CATALOG") {
+            onSourceChange({
+              sourceType: "ENUM_CATALOG",
+              catalogId: valueSource?.catalogId,
+              catalogCode: valueSource?.catalogCode,
+              catalogName: valueSource?.catalogName,
+            });
+            return;
+          }
+          onSourceChange({ sourceType: nextSourceType });
+        }}
+      >
+        <MenuItem value="FIXED_ENUM">Danh sách cố định</MenuItem>
+        <MenuItem value="ENUM_CATALOG">Danh mục enum riêng</MenuItem>
+        <MenuItem value="SYSTEM_UNIT">Danh mục đơn vị</MenuItem>
+        <MenuItem value="SYSTEM_USER">Danh mục người dùng</MenuItem>
+        <MenuItem value="SYSTEM_POSITION">Danh mục chức vụ</MenuItem>
+        <MenuItem value="SYSTEM_UNIT_TYPE">Danh mục loại đơn vị</MenuItem>
+      </TextField>
+
+      {!usesFixedOptions && (
+        <Alert severity="info" variant="outlined">
+          {usesEnumCatalog
+            ? "Người báo cáo chọn từ danh mục enum riêng được phân quyền; không nhập text tự do."
+            : "Người báo cáo chọn từ danh mục hệ thống; không nhập text tự do."}
+        </Alert>
+      )}
+
+      {usesEnumCatalog && (
+        <LabelEnumCatalogSelect
+          value={valueSource?.catalogId ?? ""}
+          selectedName={valueSource?.catalogName ?? ""}
+          disabled={disabled}
+          helperText="Chọn danh mục enum riêng đã được MU/ML tạo và phân quyền."
+          onChange={(catalog) =>
+            onSourceChange({
+              sourceType: "ENUM_CATALOG",
+              catalogId: catalog?.id,
+              catalogCode: catalog?.code,
+              catalogName: catalog?.name,
+            })
+          }
+        />
+      )}
+
+      {usesFixedOptions && (
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={1}
+          alignItems={{ xs: "stretch", md: "flex-start" }}
+        >
+          <TextField
+            size="small"
+            label="Tên danh mục enum mới"
+            value={catalogDraftName}
+            disabled={disabled || quickCreateState.isLoading}
+            helperText="Tạo nhanh danh mục enum riêng từ danh sách đang cấu hình."
+            onChange={(event) => setCatalogDraftName(event.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={
+              disabled ||
+              quickCreateState.isLoading ||
+              !catalogDraftName.trim() ||
+              normalizeChoiceRows(rows, fieldType).length === 0
+            }
+            onClick={createEnumCatalogFromOptions}
+            sx={{ minHeight: 40 }}
+          >
+            Tạo enum
+          </Button>
+        </Stack>
+      )}
+
+      {catalogError && <Alert severity="error">{catalogError}</Alert>}
+
+      {usesFixedOptions && (
+        <>
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
         <Typography variant="body2" sx={{ fontWeight: 700 }}>
           {fieldType === "shortText" ? "Nội dung" : "Lựa chọn"}
@@ -1551,7 +1648,7 @@ function ChoiceOptionsEditor({
 
       <Stack spacing={1}>
         {rows.map((option, index) => (
-          <Grid container spacing={1} alignItems="center" key={`${option.code}_${index}`}>
+          <Grid container spacing={1} alignItems="center" key={index}>
             <Grid size={{ xs: 4 }}>
               <TextField
                 fullWidth
@@ -1602,6 +1699,8 @@ function ChoiceOptionsEditor({
           </Grid>
         ))}
       </Stack>
+        </>
+      )}
     </Stack>
   );
 }
@@ -1652,6 +1751,21 @@ function nextChoiceCode(rows: ChoiceOption[]) {
 
 function choiceCodeAt(index: number) {
   return index < 26 ? String.fromCharCode(65 + index) : `OPT_${index + 1}`;
+}
+
+function isChoiceFieldType(fieldType: DynamicFormFieldType) {
+  return fieldType === "shortText" || fieldType === "singleSelect" || fieldType === "multiSelect";
+}
+
+function valueSourceWithChoiceOptions(
+  source: DynamicFormField["valueSource"],
+  options: ChoiceOption[],
+  fieldType: DynamicFormFieldType,
+): DynamicFormValueSource | undefined {
+  if (!source) return undefined;
+  return source.sourceType === "FIXED_ENUM"
+    ? { ...source, options: normalizeChoiceRows(options, fieldType) }
+    : source;
 }
 
 function getStatisticLabelDataTypesForField(fieldType: DynamicFormFieldType): LabelDataType[] {
@@ -1749,15 +1863,6 @@ function parseExcelBlockJson(json: string | null | undefined): Record<string, un
       : null;
   } catch {
     return null;
-  }
-}
-
-function safeParseJson<T>(input?: string | null, fallback?: T): T | undefined {
-  if (!input) return fallback;
-  try {
-    return JSON.parse(input) as T;
-  } catch {
-    return fallback;
   }
 }
 

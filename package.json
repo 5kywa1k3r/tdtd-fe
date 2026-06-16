@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/patch-fortune-sheet-wrap.mjs",
+    "predev": "node scripts/patch-fortune-sheet-wrap.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/patch-fortune-sheet-wrap.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

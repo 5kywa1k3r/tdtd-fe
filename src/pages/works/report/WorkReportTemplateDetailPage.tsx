@@ -32,7 +32,6 @@ import {
   useOpenWorkReportPeriodMutation,
 } from "../../../api/reportApi";
 import SingleDayKeyField, {
-  dayKeyToDisplay,
   dayKeyToIsoDate,
 } from "../../../components/common/SingleDayKeyField";
 
@@ -50,6 +49,8 @@ import { UITextKey, uiText } from '../../../constants/uiText';
 export interface WorkReportTemplateDetailPageProps {
   workId: string;
   group: MyReportTemplateRow;
+  scopeAssignmentId?: string | null;
+  scopeAssignmentIds?: string[];
   onBack?: () => void;
 }
 
@@ -109,11 +110,6 @@ function dayKeyToApiDate(dayKey?: string | null) {
   return normalized.length === 8 ? `${dayKeyToIsoDate(normalized)}T00:00:00.000Z` : null;
 }
 
-function dayKeyToApiDueAt(dayKey?: string | null) {
-  const normalized = normalizeDayKey(dayKey);
-  return normalized.length === 8 ? `${dayKeyToIsoDate(normalized)}T23:59:59.999Z` : null;
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   const anyError = error as any;
   return anyError?.data?.message || anyError?.data?.title || anyError?.message || fallback;
@@ -139,7 +135,12 @@ function compactId(value?: string | null) {
 
 function formatAssignmentOptionLabel(option: MyReportTemplateAssignmentOption) {
   const code = option.assignmentCode?.trim();
-  const type = option.assignmentType === "PERIODIC_REPORT" ? "Định kỳ" : "Chủ động";
+  const type =
+    option.assignmentType === "ONCE"
+      ? "Một lần"
+      : option.assignmentType === "PERIODIC_REPORT"
+        ? "Định kỳ"
+        : "Phân công";
   const date = normalizeDayKey(option.dueDate || option.dueAtUtc || option.completedDate);
   const suffix = date ? ` - ${date}` : "";
   return `${code || compactId(option.workAssignmentId) || "Phân công"} - ${type}${suffix}`;
@@ -171,7 +172,8 @@ function getCreateAssignmentId(
 export default function WorkReportTemplateDetailPage(
   props: WorkReportTemplateDetailPageProps
 ) {
-  const { workId, group, onBack } = props;
+  const { workId, group, scopeAssignmentId = null, scopeAssignmentIds = [], onBack } = props;
+  const isBranchView = Boolean(scopeAssignmentId);
 
   const [selectedWorkReportPeriodId, setSelectedWorkReportPeriodId] =
     useState<string | null>(null);
@@ -182,10 +184,7 @@ export default function WorkReportTemplateDetailPage(
   );
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
-  const [createStartDay, setCreateStartDay] = useState("");
-  const [createEndDay, setCreateEndDay] = useState("");
   const [createReportDay, setCreateReportDay] = useState("");
-  const [createDueDay, setCreateDueDay] = useState("");
   const [createAssignmentId, setCreateAssignmentId] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -193,6 +192,7 @@ export default function WorkReportTemplateDetailPage(
     {
       workId,
       dynamicFormTemplateId: group.dynamicFormTemplateId,
+      scopeAssignmentId: scopeAssignmentId || null,
     },
     {
       skip: !workId || !group.dynamicFormTemplateId,
@@ -208,13 +208,38 @@ export default function WorkReportTemplateDetailPage(
     return parseMyReportTemplateDetail(data);
   }, [data]);
 
-  const allPeriods = parsed?.periods ?? [];
-  const assignmentOptions = parsed?.assignmentOptions ?? [];
+  const scopeIdSet = useMemo(() => {
+    const ids = scopeAssignmentIds.length > 0
+      ? scopeAssignmentIds
+      : scopeAssignmentId
+      ? [scopeAssignmentId]
+      : [];
+    return new Set(ids.filter(Boolean));
+  }, [scopeAssignmentId, scopeAssignmentIds]);
+  const allPeriods = useMemo(() => {
+    const periods = parsed?.periods ?? [];
+    if (scopeIdSet.size === 0) return periods;
+    return periods.filter((period) => scopeIdSet.has(period.workAssignmentId));
+  }, [parsed?.periods, scopeIdSet]);
+  const assignmentOptions = useMemo(() => {
+    const options = parsed?.assignmentOptions ?? [];
+    if (scopeIdSet.size === 0) return options;
+    return options.filter((option) => scopeIdSet.has(option.workAssignmentId));
+  }, [parsed?.assignmentOptions, scopeIdSet]);
   const assignmentLabelById = useMemo(() => {
     const map = new Map<string, string>();
     assignmentOptions.forEach((option) => {
       if (option.workAssignmentId) {
         map.set(option.workAssignmentId, formatAssignmentOptionLabel(option));
+      }
+    });
+    return map;
+  }, [assignmentOptions]);
+  const assignmentTypeById = useMemo(() => {
+    const map = new Map<string, string>();
+    assignmentOptions.forEach((option) => {
+      if (option.workAssignmentId && option.assignmentType) {
+        map.set(option.workAssignmentId, option.assignmentType);
       }
     });
     return map;
@@ -225,20 +250,6 @@ export default function WorkReportTemplateDetailPage(
     assignmentOptions,
     parsed?.workAssignmentId
   );
-  const selectedCreateAssignmentOption = useMemo(
-    () =>
-      assignmentOptions.find((option) => option.workAssignmentId === createAssignmentId) ??
-      assignmentOptions.find((option) => option.workAssignmentId === defaultCreateAssignmentId) ??
-      null,
-    [assignmentOptions, createAssignmentId, defaultCreateAssignmentId]
-  );
-  const createAssignmentDueDay = getAssignmentHardDueDayKey(selectedCreateAssignmentOption);
-  const createDueAfterAssignmentDue = Boolean(
-    createAssignmentDueDay &&
-    normalizeDayKey(createDueDay).length === 8 &&
-    normalizeDayKey(createDueDay) > createAssignmentDueDay
-  );
-
   const filteredPeriods = useMemo(
     () => allPeriods.filter((row) => matchStatusBucket(row, filterValue.statusBucket)),
     [allPeriods, filterValue.statusBucket]
@@ -259,6 +270,17 @@ export default function WorkReportTemplateDetailPage(
   }, [allPeriods]);
 
   const handleOpenPeriod = async (row: WorkReportPeriodRow) => {
+    if (isBranchView) {
+      if (!row.currentReportId) {
+        setOpenError("Kỳ này chưa có báo cáo để xem.");
+        return;
+      }
+
+      setSelectedWorkReportPeriodId(row.id);
+      setSelectedReportId(row.currentReportId);
+      return;
+    }
+
     try {
       setOpenError(null);
       const rs = await openWorkReportPeriod({
@@ -282,10 +304,7 @@ export default function WorkReportTemplateDetailPage(
       : todayDayKey();
     setCreateTitle("");
     setCreateAssignmentId(assignmentId);
-    setCreateStartDay(day);
-    setCreateEndDay(day);
     setCreateReportDay(day);
-    setCreateDueDay(day);
     setCreateError(null);
     setCreateOpen(true);
   };
@@ -305,57 +324,19 @@ export default function WorkReportTemplateDetailPage(
       return;
     }
 
-    const startDay = normalizeDayKey(createStartDay);
-    const endDay = normalizeDayKey(createEndDay);
-    const reportDay = normalizeDayKey(createReportDay || endDay);
-    const dueDay = normalizeDayKey(createDueDay);
+    const reportDay = normalizeDayKey(createReportDay);
 
-    if (dueDay.length !== 8) {
-      setCreateError("Nhập hạn hoàn thành cho báo cáo chủ động.");
-      return;
-    }
-
-    if (startDay.length !== 8 || endDay.length !== 8 || reportDay.length !== 8) {
-      setCreateError("Nhập đủ ngày bắt đầu, ngày kết thúc và ngày báo cáo.");
-      return;
-    }
-
-    if (endDay < startDay) {
-      setCreateError("Ngày kết thúc không được trước ngày bắt đầu.");
-      return;
-    }
-
-    if (reportDay < startDay || reportDay > endDay) {
-      setCreateError("Ngày báo cáo phải nằm trong khoảng ngày bắt đầu - kết thúc.");
-      return;
-    }
-
-    if (dueDay < startDay) {
-      setCreateError("Hạn hoàn thành không được trước ngày bắt đầu.");
-      return;
-    }
-
-    const assignmentDueDay = getAssignmentHardDueDayKey(
-      assignmentOptions.find((option) => option.workAssignmentId === targetAssignmentId)
-    );
-    if (assignmentDueDay && dueDay > assignmentDueDay) {
-      setCreateError(`Hạn hoàn thành của báo cáo chủ động không được sau hạn chung của công việc (${dayKeyToDisplay(assignmentDueDay)}).`);
+    if (reportDay.length !== 8) {
+      setCreateError("Nhập ngày báo cáo.");
       return;
     }
 
     try {
       setCreateError(null);
-      const completedDate = endDay < todayDayKey() ? dayKeyToApiDate(endDay) : null;
       const created = await createUserCreatedReport({
         workAssignmentId: targetAssignmentId,
         data: {
-          periodKey: reportDay,
           reportDate: dayKeyToApiDate(reportDay),
-          periodStart: dayKeyToApiDate(startDay),
-          periodEnd: dayKeyToApiDate(endDay),
-          startedDate: dayKeyToApiDate(startDay),
-          completedDate,
-          dueAtUtc: dayKeyToApiDueAt(dueDay),
           reportTitle: createTitle.trim() || `Báo cáo chủ động ${reportDay}`,
         },
       }).unwrap();
@@ -375,6 +356,7 @@ export default function WorkReportTemplateDetailPage(
         workId={workId}
         reportId={selectedReportId}
         workReportPeriodId={selectedWorkReportPeriodId ?? undefined}
+        forceReadOnly={isBranchView}
         onBack={() => {
           setSelectedReportId(null);
           setSelectedWorkReportPeriodId(null);
@@ -420,7 +402,7 @@ export default function WorkReportTemplateDetailPage(
             variant="contained"
             startIcon={<AddCircleOutlineIcon />}
             onClick={handleOpenCreateUserReport}
-            disabled={!defaultCreateAssignmentId || createUserCreatedReportState.isLoading}
+            disabled={isBranchView || !defaultCreateAssignmentId || createUserCreatedReportState.isLoading}
             sx={{ borderRadius: 2 }}
           >
             Tạo báo cáo chủ động
@@ -471,8 +453,10 @@ export default function WorkReportTemplateDetailPage(
               compactId(row.workAssignmentId) ||
               "-"
             }
+            getAssignmentType={(row) => assignmentTypeById.get(row.workAssignmentId)}
             onOpen={handleOpenPeriod}
             onRowDoubleClick={handleOpenPeriod}
+            canOpen={(row) => !isBranchView || Boolean(row.currentReportId)}
           />
         </Paper>
       )}
@@ -509,8 +493,8 @@ export default function WorkReportTemplateDetailPage(
                     const nextAssignmentDueDay = getAssignmentHardDueDayKey(
                       assignmentOptions.find((option) => option.workAssignmentId === nextAssignmentId)
                     );
-                    if (nextAssignmentDueDay && createDueDay && createDueDay > nextAssignmentDueDay) {
-                      setCreateDueDay(nextAssignmentDueDay);
+                    if (nextAssignmentDueDay && nextAssignmentDueDay < todayDayKey()) {
+                      setCreateReportDay(nextAssignmentDueDay);
                     }
                   }}
                   disabled={createUserCreatedReportState.isLoading}
@@ -530,58 +514,15 @@ export default function WorkReportTemplateDetailPage(
                 </Select>
               </FormControl>
             )}
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              <SingleDayKeyField
-                label="Ngày bắt đầu"
-                value={createStartDay}
-                onChange={(dayKey) => {
-                  setCreateStartDay(dayKey);
-                  if (createEndDay && dayKey && createEndDay < dayKey) {
-                    setCreateEndDay(dayKey);
-                    setCreateReportDay(dayKey);
-                    setCreateDueDay(dayKey);
-                  }
-                }}
-                maxDayKey={createEndDay || undefined}
-                disabled={createUserCreatedReportState.isLoading}
-                fullWidth
-              />
-              <SingleDayKeyField
-                label="Ngày kết thúc"
-                value={createEndDay}
-                onChange={(dayKey) => {
-                  setCreateEndDay(dayKey);
-                  if (dayKey) {
-                    setCreateReportDay(dayKey);
-                    setCreateDueDay(dayKey);
-                  }
-                }}
-                minDayKey={createStartDay || undefined}
-                disabled={createUserCreatedReportState.isLoading}
-                fullWidth
-              />
-            </Stack>
             <SingleDayKeyField
               label="Ngày báo cáo"
               value={createReportDay}
               onChange={setCreateReportDay}
-              minDayKey={createStartDay || undefined}
-              maxDayKey={createEndDay || undefined}
-              disabled={createUserCreatedReportState.isLoading}
-              fullWidth
-            />
-            <SingleDayKeyField
-              label="Hạn hoàn thành"
-              value={createDueDay}
-              onChange={setCreateDueDay}
-              minDayKey={createStartDay || undefined}
-              maxDayKey={createAssignmentDueDay || undefined}
-              helperText={createAssignmentDueDay ? `Không sau hạn chung của công việc: ${dayKeyToDisplay(createAssignmentDueDay)}.` : undefined}
               disabled={createUserCreatedReportState.isLoading}
               fullWidth
             />
             <Alert severity="warning">
-              Báo cáo chủ động là báo cáo phát sinh, không thay thế kỳ định kỳ bắt buộc. Hạn hoàn thành dùng để xác định đúng hạn hoặc quá hạn và vẫn bị giới hạn bởi hạn chung của công việc.
+              Báo cáo chủ động là báo cáo phát sinh, không thay thế kỳ định kỳ bắt buộc. Khoảng báo cáo và hạn hoàn thành được xác định theo phân công đã giao.
             </Alert>
             {createError ? (
               <Alert severity="error">{createError}</Alert>
@@ -602,8 +543,7 @@ export default function WorkReportTemplateDetailPage(
             disabled={
               createUserCreatedReportState.isLoading ||
               !createAssignmentId ||
-              !createDueDay ||
-              createDueAfterAssignmentDue
+              !createReportDay
             }
           >
             {createUserCreatedReportState.isLoading ? "Đang tạo..." : "Tạo bản nháp"}

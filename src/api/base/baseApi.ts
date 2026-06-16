@@ -4,8 +4,8 @@ import { axiosBaseQuery } from './axiosBaseQuery';
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: axiosBaseQuery(),
-  tagTypes: ['Me', 'Units', 'Users', 'UnitHistory', 'UnitTypes', 'Positions', 'Tasks', 'DynamicExcel', 'DynamicForm', 'Label', 'UsersSearch',
-     'WorkHistory', 'Work', 'WorkFile', 'WorkDocument', 'PickersUnits', 'PickersLeaders', 'PickersAssignees', 'WorkAssignment',
+  tagTypes: ['Me', 'Units', 'Users', 'UnitHistory', 'UnitTypes', 'Positions', 'Tasks', 'DynamicExcel', 'DynamicForm', 'Label', 'LabelEnumCatalog', 'UsersSearch',
+     'WorkHistory', 'Work', 'WorkFile', 'WorkDocument', 'PickersUnits', 'PickersUsers', 'PickersCatalog', 'PickersLeaders', 'PickersAssignees', 'WorkAssignment',
      'WorkAssignmentHandoverHistory', 'DynamicFormCloneRequest',
      //Report
      'ReportTemplateGroup', 'WorkAssignmentReportList', 'WorkAssignmentReportSearch', 'WorkAssignmentReport', 'WorkAssignmentByDynamicExcel',

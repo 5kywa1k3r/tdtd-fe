@@ -44,6 +44,8 @@ function buildMindMapScopeQueryString(
   return params.toString();
 }
 
+const MIND_MAP_CACHE_SECONDS = 60;
+
 export const dashboardMindMapApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getDashboardMindMapWorkTree: build.query<
@@ -62,7 +64,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
           method: "GET",
         };
       },
-      keepUnusedDataFor: 180,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMap" as const,
@@ -85,7 +87,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
           method: "GET",
         };
       },
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         { type: "DashboardMindMap" as const, id: `ROOTS_${arg.workId}_${arg.cursor ?? "0"}` },
       ],
@@ -104,7 +106,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
           method: "GET",
         };
       },
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         { type: "DashboardMindMapNode" as const, id: `CHILDREN_${arg.assignmentId}_${arg.cursor ?? "0"}` },
       ],
@@ -119,7 +121,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req ?? { unitIds: [] },
       }),
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         { type: "DashboardMindMapNode" as const, id: arg.assignmentId },
       ],
@@ -133,7 +135,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         url: `dashboard-mindmap/nodes/${assignmentId}/template-groups`,
         method: "GET",
       }),
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         { type: "DashboardMindMapNode" as const, id: `TEMPLATES_${arg.assignmentId}` },
       ],
@@ -159,7 +161,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
           method: "GET",
         };
       },
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapNode" as const,
@@ -181,7 +183,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req ?? { assigneeUserIds: [], limit: 5 },
       }),
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapReports" as const,
@@ -203,7 +205,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
           method: "GET",
         };
       },
-      keepUnusedDataFor: 300,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         { type: "DashboardMindMapNode" as const, id: arg.assignmentId },
       ],
@@ -218,7 +220,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req,
       }),
-      keepUnusedDataFor: 180,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapUnits" as const,
@@ -240,7 +242,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req,
       }),
-      keepUnusedDataFor: 180,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapReports" as const,
@@ -262,7 +264,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req,
       }),
-      keepUnusedDataFor: 180,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapReports" as const,
@@ -284,7 +286,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req,
       }),
-      keepUnusedDataFor: 180,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapReports" as const,
@@ -306,7 +308,7 @@ export const dashboardMindMapApi = baseApi.injectEndpoints({
         method: "POST",
         data: req,
       }),
-      keepUnusedDataFor: 180,
+      keepUnusedDataFor: MIND_MAP_CACHE_SECONDS,
       providesTags: (_result, _error, arg) => [
         {
           type: "DashboardMindMapReports" as const,

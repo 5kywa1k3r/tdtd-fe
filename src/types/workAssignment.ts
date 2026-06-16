@@ -28,6 +28,7 @@ export type DynamicFormDataSourceRulesDocument = {
 };
 
 export type WorkAssignmentAutoApproveConditionOperator =
+  | "always"
   | "eq"
   | "neq"
   | "contains"
@@ -95,6 +96,7 @@ export type WorkAssignmentStatusFields = {
 export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
   id: string;
   workId: string;
+  name?: string | null;
 
   dynamicExcelId: string;
   dynamicExcelCode: string;
@@ -139,6 +141,7 @@ export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
 export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
   id: string;
   workId: string;
+  name?: string | null;
 
   dynamicExcelId: string;
   dynamicExcelCode: string;
@@ -190,6 +193,7 @@ export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
 };
 
 export type SaveWorkAssignmentRequest = {
+  name?: string | null;
   parentAssignmentId?: string | null;
   dynamicFormTemplateId?: string | null;
   dynamicFormDataSourceRulesJson?: string | null;
@@ -238,6 +242,7 @@ export type AssignmentDraft = {
   localId: string;
   id?: string;
   workId?: string;
+  name?: string | null;
   parentAssignmentId?: string | null;
   createMode?: "root" | "child";
 
@@ -297,6 +302,7 @@ export type AssignmentDraft = {
 export function emptyAssignmentDraft(): AssignmentDraft {
   return {
     localId: `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: "",
     parentAssignmentId: null,
     createMode: "root",
     dynamicExcelId: "",
@@ -348,6 +354,7 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     localId: `assignment_${x.id}`,
     id: x.id,
     workId: x.workId,
+    name: x.name ?? "",
     parentAssignmentId: x.parentAssignmentId ?? null,
     createMode: x.parentAssignmentId ? "child" : "root",
     dynamicExcelId: x.dynamicExcelId,

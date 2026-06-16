@@ -104,6 +104,7 @@ export type DashboardMindMapTemplateGroupDto = {
   reportCount: number;
   overdueCount: number;
   latestDueAtUtc?: string | null;
+  coverage: DashboardMindMapCoverageDto;
   reportBar: DashboardStackedBarDto;
 };
 
@@ -121,6 +122,7 @@ export type DashboardMindMapTemplateUserDto = {
   totalReports: number;
   overdueCount: number;
   latestDueAtUtc?: string | null;
+  coverage: DashboardMindMapCoverageDto;
   reportBar: DashboardStackedBarDto;
 };
 
@@ -197,6 +199,17 @@ export type DashboardStackedBarDto = {
   segments: DashboardStackedBarSegmentDto[];
 };
 
+export type DashboardMindMapCoverageDto = {
+  requiredCount: number;
+  scheduledPeriodCount: number;
+  reportedCount: number;
+  submittedCount: number;
+  approvedCount: number;
+  missingCount: number;
+  overdueMissingCount: number;
+  adHocCount: number;
+};
+
 export type DashboardMindMapLabelSummaryDto = {
   labelCode: string;
   labelName?: string | null;
@@ -259,6 +272,7 @@ export type DashboardMindMapNodeSummaryDto = {
   activeAssignmentCount: number;
   totalAssigneeCount: number;
   reportSummary: DashboardNodeReportSummaryDto;
+  coverage: DashboardMindMapCoverageDto;
   unitBar: DashboardStackedBarDto;
   reportBar: DashboardStackedBarDto;
   labelSummaries: DashboardMindMapLabelSummaryDto[];
@@ -279,8 +293,6 @@ export type DashboardMindMapUnitRowDto = {
   overdueCount: number;
   latestPeriodKey?: string | null;
   latestDueAtUtc?: string | null;
-  currentProgressStatus?: string | null;
-  difficulties?: string | null;
   lateReason?: string | null;
   returnReason?: string | null;
   reviewerComment?: string | null;
@@ -301,15 +313,12 @@ export type DashboardMindMapReportRowDto = {
   unitLabel?: string | null;
   bucket: DashboardMindMapBucket;
   periodKey?: string | null;
+  periodKind?: string | null;
   periodStatus?: number | null;
   reportStatus?: number | null;
   dueAtUtc?: string | null;
   submittedAtUtc?: string | null;
   approvedAtUtc?: string | null;
-  currentProgressStatus?: string | null;
-  reportReason?: string | null;
-  difficulties?: string | null;
-  proposedSolution?: string | null;
   lateReason?: string | null;
   returnReason?: string | null;
   reviewerComment?: string | null;

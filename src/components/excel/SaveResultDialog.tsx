@@ -15,7 +15,7 @@ export function SaveResultDialog(props: {
       <DialogTitle>{uiText(UITextKey.TextKetQuaLuu)}</DialogTitle>
       <DialogContent dividers>
         {ok ? (
-          <Alert severity="success">{uiText(UITextKey.TextHopLeDaSanSangLuuCauHinhHeader)}</Alert>
+          <Alert severity="success">Đã lưu cấu hình bảng biểu động.</Alert>
         ) : (
           <Stack spacing={1}>
             <Alert severity="error">{uiText(UITextKey.TextKhongHopLeSuaCacLoiSau)}</Alert>

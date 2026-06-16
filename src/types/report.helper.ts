@@ -37,10 +37,6 @@ export interface WorkReportEditorState {
   spec?: any;
   values1D: ReportCellValue[];
 
-  currentProgressStatus: string;
-  reportReason: string;
-  difficulties: string;
-  proposedSolution: string;
   lateReason: string;
 
   reviewerComment: string;

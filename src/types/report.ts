@@ -23,6 +23,7 @@ export interface MyReportTemplateSearchRequest {
   isActive?: boolean | null;
   hasReport?: boolean | null;
   hasOverduePeriod?: boolean | null;
+  scopeAssignmentId?: string | null;
   sortField?: string | null;
   sortDirection?: "asc" | "desc" | string | null;
 }
@@ -58,6 +59,7 @@ export interface WorkReportPeriodRow {
   id: string;
   workId: string;
   workAssignmentId: string;
+  assignmentType?: string | null;
   workTemplateAssigneeId: string;
 
   dynamicExcelId: string;
@@ -96,11 +98,6 @@ export interface WorkReportPeriodRow {
   lastDraftSavedAtUtc?: string | null;
   lastSubmittedAtUtc?: string | null;
   lastReviewedAtUtc?: string | null;
-
-  currentProgressStatus?: string | null;
-  reportReason?: string | null;
-  difficulties?: string | null;
-  proposedSolution?: string | null;
 
   lateReason?: string | null;
   reviewerComment?: string | null;
@@ -156,6 +153,7 @@ export interface WorkAssignmentReportResponse {
   id: string;
   workId: string;
   workAssignmentId: string;
+  assignmentType?: string | null;
   workReportPeriodId: string;
   assigneeUserId?: string | null;
 
@@ -217,11 +215,6 @@ export interface WorkAssignmentReportResponse {
   aggregateSnapshotDirtyAtUtc?: string | null;
   aggregateSnapshotRefreshedAtUtc?: string | null;
   aggregateRefreshError?: string | null;
-
-  currentProgressStatus?: string | null;
-  reportReason?: string | null;
-  difficulties?: string | null;
-  proposedSolution?: string | null;
 
   isLateSubmission: boolean;
   lateReason?: string | null;
@@ -303,11 +296,6 @@ export interface WorkAssignmentReportListRow {
   aggregateSnapshotRefreshedAtUtc?: string | null;
   aggregateRefreshError?: string | null;
 
-  currentProgressStatus?: string | null;
-  reportReason?: string | null;
-  difficulties?: string | null;
-  proposedSolution?: string | null;
-
   versionNo: number;
   isCurrent: boolean;
   isActive: boolean;
@@ -369,11 +357,6 @@ export interface SaveWorkAssignmentReportDraftRequest {
   cumulativeContributionPolicyJson?: string | null;
   summarySourceJson?: string | null;
 
-  currentProgressStatus?: string | null;
-  reportReason?: string | null;
-  difficulties?: string | null;
-  proposedSolution?: string | null;
-  startedDate?: string | null;
   completedDate?: string | null;
   lateReason?: string | null;
 
@@ -385,9 +368,11 @@ export interface ApplyDynamicFormAggregateDraftRequest {
   dataOrigin?: WorkReportDataOrigin | string | null;
   cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
   cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
   targetBlockId?: string | null;
   valueSelector?: "SUM" | "AVERAGE" | "MIN" | "MAX" | "COUNT" | string | null;
   clearExistingValues?: boolean | null;
+  reportMapConfigJson?: string | null;
   allowSubmittedSources?: boolean | null;
 }
 
@@ -405,11 +390,6 @@ export interface SubmitWorkAssignmentReportRequest {
   cumulativeContributionPolicyJson?: string | null;
   summarySourceJson?: string | null;
 
-  currentProgressStatus?: string | null;
-  reportReason?: string | null;
-  difficulties?: string | null;
-  proposedSolution?: string | null;
-  startedDate?: string | null;
   completedDate?: string | null;
   lateReason?: string | null;
 
@@ -440,13 +420,7 @@ export interface WorkAssignmentReportLogRow {
 }
 
 export interface CreateUserCreatedReportRequest {
-  periodKey?: string | null;
   reportTitle?: string | null;
   reportDate?: string | null;
-  startedDate?: string | null;
-  completedDate?: string | null;
-  periodStart?: string | null;
-  periodEnd?: string | null;
-  dueAtUtc?: string | null;
   linkedScheduledPeriodId?: string | null;
 }

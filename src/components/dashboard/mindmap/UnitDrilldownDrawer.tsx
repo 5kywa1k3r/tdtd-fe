@@ -128,10 +128,9 @@ export default function UnitDrilldownDrawer(props: UnitDrilldownDrawerProps) {
       },
       {
         field: "notes",
-        header: "Khó khăn / lý do",
+        header: "Ghi chú duyệt / trễ hạn",
         render: (row) => (
           <Stack spacing={1}>
-            {renderTextBlock("Khó khăn", row.difficulties)}
             {renderTextBlock("Lý do chậm", row.lateReason)}
             {renderTextBlock(
               "Góp ý phản hồi",

@@ -104,6 +104,8 @@ export interface DynamicFormAggregateRequest {
   periodKeyTo?: string | null;
   sourceStatusMode?: string | null;
   selectedUnitIds?: string[] | null;
+  aggregateConfigId?: string | null;
+  identityColumns?: string[] | null;
 }
 
 export interface DynamicFormAggregateMetaDto {
@@ -120,9 +122,34 @@ export interface DynamicFormAggregateMetaDto {
   periodKeyTo?: string | null;
   sourceStatusMode?: string | null;
   selectedUnitIds: string[];
+  aggregateConfigId?: string | null;
+  identityColumns: string[];
   sourceAssignmentCount: number;
   sourceReportCount: number;
   metricCount: number;
+}
+
+export interface DynamicFormStackedTableColumnDto {
+  key: string;
+  label: string;
+  role: "IDENTITY" | "METRIC" | string;
+  type: string;
+  metricKey?: string | null;
+  sourceKey?: string | null;
+}
+
+export interface DynamicFormStackedTableRowDto {
+  rowKey: string;
+  cells: Record<string, unknown>;
+  sourceReportIds: string[];
+  sourceAssignmentIds: string[];
+}
+
+export interface DynamicFormStackedTableDto {
+  sourceTableMode: string;
+  rowMode: string;
+  columns: DynamicFormStackedTableColumnDto[];
+  rows: DynamicFormStackedTableRowDto[];
 }
 
 export interface DynamicFormAggregateColumnDto {
@@ -163,6 +190,211 @@ export interface DynamicFormAggregateResponse {
   meta: DynamicFormAggregateMetaDto;
   columns: DynamicFormAggregateColumnDto[];
   rows: DynamicFormAggregateRowDto[];
+  stackedTable?: DynamicFormStackedTableDto | null;
   sources: AggregateSourceRowDto[];
+  warnings: string[];
+}
+
+export interface WorkAssignmentAggregateConfigDto {
+  id?: string | null;
+  workId: string;
+  assignmentId: string;
+  sourceDynamicFormTemplateId?: string | null;
+  sourceBlockId?: string | null;
+  sourceTableMode?: string | null;
+  targetDynamicFormTemplateId?: string | null;
+  targetBlockId?: string | null;
+  aggregateKind: string;
+  identityColumns: string[];
+  periodAggregationRule: string;
+  metricMappingsJson?: string | null;
+  versionNo: number;
+  isActive: boolean;
+}
+
+export interface SaveWorkAssignmentAggregateConfigRequest {
+  sourceDynamicFormTemplateId?: string | null;
+  sourceBlockId?: string | null;
+  sourceTableMode?: string | null;
+  targetDynamicFormTemplateId?: string | null;
+  targetBlockId?: string | null;
+  aggregateKind?: string | null;
+  identityColumns?: string[] | null;
+  periodAggregationRule?: string | null;
+  metricMappingsJson?: string | null;
+}
+
+export interface WorkAssignmentBasicSummaryRuleDto {
+  targetKind: "FIELD" | "TABLE" | string;
+  targetKey: string;
+  operation: string;
+}
+
+export interface WorkAssignmentBasicSummaryDefaultMethodsDto {
+  number?: string | null;
+  date?: string | null;
+  boolean?: string | null;
+  text?: string | null;
+  selection?: string | null;
+}
+
+export interface WorkAssignmentBasicSummarySourceViewRequestDto {
+  q?: string | null;
+  periodKey?: string | null;
+  unitId?: string | null;
+  assigneeUserId?: string | null;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface WorkAssignmentBasicSummaryRequest {
+  scopeAssignmentId: string;
+  dynamicFormTemplateId?: string | null;
+  selectedUnitIds?: string[] | null;
+  defaultMethods?: WorkAssignmentBasicSummaryDefaultMethodsDto | null;
+  rules?: WorkAssignmentBasicSummaryRuleDto[] | null;
+  sourceView?: WorkAssignmentBasicSummarySourceViewRequestDto | null;
+  forceRefresh?: boolean;
+  includeSourceRows?: boolean;
+  maxTextChars?: number;
+}
+
+export interface WorkAssignmentBasicSummaryConfigDto {
+  id?: string | null;
+  workId: string;
+  assignmentId: string;
+  dynamicFormTemplateId: string;
+  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto;
+  rules: WorkAssignmentBasicSummaryRuleDto[];
+  versionNo: number;
+  isActive: boolean;
+}
+
+export interface SaveWorkAssignmentBasicSummaryConfigRequest {
+  defaultMethods?: WorkAssignmentBasicSummaryDefaultMethodsDto | null;
+  rules?: WorkAssignmentBasicSummaryRuleDto[] | null;
+}
+
+export interface WorkAssignmentBasicSummaryMetaDto {
+  snapshotId: string;
+  scopeAssignmentId: string;
+  scopeMode: string;
+  assignmentType: string;
+  dynamicFormTemplateId: string;
+  dynamicFormTemplateCode?: string | null;
+  dynamicFormTemplateName?: string | null;
+  selectedUnitIds: string[];
+  sourceAssignmentCount: number;
+  sourceReportCount: number;
+  fromSnapshot: boolean;
+  snapshotDirty: boolean;
+  snapshotDirtyAtUtc?: string | null;
+  snapshotRefreshedAtUtc?: string | null;
+  sourceSignatureHash?: string | null;
+}
+
+export interface WorkAssignmentBasicSummaryBucketDto {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface WorkAssignmentBasicSummaryItemDto {
+  targetKind: "FIELD" | "TABLE" | string;
+  targetKey: string;
+  fieldId?: string | null;
+  fieldKey?: string | null;
+  blockId?: string | null;
+  tableMode?: string | null;
+  metricKey?: string | null;
+  rowKey?: string | null;
+  columnKey?: string | null;
+  index?: number | null;
+  label: string;
+  dataType: string;
+  operation: string;
+  value?: unknown;
+  valueCount: number;
+  reportCount: number;
+  sum?: number | null;
+  min?: number | null;
+  max?: number | null;
+  mean?: number | null;
+  trueCount?: number | null;
+  falseCount?: number | null;
+  minDateUtc?: string | null;
+  maxDateUtc?: string | null;
+  text?: string | null;
+  textCharCount?: number | null;
+  textTruncated: boolean;
+  buckets: WorkAssignmentBasicSummaryBucketDto[];
+}
+
+export interface WorkAssignmentBasicSummarySourceDto {
+  workAssignmentId: string;
+  workAssignmentReportId: string;
+  workReportPeriodId: string;
+  assigneeUserId?: string | null;
+  assigneeUsername?: string | null;
+  assigneeFullName?: string | null;
+  unitId?: string | null;
+  unitSymbol?: string | null;
+  unitShortName?: string | null;
+  unitName?: string | null;
+  periodKey: string;
+  periodInstanceKey: string;
+  periodKind: string;
+  reportStatus: number;
+  submittedAtUtc?: string | null;
+  approvedAtUtc?: string | null;
+  payloadUpdatedAtUtc?: string | null;
+  payloadRevision: number;
+  payloadHash?: string | null;
+}
+
+export interface WorkAssignmentBasicSummarySourcePageDto {
+  rows: WorkAssignmentBasicSummarySourceDto[];
+  totalRows: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface WorkAssignmentBasicSummaryValueDto {
+  value?: unknown;
+  displayValue?: string | null;
+  dataType: string;
+  operation: string;
+}
+
+export interface WorkAssignmentBasicSummaryTableCellValueDto {
+  metricKey: string;
+  rowKey?: string | null;
+  columnKey?: string | null;
+  index?: number | null;
+  value?: unknown;
+  displayValue?: string | null;
+  dataType: string;
+  operation: string;
+}
+
+export interface WorkAssignmentBasicSummaryTableValuesDto {
+  blockId: string;
+  tableMode: string;
+  values1D: unknown[];
+  cells: WorkAssignmentBasicSummaryTableCellValueDto[];
+}
+
+export interface WorkAssignmentBasicSummaryValuesDto {
+  fields: Record<string, WorkAssignmentBasicSummaryValueDto>;
+  tables: WorkAssignmentBasicSummaryTableValuesDto[];
+}
+
+export interface WorkAssignmentBasicSummaryResponse {
+  meta: WorkAssignmentBasicSummaryMetaDto;
+  fields: WorkAssignmentBasicSummaryItemDto[];
+  tables: WorkAssignmentBasicSummaryItemDto[];
+  sources: WorkAssignmentBasicSummarySourceDto[];
+  sourcesPage?: WorkAssignmentBasicSummarySourcePageDto | null;
+  summaryValues?: WorkAssignmentBasicSummaryValuesDto | null;
   warnings: string[];
 }

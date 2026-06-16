@@ -151,6 +151,14 @@ export default function DashboardPage() {
   const [selectedPieKey, setSelectedPieKey] = React.useState<string | null>(null);
   const [mindMapPickerOpen, setMindMapPickerOpen] = React.useState(false);
   const [mindMapCanvasOpen, setMindMapCanvasOpen] = React.useState(false);
+  const mindMapScope = React.useMemo(
+    () => ({
+      fromUtc: dateInputToUtcStart(appliedFilters.fromDate),
+      toUtc: dateInputToUtcEnd(appliedFilters.toDate),
+      unitIds: appliedFilters.unitIds,
+    }),
+    [appliedFilters.fromDate, appliedFilters.toDate, appliedFilters.unitIds]
+  );
 
   const requestIdRef = React.useRef(0);
 
@@ -335,7 +343,7 @@ export default function DashboardPage() {
               </Box>
             )}
           >
-            <WorkMindMapPage embedded canvasOnly />
+            <WorkMindMapPage embedded canvasOnly scope={mindMapScope} />
           </React.Suspense>
         </DialogContent>
       </Dialog>

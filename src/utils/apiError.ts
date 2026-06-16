@@ -1,4 +1,5 @@
 import type { AxiosError } from 'axios';
+import { ApiErrorCode } from '../constants/errorCodes';
 import { API_ERROR_MESSAGES, DEFAULT_ERROR_MESSAGE } from '../constants/errorMessages';
 import type { ApiError, ApiErrorPayload } from '../types/apiError';
 
@@ -15,6 +16,9 @@ function isApiErrorPayload(value: unknown): value is ApiErrorPayload {
 }
 
 function messageFor(errorCode: string | undefined, payloadMessage: string | undefined): string {
+  if (errorCode === ApiErrorCode.CommonValidationFailed && payloadMessage) {
+    return payloadMessage;
+  }
   if (errorCode && errorCode in API_ERROR_MESSAGES) {
     return API_ERROR_MESSAGES[errorCode as keyof typeof API_ERROR_MESSAGES] ?? payloadMessage ?? DEFAULT_ERROR_MESSAGE;
   }

@@ -4,12 +4,19 @@ import type { DynamicExcelStringListOption, HeaderCell, HeaderSpec } from "./typ
 import {
   getCellDataType,
   getCellStringListOptions,
+  getCellValueSource,
   isDynamicExcelEnumDataType,
+  isSystemValueSource,
 } from "./dataTypes";
 import {
   getDateInputFormatLabel,
   normalizeDateInputValue,
 } from "../../../utils/dateInputFormat";
+import {
+  buildCellRefsForValues,
+  buildInputCellRefs,
+  type DynamicExcelInputCellRef,
+} from "./specialRanges";
 
 export type WorkbookCellValue = string | string[] | number | boolean | null;
 
@@ -46,15 +53,18 @@ function parseNumberFromCell(cell: any): number | null {
   return null;
 }
 
-export function extractNumericValues1D(sheet: any, dataRect: Rect): (number | null)[] {
+export function extractNumericValues1D(
+  sheet: any,
+  dataRect: Rect,
+  spec?: HeaderSpec | null,
+): (number | null)[] {
   const grid: any[][] = Array.isArray(sheet?.data) ? sheet.data : [];
+  const cellRefs = buildInputCellRefs(dataRect, spec);
 
   const out: (number | null)[] = [];
-  for (let r = dataRect.r0; r <= dataRect.r1; r++) {
-    const row = grid[r] ?? [];
-    for (let c = dataRect.c0; c <= dataRect.c1; c++) {
-      out.push(parseNumberFromCell(row[c]));
-    }
+  for (const ref of cellRefs) {
+    const row = grid[ref.r] ?? [];
+    out.push(parseNumberFromCell(row[ref.c]));
   }
   return out;
 }
@@ -66,35 +76,38 @@ export function extractTypedValues1D(
 ): {
   values1D: WorkbookCellValue[];
   issues: WorkbookValueValidationIssue[];
+  cellRefs: DynamicExcelInputCellRef[];
 } {
   const grid: any[][] = Array.isArray(sheet?.data) ? sheet.data : [];
   const values1D: WorkbookCellValue[] = [];
   const issues: WorkbookValueValidationIssue[] = [];
+  const cellRefs = buildInputCellRefs(dataRect, spec);
 
-  for (let r = dataRect.r0; r <= dataRect.r1; r++) {
-    const row = grid[r] ?? [];
-    for (let c = dataRect.c0; c <= dataRect.c1; c++) {
-      const dataType = spec ? getCellDataType(spec, dataRect, r, c) : "NUMBER";
-      const options = isDynamicExcelEnumDataType(dataType) && spec
-        ? getCellStringListOptions(spec, dataRect, r, c)
-        : [];
-      const parsed = parseTypedCellValue(row[c], dataType, options);
-      values1D.push(parsed.value);
-      if (parsed.issue) {
-        const cellRef = toExcelRef(r, c);
-        issues.push({
-          r,
-          c,
-          cellRef,
-          dataType,
-          value: parsed.raw,
-          message: `${cellRef}: ${parsed.issue}`,
-        });
-      }
+  for (const ref of cellRefs) {
+    const row = grid[ref.r] ?? [];
+    const dataType = spec ? getCellDataType(spec, dataRect, ref.r, ref.c) : "NUMBER";
+    const options = isDynamicExcelEnumDataType(dataType) && spec
+      ? getCellStringListOptions(spec, dataRect, ref.r, ref.c)
+      : [];
+    const valueSource = isDynamicExcelEnumDataType(dataType) && spec
+      ? getCellValueSource(spec, dataRect, ref.r, ref.c)
+      : null;
+    const parsed = parseTypedCellValue(row[ref.c], dataType, options, isSystemValueSource(valueSource));
+    values1D.push(parsed.value);
+    if (parsed.issue) {
+      const cellRef = toExcelRef(ref.r, ref.c);
+      issues.push({
+        r: ref.r,
+        c: ref.c,
+        cellRef,
+        dataType,
+        value: parsed.raw,
+        message: `${cellRef}: ${parsed.issue}`,
+      });
     }
   }
 
-  return { values1D, issues };
+  return { values1D, issues, cellRefs };
 }
 
 /**
@@ -103,21 +116,22 @@ export function extractTypedValues1D(
  * - KHÔNG ghi đè khi values1D[i] = null (giữ nguyên cell cũ để không làm mất dữ liệu user thiết kế).
  * - Giữ nguyên style/formula/other props của cell nếu có.
  */
-export function applyValues1DToSheet(sheet: any, dataRect: Rect, values1D: WorkbookCellValue[]) {
-  const rows = dataRect.r1 - dataRect.r0 + 1;
-  const cols = dataRect.c1 - dataRect.c0 + 1;
-  const need = rows * cols;
-
-  if (!Array.isArray(values1D) || values1D.length !== need) return;
+export function applyValues1DToSheet(
+  sheet: any,
+  dataRect: Rect,
+  values1D: WorkbookCellValue[],
+  spec?: HeaderSpec | null,
+) {
+  const cellRefs = buildCellRefsForValues(dataRect, spec, values1D?.length);
+  if (!Array.isArray(values1D) || values1D.length !== cellRefs.length) return;
 
   const grid: any[][] = Array.isArray(sheet?.data) ? sheet.data : (sheet.data = []);
 
-  for (let i = 0; i < need; i++) {
+  for (let i = 0; i < cellRefs.length; i++) {
     const v = values1D[i];
     if (v == null) continue;
 
-    const rr = dataRect.r0 + Math.floor(i / cols);
-    const cc = dataRect.c0 + (i % cols);
+    const { r: rr, c: cc } = cellRefs[i];
 
     grid[rr] = Array.isArray(grid[rr]) ? grid[rr] : (grid[rr] = []);
     const cell = grid[rr][cc];
@@ -152,6 +166,18 @@ function getCellText(v: any): string {
   if (v.v != null) return pick(v.v).trim();
   if (v.ct?.s != null) return pick(v.ct.s).trim();
 
+  return "";
+}
+
+function getCellStoredValueText(v: any): string {
+  const pick = (x: any) => (x == null ? "" : String(x));
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+    return pick(v).trim();
+  }
+  if (v.v != null) return pick(v.v).trim();
+  if (v.m != null) return pick(v.m).trim();
+  if (v.ct?.s != null) return pick(v.ct.s).trim();
   return "";
 }
 
@@ -225,8 +251,10 @@ function parseTypedCellValue(
   cell: any,
   dataType: string,
   options: DynamicExcelStringListOption[] = [],
+  allowRawEnumCode = false,
 ): { value: WorkbookCellValue; raw: string; issue?: string } {
-  const raw = getCellText(cell);
+  const raw = allowRawEnumCode ? getCellStoredValueText(cell) : getCellText(cell);
+  if (dataType === "IGNORE") return { value: null, raw };
   if (!raw) return { value: null, raw };
 
   if (dataType === "NUMBER") {
@@ -256,6 +284,8 @@ function parseTypedCellValue(
   }
 
   if (dataType === "SHORT_TEXT") {
+    if (allowRawEnumCode) return { value: raw, raw };
+
     if (options.length === 0) {
       return { value: null, raw, issue: "chưa cấu hình danh sách lựa chọn." };
     }
@@ -268,6 +298,11 @@ function parseTypedCellValue(
   }
 
   if (dataType === "MULTI_SELECT") {
+    if (allowRawEnumCode) {
+      const codes = splitMultiSelectRaw(raw);
+      return { value: codes.length > 0 ? codes : null, raw };
+    }
+
     if (options.length === 0) {
       return { value: null, raw, issue: "chưa cấu hình danh sách lựa chọn." };
     }

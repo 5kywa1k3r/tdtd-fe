@@ -8,13 +8,19 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { Workbook } from "@fortune-sheet/react";
-import "@fortune-sheet/react/dist/index.css";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import FullscreenOutlinedIcon from "@mui/icons-material/FullscreenOutlined";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import type { Sheet } from "@fortune-sheet/core";
 
 import {
@@ -25,32 +31,73 @@ import {
 import {
   getCellDataType,
   getCellStringListOptions,
+  getCellValueSource,
   isDynamicExcelEnumDataType,
+  isSystemValueSource,
   normalizeSpecDataTypeMetadata,
+  DATA_TYPE_COLORS,
 } from "./dataTypes";
 import { cloneDeepJson, ensureWorkbookShape, type ReportRect } from "./reportWorkbook";
 import { computeRegions, getTableRect, type Rect as RegionRect } from "./regions";
-import type { DynamicExcelDataType, DynamicExcelStringListOption, HeaderSpec } from "./types";
-import { MARK_COLORS, markRect, type Backup, type Rect as MarkRect } from "./designerMarking";
+import type {
+  DynamicExcelDataType,
+  DynamicExcelStringListOption,
+  DynamicExcelValueSource,
+  HeaderSpec,
+} from "./types";
+import {
+  isInputDataCell,
+  getSpecialRanges,
+  SPECIAL_RANGE_COLORS,
+  type DynamicExcelInputCellRef,
+} from "./specialRanges";
+import { MARK_COLORS, markRect, stripMarksForSave, type Backup, type Rect as MarkRect } from "./designerMarking";
+import LazyFortuneWorkbook from "./LazyFortuneWorkbook";
+import { useFortuneWheelScrollFix } from "./wheelScroll";
+import { GuideLegend, GuideLegendChip, GuideToggleButton } from "./PreviewGuideControls";
+import { DESIGNER_LIMITS } from "./validate";
+import {
+  useLazySearchPickerPositionsQuery,
+  useLazySearchPickerLabelEnumOptionsQuery,
+  useLazySearchPickerUnitTypesQuery,
+  useLazySearchPickerUnitsByCodeQuery,
+  useLazySearchPickerUsersQuery,
+} from "../../../api/pickersApi";
 
 export type WorkbookDataGridMode = "edit" | "view";
+export type WorkbookDataGridChangeCommitMode = "immediate" | "manual";
 
 export interface WorkbookDataGridSavePayload {
   rawWorkbookData: Sheet[];
   values1D: WorkbookCellValue[];
+  cellRefs?: DynamicExcelInputCellRef[];
   validationIssues: WorkbookValueValidationIssue[];
 }
+
+export interface WorkbookDataGridHandle {
+  commitChanges: () => WorkbookDataGridSavePayload | null;
+}
+
+export type WorkbookPreviewHighlight = {
+  rect: ReportRect;
+  color: string;
+};
 
 export interface WorkbookDataGridProps {
   initialSpec: any;
   initialWorkbookData: Sheet[];
   dataRect: ReportRect;
+  previewHighlights?: WorkbookPreviewHighlight[];
 
   mode?: WorkbookDataGridMode;
   readOnly?: boolean;
   saving?: boolean;
 
   showActions?: boolean;
+  showFullscreenActions?: boolean;
+  embeddedFullscreen?: boolean;
+  inlineReadOnly?: boolean;
+  changeCommitMode?: WorkbookDataGridChangeCommitMode;
   saveLabel?: string;
   backLabel?: string;
   excludedDataColumns?: number[];
@@ -60,17 +107,40 @@ export interface WorkbookDataGridProps {
   onSave?: (payload: WorkbookDataGridSavePayload) => void;
 }
 
-export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
+const EMPTY_PREVIEW_HIGHLIGHTS: WorkbookPreviewHighlight[] = [];
+const LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT = DESIGNER_LIMITS.MAX_TABLE_STATISTIC_INPUT_CELLS;
+
+type WorkbookPreviewSummary = {
+  hasPreview: boolean;
+  hasSemanticWarning: boolean;
+  specialRanges: ReturnType<typeof getSpecialRanges>;
+  ignoreCells: number;
+  inputCells: number;
+  statisticsDisabled: boolean;
+  statisticsInputCellLimit: number;
+};
+
+const EMPTY_PREVIEW_BACKUP = new Map<string, Backup>();
+
+function WorkbookDataGrid(
+  props: WorkbookDataGridProps,
+  ref: React.ForwardedRef<WorkbookDataGridHandle>,
+) {
   const {
     initialSpec,
     initialWorkbookData,
     dataRect,
+    previewHighlights = EMPTY_PREVIEW_HIGHLIGHTS,
 
     mode = "edit",
     readOnly = false,
     saving = false,
 
     showActions = true,
+    showFullscreenActions = showActions,
+    embeddedFullscreen = false,
+    inlineReadOnly = false,
+    changeCommitMode = "immediate",
     saveLabel = "Lưu draft",
     backLabel = "Quay lại",
 
@@ -82,23 +152,95 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
   } = props;
 
   const isView = mode === "view" || readOnly;
-
-  const [workbookData, setWorkbookData] = React.useState<Sheet[]>(
-    () => buildGridWorkbook(initialWorkbookData, dataRect, initialSpec, isView)
+  const previewSummary = React.useMemo(
+    () => buildWorkbookPreviewSummary(initialSpec, dataRect, previewHighlights),
+    [initialSpec, dataRect, previewHighlights],
   );
+  const [previewOverlayEnabled, setPreviewOverlayEnabled] = React.useState(true);
+  const effectivePreviewOverlayEnabled = previewOverlayEnabled && previewSummary.hasPreview;
+  const togglePreviewOverlay = React.useCallback(() => {
+    setPreviewOverlayEnabled((value) => !value);
+  }, []);
 
-  const workbookRef = React.useRef<Sheet[]>(workbookData);
+  const workbookRef = React.useRef<Sheet[]>([]);
+  const baselineWorkbookRef = React.useRef<Sheet[]>([]);
+  const previewBackupRef = React.useRef<Map<string, Backup>>(EMPTY_PREVIEW_BACKUP);
+  const [workbookData, setWorkbookData] = React.useState<Sheet[]>(() => {
+    const raw = normalizeWorkbookForGrid(initialWorkbookData, dataRect);
+    workbookRef.current = raw;
+    baselineWorkbookRef.current = cloneDeepJson(raw);
+    const rendered = buildGridWorkbook(raw, dataRect, initialSpec, effectivePreviewOverlayEnabled, previewHighlights);
+    previewBackupRef.current = rendered.previewBackup;
+    return rendered.workbookData;
+  });
   const [workbookKey, setWorkbookKey] = React.useState(0);
   const [shouldRenderWorkbook, setShouldRenderWorkbook] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [fullscreenOpen, setFullscreenOpen] = React.useState(false);
+  const sheetWheelRef = useFortuneWheelScrollFix<HTMLDivElement>();
+
+  const renderWorkbookForState = React.useCallback(
+    (rawWorkbookData: Sheet[]) => {
+      const rendered = buildGridWorkbook(
+        rawWorkbookData,
+        dataRect,
+        initialSpec,
+        effectivePreviewOverlayEnabled,
+        previewHighlights,
+      );
+      previewBackupRef.current = rendered.previewBackup;
+      return rendered.workbookData;
+    },
+    [dataRect, effectivePreviewOverlayEnabled, initialSpec, previewHighlights],
+  );
+
+  const buildCurrentSavePayload = React.useCallback(() => {
+    const latestRaw =
+      Array.isArray(workbookRef.current) && workbookRef.current.length > 0
+        ? workbookRef.current
+        : workbookData;
+    const sanitized = sanitizeRuntimeWorkbookData(
+      latestRaw,
+      baselineWorkbookRef.current,
+      dataRect,
+      excludedDataColumns,
+      initialSpec,
+      previewBackupRef.current,
+      previewHighlights,
+    );
+    workbookRef.current = sanitized;
+    return buildWorkbookSavePayload(sanitized, dataRect, excludedDataColumns, initialSpec);
+  }, [dataRect, excludedDataColumns, initialSpec, previewHighlights, workbookData]);
+
+  const commitChanges = React.useCallback(() => {
+    const payload = buildCurrentSavePayload();
+    if (!payload) return null;
+    return payload;
+  }, [buildCurrentSavePayload]);
+
+  React.useImperativeHandle(ref, () => ({ commitChanges }), [commitChanges]);
 
   React.useEffect(() => {
-    const cloned = buildGridWorkbook(initialWorkbookData, dataRect, initialSpec, isView);
-    setWorkbookData(cloned);
-    workbookRef.current = cloned;
+    const raw = normalizeWorkbookForGrid(initialWorkbookData, dataRect);
+    workbookRef.current = raw;
+    baselineWorkbookRef.current = cloneDeepJson(raw);
+    const rendered = buildGridWorkbook(
+      raw,
+      dataRect,
+      initialSpec,
+      effectivePreviewOverlayEnabled,
+      previewHighlights,
+    );
+    previewBackupRef.current = rendered.previewBackup;
+    setWorkbookData(rendered.workbookData);
     setWorkbookKey((x) => x + 1);
     setError(null);
-  }, [initialWorkbookData, dataRect, initialSpec, isView]);
+  }, [dataRect, initialSpec, initialWorkbookData]);
+
+  React.useEffect(() => {
+    setWorkbookData(renderWorkbookForState(workbookRef.current));
+    setWorkbookKey((x) => x + 1);
+  }, [effectivePreviewOverlayEnabled, previewHighlights]);
 
   React.useEffect(() => {
     setShouldRenderWorkbook(false);
@@ -114,7 +256,7 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
       data: workbookData as Sheet[],
       row: workbookData?.[0]?.row,
       column: workbookData?.[0]?.column,
-      allowEdit: !isView,
+      allowEdit: !isView && (!inlineReadOnly || fullscreenOpen || embeddedFullscreen),
       showSheetTabs: false,
       hooks: {
         beforeRenderCell: (cell: any, cellInfo: FortuneCellRenderInfo, renderCtx: CanvasRenderingContext2D) =>
@@ -130,9 +272,21 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
       onChange: (data: any) => {
         if (isView) return;
         if (Array.isArray(data)) {
-          const nextWorkbookData = data as Sheet[];
+          if (changeCommitMode === "manual") {
+            workbookRef.current = data as Sheet[];
+            return;
+          }
+          const nextWorkbookData = sanitizeRuntimeWorkbookData(
+            data as Sheet[],
+            baselineWorkbookRef.current,
+            dataRect,
+            excludedDataColumns,
+            initialSpec,
+            previewBackupRef.current,
+            previewHighlights,
+          );
           workbookRef.current = nextWorkbookData;
-          setWorkbookData(nextWorkbookData);
+          setWorkbookData(renderWorkbookForState(nextWorkbookData));
           onChangeRaw?.(
             nextWorkbookData,
             buildWorkbookSavePayload(nextWorkbookData, dataRect, excludedDataColumns, initialSpec) ?? undefined,
@@ -140,40 +294,82 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
         }
       },
     };
-  }, [workbookData, dataRect, excludedDataColumns, initialSpec, isView, onChangeRaw]);
+  }, [
+    changeCommitMode,
+    embeddedFullscreen,
+    fullscreenOpen,
+    inlineReadOnly,
+    workbookData,
+    dataRect,
+    excludedDataColumns,
+    initialSpec,
+    isView,
+    onChangeRaw,
+    previewHighlights,
+    renderWorkbookForState,
+  ]);
 
   const enumCells = React.useMemo(
     () => buildEnumCellOptions(workbookData, dataRect, excludedDataColumns, initialSpec),
     [workbookData, dataRect, excludedDataColumns, initialSpec],
   );
+  const valueSourceOptions = useWorkbookValueSourceOptions(enumCells);
+  const enumEditorDisabled = isView || (inlineReadOnly && !fullscreenOpen && !embeddedFullscreen);
 
   const handleEnumCellChange = React.useCallback(
     (cell: EnumCellOption, nextValue: unknown) => {
-      if (isView) return;
+      if (enumEditorDisabled) return;
 
       setError(null);
       setWorkbookData((prev) => {
-        const next = setWorkbookEnumCell(prev, cell.r, cell.c, cell.options, cell.dataType, nextValue);
+        const baseWorkbook =
+          Array.isArray(workbookRef.current) && workbookRef.current.length > 0
+            ? workbookRef.current
+            : prev;
+        const edited = setWorkbookEnumCell(
+          baseWorkbook,
+          cell.r,
+          cell.c,
+          valueSourceOptions.getOptions(cell),
+          cell.dataType,
+          nextValue,
+        );
+        const next = sanitizeRuntimeWorkbookData(
+          edited,
+          baselineWorkbookRef.current,
+          dataRect,
+          excludedDataColumns,
+          initialSpec,
+          previewBackupRef.current,
+          previewHighlights,
+        );
         workbookRef.current = next;
         const payload = buildWorkbookSavePayload(next, dataRect, excludedDataColumns, initialSpec);
-        onChangeRaw?.(next, payload ?? undefined);
-        return next;
+        if (changeCommitMode === "immediate") {
+          onChangeRaw?.(next, payload ?? undefined);
+        }
+        return renderWorkbookForState(next);
       });
       setWorkbookKey((x) => x + 1);
     },
-    [dataRect, excludedDataColumns, initialSpec, isView, onChangeRaw],
+    [
+      changeCommitMode,
+      dataRect,
+      enumEditorDisabled,
+      excludedDataColumns,
+      initialSpec,
+      onChangeRaw,
+      previewHighlights,
+      renderWorkbookForState,
+      valueSourceOptions,
+    ],
   );
 
   const handleSave = React.useCallback(() => {
     try {
       setError(null);
 
-      const latestRaw =
-        Array.isArray(workbookRef.current) && workbookRef.current.length > 0
-          ? workbookRef.current
-          : workbookData;
-
-      const payload = buildWorkbookSavePayload(latestRaw, dataRect, excludedDataColumns, initialSpec);
+      const payload = buildCurrentSavePayload();
       if (!payload) {
         throw new Error("Không lấy được dữ liệu sheet để lưu.");
       }
@@ -181,54 +377,129 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
         throw new Error(payload.validationIssues[0].message);
       }
 
+      workbookRef.current = payload.rawWorkbookData;
+      setWorkbookData(renderWorkbookForState(payload.rawWorkbookData));
+      setWorkbookKey((x) => x + 1);
       onSave?.(payload);
     } catch (e: any) {
       setError(e?.message || "Không thể chuẩn bị dữ liệu để lưu.");
     }
-  }, [workbookData, dataRect, excludedDataColumns, initialSpec, onSave]);
+  }, [buildCurrentSavePayload, onSave, renderWorkbookForState]);
+
+  const handleOpenFullscreen = React.useCallback(() => {
+    setFullscreenOpen(true);
+    setWorkbookKey((x) => x + 1);
+  }, []);
+
+  const handleCloseFullscreen = React.useCallback(() => {
+    setFullscreenOpen(false);
+    setWorkbookKey((x) => x + 1);
+  }, []);
+
+  const renderWorkbookSurface = React.useCallback((fullscreen = false) => (
+    <Box
+      ref={sheetWheelRef}
+      className="tdtdSheet"
+      sx={{
+        width: "100%",
+        ...(embeddedFullscreen
+          ? { flex: "1 1 auto", minHeight: 0 }
+          : {
+              height: fullscreen ? "calc(100dvh - 90px)" : 350,
+              minHeight: fullscreen ? "calc(100dvh - 90px)" : 350,
+            }),
+        overflow: "hidden",
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: fullscreen || embeddedFullscreen ? 0 : 2,
+        "& .fortune-sheettab-button": {
+          display: "none !important",
+        },
+        "& .fortune-zoom-container": {
+          display: "none !important",
+        },
+        "& #luckysheet-bottom-add-row, & #luckysheet-bottom-add-row-input, & #luckysheet-bottom-return-top": {
+          display: "none !important",
+        },
+      }}
+    >
+      {shouldRenderWorkbook ? (
+        <LazyFortuneWorkbook
+          key={workbookKey}
+          {...settings}
+          fallback={(
+            <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
+              <CircularProgress size={24} />
+            </Stack>
+          )}
+        />
+      ) : (
+        <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
+          <CircularProgress size={24} />
+        </Stack>
+      )}
+    </Box>
+  ), [embeddedFullscreen, settings, shouldRenderWorkbook, workbookKey]);
 
   return (
-    <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
+    <Stack spacing={embeddedFullscreen ? 1 : 2} sx={{ flex: 1, minHeight: 0, height: embeddedFullscreen ? "100%" : undefined }}>
       {error && <Alert severity="error">{error}</Alert>}
 
       <Card
         variant="outlined"
-        sx={{ flex: 1, minHeight: 350, display: "flex", flexDirection: "column" }}
+        sx={{
+          flex: 1,
+          minHeight: embeddedFullscreen ? 0 : 350,
+          height: embeddedFullscreen ? "100%" : undefined,
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
         <CardContent
-          sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1, minHeight: 0 }}
+          sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1, minHeight: 0, height: "100%" }}
         >
-          <Box
-            className="tdtdSheet"
-            sx={{
-              width: "100%",
-              height: 350,
-              minHeight: 350,
-              overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 2,
-              "& .luckysheet-bottom-controll-row": {
-                display: "none !important",
-              },
-              "& .fortune-sheettab-button": {
-                display: "none !important",
-              },
-            }}
-          >
-            {shouldRenderWorkbook ? (
-              <Workbook key={workbookKey} {...settings} />
-            ) : (
-              <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
-                <CircularProgress size={24} />
-              </Stack>
-            )}
-          </Box>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
+            <WorkbookPreviewLegend summary={previewSummary} visible={effectivePreviewOverlayEnabled} />
+            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ ml: "auto" }}>
+              <GuideToggleButton
+                enabled={effectivePreviewOverlayEnabled}
+                disabled={!previewSummary.hasPreview}
+                onToggle={togglePreviewOverlay}
+              />
+              {!embeddedFullscreen && (
+                <Tooltip title="Mở toàn màn hình">
+                  <IconButton size="small" onClick={handleOpenFullscreen} aria-label="Mở toàn màn hình">
+                    <FullscreenOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Stack>
+          </Stack>
+
+          {previewSummary.hasSemanticWarning && (
+            <Alert severity="info" sx={{ py: 0.75 }}>
+              Lớp màu hướng dẫn không lưu vào dữ liệu. Vùng công thức, tiêu đề và bỏ trống không nhận dữ liệu nhập.
+            </Alert>
+          )}
+
+          {previewSummary.statisticsDisabled && (
+            <Alert severity="warning" sx={{ py: 0.75 }}>
+              Bảng có {previewSummary.inputCells} ô nhập, vượt ngưỡng {previewSummary.statisticsInputCellLimit}. Hệ thống không ghi thống kê nền từng ô, nhưng vẫn có thể tổng hợp trực tiếp từ báo cáo đã duyệt nếu không vượt {DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô input.
+            </Alert>
+          )}
+
+          {fullscreenOpen && !embeddedFullscreen ? (
+            <Alert severity="info" sx={{ py: 0.75 }}>
+              Bảng đang mở ở chế độ toàn màn hình.
+            </Alert>
+          ) : renderWorkbookSurface(embeddedFullscreen)}
 
           {showActions && (
-            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-              <Button variant="outlined" onClick={onBack}>
-                {backLabel}
-              </Button>
+            <Box sx={{ display: "flex", justifyContent: onBack ? "space-between" : "flex-end", gap: 1 }}>
+              {onBack && (
+                <Button variant="outlined" onClick={onBack}>
+                  {backLabel}
+                </Button>
+              )}
 
               <Button
                 variant="contained"
@@ -242,12 +513,53 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
         </CardContent>
       </Card>
 
+      {!embeddedFullscreen && (
+      <Dialog fullScreen open={fullscreenOpen} onClose={handleCloseFullscreen}>
+        <DialogTitle component="div" sx={{ py: 1, pr: 1.25 }}>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }} noWrap>
+                Bảng tính
+              </Typography>
+              <GuideToggleButton
+                enabled={effectivePreviewOverlayEnabled}
+                disabled={!previewSummary.hasPreview}
+                onToggle={togglePreviewOverlay}
+              />
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {showFullscreenActions && !isView && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<SaveOutlinedIcon fontSize="small" />}
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saveLabel}
+                </Button>
+              )}
+              <Tooltip title="Đóng toàn màn hình">
+                <IconButton size="small" onClick={handleCloseFullscreen} aria-label="Đóng toàn màn hình">
+                  <CloseOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+          {error && <Alert severity="error" sx={{ m: 1 }}>{error}</Alert>}
+          {fullscreenOpen ? renderWorkbookSurface(true) : null}
+        </DialogContent>
+      </Dialog>
+      )}
+
       {enumCells.length > 0 && (
         <Card variant="outlined">
           <CardContent>
             <Stack spacing={1.25}>
               <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Typography fontWeight={700}>Enum cố định trong bảng</Typography>
+                <Typography fontWeight={700}>Danh sách chọn trong bảng</Typography>
                 <Chip size="small" variant="outlined" label={`${enumCells.length} ô`} />
               </Stack>
               <Box
@@ -266,6 +578,7 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
                     : cell.value
                       ? [cell.value]
                       : [];
+                  const options = valueSourceOptions.getOptions(cell);
 
                   return (
                     <TextField
@@ -274,8 +587,8 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
                       size="small"
                       label={cell.cellRef}
                       value={cell.value}
-                      disabled={isView || cell.options.length === 0}
-                      helperText={cell.options.length === 0 ? "Chưa cấu hình options." : isMulti ? "Chọn một hoặc nhiều giá trị từ danh sách đã cấu hình." : "Chọn một giá trị từ danh sách đã cấu hình."}
+                      disabled={enumEditorDisabled || options.length === 0}
+                      helperText={getEnumCellHelperText(cell, options.length)}
                       onChange={(event) => handleEnumCellChange(cell, event.target.value)}
                       SelectProps={{
                         multiple: isMulti,
@@ -285,7 +598,7 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
                               return (
                                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                                   {values.map((code) => {
-                                    const option = cell.options.find((item) => item.code === code);
+                                    const option = options.find((item) => item.code === code);
                                     return (
                                       <Chip
                                         key={code}
@@ -305,7 +618,7 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
                           <em>Để trống</em>
                         </MenuItem>
                       )}
-                      {cell.options.map((option) => (
+                      {options.map((option) => (
                         <MenuItem key={option.code} value={option.code}>
                           {isMulti && <Checkbox size="small" checked={selectedCodes.includes(option.code)} />}
                           {option.label || option.code}
@@ -323,6 +636,89 @@ export default function WorkbookDataGrid(props: WorkbookDataGridProps) {
   );
 }
 
+export default React.forwardRef<WorkbookDataGridHandle, WorkbookDataGridProps>(WorkbookDataGrid);
+
+function WorkbookPreviewLegend({
+  summary,
+  visible,
+}: {
+  summary: WorkbookPreviewSummary;
+  visible: boolean;
+}) {
+  const specialByRole = summary.specialRanges.reduce<Record<string, number>>((acc, range) => {
+    acc[range.role] = (acc[range.role] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <GuideLegend visible={visible}>
+      <GuideLegendChip label="Header" color={MARK_COLORS.HEADER_BG} />
+      <GuideLegendChip label="Vùng dữ liệu" color={MARK_COLORS.DATA_BG} />
+      {specialByRole.FORMULA ? (
+        <GuideLegendChip label={`Công thức ${specialByRole.FORMULA}`} color={SPECIAL_RANGE_COLORS.FORMULA} />
+      ) : null}
+      {(specialByRole.TITLE || specialByRole.HEADER) ? (
+        <GuideLegendChip
+          label={`Tiêu đề ${(specialByRole.TITLE ?? 0) + (specialByRole.HEADER ?? 0)}`}
+          color={SPECIAL_RANGE_COLORS.TITLE}
+        />
+      ) : null}
+      {(specialByRole.BLANK || specialByRole.STYLE) ? (
+        <GuideLegendChip
+          label={`Bỏ trống ${(specialByRole.BLANK ?? 0) + (specialByRole.STYLE ?? 0)}`}
+          color={SPECIAL_RANGE_COLORS.BLANK}
+        />
+      ) : null}
+      {summary.ignoreCells > 0 ? (
+        <GuideLegendChip label={`Bỏ qua nhập ${summary.ignoreCells}`} color={DATA_TYPE_COLORS.IGNORE} />
+      ) : null}
+    </GuideLegend>
+  );
+}
+
+function buildWorkbookPreviewSummary(
+  spec: HeaderSpec | null | undefined,
+  dataRect: ReportRect,
+  previewHighlights: WorkbookPreviewHighlight[],
+): WorkbookPreviewSummary {
+  if (!isHeaderSpec(spec)) {
+    return {
+      hasPreview: previewHighlights.length > 0,
+      hasSemanticWarning: false,
+      specialRanges: [],
+      ignoreCells: 0,
+      inputCells: 0,
+      statisticsDisabled: false,
+      statisticsInputCellLimit: LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
+    };
+  }
+
+  const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
+  const specialRanges = getSpecialRanges(normalizedSpec);
+  let ignoreCells = 0;
+  let inputCells = 0;
+
+  for (let r = dataRect.r0; r <= dataRect.r1; r += 1) {
+    for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
+      if (!isInputDataCell(normalizedSpec, dataRect, r, c)) continue;
+      inputCells += 1;
+      if (getCellDataType(normalizedSpec, dataRect, r, c) === "IGNORE") {
+        ignoreCells += 1;
+      }
+    }
+  }
+
+  return {
+    hasPreview: true,
+    hasSemanticWarning: specialRanges.length > 0 || ignoreCells > 0,
+    specialRanges,
+    ignoreCells,
+    inputCells,
+    statisticsDisabled: inputCells > LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
+    statisticsInputCellLimit: LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
+  };
+}
+
 type EnumCellOption = {
   r: number;
   c: number;
@@ -330,7 +726,154 @@ type EnumCellOption = {
   dataType: DynamicExcelDataType;
   value: string | string[];
   options: DynamicExcelStringListOption[];
+  valueSource: DynamicExcelValueSource | null;
 };
+
+function useWorkbookValueSourceOptions(cells: EnumCellOption[]) {
+  const [searchUnits] = useLazySearchPickerUnitsByCodeQuery();
+  const [searchUsers] = useLazySearchPickerUsersQuery();
+  const [searchPositions] = useLazySearchPickerPositionsQuery();
+  const [searchUnitTypes] = useLazySearchPickerUnitTypesQuery();
+  const [searchLabelEnumOptions] = useLazySearchPickerLabelEnumOptionsQuery();
+  const [optionsBySource, setOptionsBySource] = React.useState<Record<string, DynamicExcelStringListOption[]>>({});
+
+  const externalSources = React.useMemo(() => {
+    const byKey = new Map<string, DynamicExcelValueSource>();
+    for (const cell of cells) {
+      const source = cell.valueSource;
+      if (source && source.sourceType !== "FIXED_ENUM") {
+        byKey.set(valueSourceOptionKey(source), source);
+      }
+    }
+    return Array.from(byKey.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, source]) => source);
+  }, [cells]);
+
+  const loadSource = React.useCallback(
+    async (source: DynamicExcelValueSource, query = "") => {
+      const sourceType = source.sourceType;
+      if (sourceType === "ENUM_CATALOG") {
+        if (!source.catalogId) return [];
+        const result = await searchLabelEnumOptions({
+          catalogId: source.catalogId,
+          q: query,
+          page: 0,
+          pageSize: 200,
+        }).unwrap();
+        return result.rows.map((row) => ({
+          code: row.code,
+          label: row.label || row.code,
+        }));
+      }
+      if (sourceType === "SYSTEM_UNIT") {
+        const result = await searchUnits({ code: query, page: 0, pageSize: 50 }).unwrap();
+        return result.rows.map((row) => ({
+          code: row.id,
+          label: [row.fullName, row.code].filter(Boolean).join(" - "),
+        }));
+      }
+      if (sourceType === "SYSTEM_USER") {
+        const result = await searchUsers({ q: query, page: 0, pageSize: 50 }).unwrap();
+        return result.rows.map((row) => ({
+          code: row.id,
+          label: [row.fullName, row.username].filter(Boolean).join(" - "),
+        }));
+      }
+      if (sourceType === "SYSTEM_POSITION") {
+        const result = await searchPositions({ q: query, page: 0, pageSize: 50 }).unwrap();
+        return result.rows.map((row) => ({ code: row.code, label: row.name || row.code }));
+      }
+      if (sourceType === "SYSTEM_UNIT_TYPE") {
+        const result = await searchUnitTypes({ q: query, page: 0, pageSize: 50 }).unwrap();
+        return result.rows.map((row) => ({ code: row.code, label: row.name || row.code }));
+      }
+      return [];
+    },
+    [searchLabelEnumOptions, searchPositions, searchUnitTypes, searchUnits, searchUsers],
+  );
+
+  React.useEffect(() => {
+    let cancelled = false;
+    for (const source of externalSources) {
+      const key = valueSourceOptionKey(source);
+      if (optionsBySource[key]) continue;
+      void loadSource(source)
+        .then((options) => {
+          if (cancelled) return;
+          setOptionsBySource((current) => ({ ...current, [key]: options }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setOptionsBySource((current) => ({ ...current, [key]: [] }));
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [externalSources, loadSource, optionsBySource]);
+
+  const getOptions = React.useCallback(
+    (cell: EnumCellOption) => {
+      const source = cell.valueSource;
+      const base = source && source.sourceType !== "FIXED_ENUM"
+        ? optionsBySource[valueSourceOptionKey(source)] ?? []
+        : cell.options;
+      const selectedCodes = Array.isArray(cell.value)
+        ? cell.value
+        : cell.value
+          ? [cell.value]
+          : [];
+      const seen = new Set<string>();
+      const merged: DynamicExcelStringListOption[] = [];
+      for (const option of base) {
+        if (!option.code || seen.has(option.code)) continue;
+        seen.add(option.code);
+        merged.push(option);
+      }
+      for (const code of selectedCodes) {
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        merged.push({ code, label: code });
+      }
+      return merged;
+    },
+    [optionsBySource],
+  );
+
+  return { getOptions };
+}
+
+function valueSourceOptionKey(source: DynamicExcelValueSource) {
+  return source.sourceType === "ENUM_CATALOG"
+    ? `${source.sourceType}:${source.catalogId ?? ""}`
+    : source.sourceType;
+}
+
+function getEnumCellHelperText(cell: EnumCellOption, optionCount: number) {
+  if (optionCount === 0) {
+    return isSystemValueSource(cell.valueSource)
+      ? `Không tải được ${formatValueSourceLabel(cell.valueSource)} cho ô này.`
+      : "Chưa cấu hình danh sách lựa chọn.";
+  }
+  if (isSystemValueSource(cell.valueSource)) {
+    return `Chọn từ ${formatValueSourceLabel(cell.valueSource)}; hệ thống lưu mã để thống kê.`;
+  }
+  return cell.dataType === "MULTI_SELECT"
+    ? "Chọn một hoặc nhiều giá trị từ danh sách đã cấu hình; hệ thống lưu mã để thống kê."
+    : "Chọn một giá trị từ danh sách đã cấu hình; hệ thống lưu mã để thống kê.";
+}
+
+function formatValueSourceLabel(source?: DynamicExcelValueSource | null) {
+  if (!source) return "danh sách";
+  if (source.labelName) return source.labelName;
+  if (source.sourceType === "ENUM_CATALOG") return source.catalogName || "danh mục cố định riêng";
+  if (source.sourceType === "SYSTEM_UNIT") return "danh mục đơn vị";
+  if (source.sourceType === "SYSTEM_USER") return "danh mục người dùng";
+  if (source.sourceType === "SYSTEM_POSITION") return "danh mục chức vụ";
+  if (source.sourceType === "SYSTEM_UNIT_TYPE") return "danh mục loại đơn vị";
+  return "danh sách cố định";
+}
 
 type FortuneCellRenderInfo = {
   row: number;
@@ -359,14 +902,25 @@ function buildEnumCellOptions(
     const row = grid[r] ?? [];
     for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
       if (excluded.has(c)) continue;
+      if (!isInputDataCell(normalizedSpec, dataRect, r, c)) continue;
       const dataType = getCellDataType(normalizedSpec, dataRect, r, c);
       if (!isDynamicExcelEnumDataType(dataType)) continue;
 
-      const options = getCellStringListOptions(normalizedSpec, dataRect, r, c);
-      const raw = getWorkbookCellText(row[c]);
+      const valueSource = getCellValueSource(normalizedSpec, dataRect, r, c);
+      const configuredOptions = getCellStringListOptions(normalizedSpec, dataRect, r, c);
+      const options = valueSource?.sourceType === "FIXED_ENUM" && valueSource.options?.length
+        ? valueSource.options
+        : configuredOptions;
+      const raw = isSystemValueSource(valueSource)
+        ? getWorkbookCellStoredValueText(row[c])
+        : getWorkbookCellText(row[c]);
       const value = dataType === "MULTI_SELECT"
-        ? resolveStringListOptions(raw, options).map((option) => option.code)
-        : resolveStringListOption(raw, options)?.code ?? "";
+        ? isSystemValueSource(valueSource)
+          ? splitEnumCellText(raw)
+          : resolveStringListOptions(raw, options).map((option) => option.code)
+        : isSystemValueSource(valueSource)
+          ? raw
+          : resolveStringListOption(raw, options)?.code ?? "";
       cells.push({
         r,
         c,
@@ -374,6 +928,7 @@ function buildEnumCellOptions(
         dataType,
         value,
         options,
+        valueSource,
       });
     }
   }
@@ -429,6 +984,7 @@ function renderMultiSelectChipsCell(
   if (buildExcludedColumnSet(excludedDataColumns).has(c)) return true;
 
   const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
+  if (!isInputDataCell(normalizedSpec, dataRect, r, c)) return true;
   if (getCellDataType(normalizedSpec, dataRect, r, c) !== "MULTI_SELECT") return true;
 
   const options = getCellStringListOptions(normalizedSpec, dataRect, r, c);
@@ -656,6 +1212,18 @@ function getWorkbookCellText(cell: any): string {
   return "";
 }
 
+function getWorkbookCellStoredValueText(cell: any): string {
+  const pick = (value: unknown) => (value == null ? "" : String(value));
+  if (cell == null) return "";
+  if (typeof cell === "string" || typeof cell === "number" || typeof cell === "boolean") {
+    return pick(cell).trim();
+  }
+  if (cell.v != null) return pick(cell.v).trim();
+  if (cell.m != null) return pick(cell.m).trim();
+  if (cell.ct?.s != null) return pick(cell.ct.s).trim();
+  return "";
+}
+
 function toExcelRef(r: number, c: number) {
   return `${toExcelColumn(c)}${r + 1}`;
 }
@@ -689,20 +1257,143 @@ function buildWorkbookSavePayload(
       extracted.values1D,
       dataRect,
       excludedDataColumns,
+      extracted.cellRefs,
     ),
+    cellRefs: extracted.cellRefs,
     validationIssues: extracted.issues.filter((issue) => !excluded.has(issue.c)),
   };
+}
+
+function sanitizeRuntimeWorkbookData(
+  editedWorkbookData: Sheet[],
+  baselineWorkbookData: Sheet[],
+  dataRect: ReportRect,
+  excludedDataColumns: number[],
+  spec: HeaderSpec | null | undefined,
+  previewBackup: Map<string, Backup>,
+  previewHighlights: WorkbookPreviewHighlight[],
+) {
+  const normalized = normalizeWorkbookForGrid(editedWorkbookData, dataRect);
+  const sheet = normalized[0] as any;
+  if (!sheet) return normalized;
+
+  stripMarksForSave(sheet, previewBackup, buildPreviewMarkedBackgrounds(previewHighlights));
+  return restoreNonInputCells(normalized, baselineWorkbookData, dataRect, excludedDataColumns, spec);
+}
+
+function restoreNonInputCells(
+  editedWorkbookData: Sheet[],
+  baselineWorkbookData: Sheet[],
+  dataRect: ReportRect,
+  excludedDataColumns: number[],
+  spec: HeaderSpec | null | undefined,
+) {
+  const edited = normalizeWorkbookForGrid(editedWorkbookData, dataRect);
+  const baseline = normalizeWorkbookForGrid(baselineWorkbookData, dataRect);
+  const editedSheet = edited[0] as any;
+  const baselineSheet = baseline[0] as any;
+  if (!editedSheet || !baselineSheet) return edited;
+
+  const editedConfig = cloneDeepJson(editedSheet.config ?? {});
+  const rows = Math.max(getWorkbookRowCount(edited), getWorkbookRowCount(baseline));
+  const cols = Math.max(getWorkbookColumnCount(edited), getWorkbookColumnCount(baseline));
+  const excluded = buildExcludedColumnSet(excludedDataColumns);
+  const normalizedSpec = isHeaderSpec(spec) ? normalizeSpecDataTypeMetadata(spec) : null;
+
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const isEditableCell =
+        r >= dataRect.r0 &&
+        r <= dataRect.r1 &&
+        c >= dataRect.c0 &&
+        c <= dataRect.c1 &&
+        !excluded.has(c) &&
+        (!normalizedSpec || isInputDataCell(normalizedSpec, dataRect, r, c));
+
+      if (isEditableCell) continue;
+      setWorkbookCell(
+        editedSheet,
+        r,
+        c,
+        restoreRuntimeNonInputCell(getWorkbookCell(baselineSheet, r, c), getWorkbookCell(editedSheet, r, c)),
+      );
+    }
+  }
+
+  editedSheet.config = restoreBaselineConfigWithRuntimeLayout(baselineSheet.config, editedConfig);
+  editedSheet.row = baselineSheet.row ?? editedSheet.row;
+  editedSheet.column = baselineSheet.column ?? editedSheet.column;
+  editedSheet.name = baselineSheet.name ?? editedSheet.name;
+  editedSheet.id = baselineSheet.id ?? editedSheet.id;
+  editedSheet.index = baselineSheet.index ?? editedSheet.index;
+  return edited;
+}
+
+function restoreBaselineConfigWithRuntimeLayout(baselineConfig: unknown, editedConfig: unknown) {
+  const next = cloneDeepJson(isPlainRecord(baselineConfig) ? baselineConfig : {});
+  if (!isPlainRecord(editedConfig)) return next;
+
+  for (const key of ["rowlen", "columnlen", "customHeight", "customWidth"] as const) {
+    const value = editedConfig[key];
+    if (isPlainRecord(value)) next[key] = cloneDeepJson(value);
+  }
+
+  return next;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function restoreRuntimeNonInputCell(baselineCell: unknown, editedCell: unknown) {
+  if (
+    isFormulaCell(baselineCell) &&
+    isFormulaCell(editedCell) &&
+    String(baselineCell.f) === String(editedCell.f)
+  ) {
+    const next = cloneDeepJson(baselineCell) as any;
+    const edited = editedCell as any;
+    if ("v" in edited) next.v = cloneDeepJson(edited.v);
+    if ("m" in edited) next.m = cloneDeepJson(edited.m);
+    if ("ct" in edited) next.ct = cloneDeepJson(edited.ct);
+    return next;
+  }
+
+  return cloneDeepJson(baselineCell ?? null);
+}
+
+function isFormulaCell(cell: unknown): cell is { f: unknown; v?: unknown; m?: unknown; ct?: unknown } {
+  return Boolean(cell && typeof cell === "object" && typeof (cell as any).f === "string" && (cell as any).f.trim());
+}
+
+function getWorkbookCell(sheet: any, r: number, c: number) {
+  const row = Array.isArray(sheet?.data) ? sheet.data[r] : null;
+  if (Array.isArray(row) && row[c] != null) return row[c];
+  const celldata = Array.isArray(sheet?.celldata) ? sheet.celldata : [];
+  return celldata.find((item: any) => Number(item?.r) === r && Number(item?.c) === c)?.v ?? null;
+}
+
+function setWorkbookCell(sheet: any, r: number, c: number, cell: unknown) {
+  if (!Array.isArray(sheet.data)) sheet.data = [];
+  if (!Array.isArray(sheet.data[r])) sheet.data[r] = [];
+  sheet.data[r][c] = cell ?? null;
+  sheet.celldata = upsertCelldataCell(sheet.celldata, r, c, cell ?? null);
 }
 
 function applyExcludedDataColumns(
   values1D: WorkbookCellValue[],
   dataRect: ReportRect,
   excludedDataColumns: number[],
+  cellRefs?: DynamicExcelInputCellRef[],
 ) {
   if (!excludedDataColumns.length || values1D.length === 0) return values1D;
 
   const excluded = buildExcludedColumnSet(excludedDataColumns);
   if (excluded.size === 0) return values1D;
+
+  if (cellRefs?.length === values1D.length) {
+    return values1D.map((value, index) => excluded.has(cellRefs[index].c) ? null : value);
+  }
 
   const width = dataRect.c1 - dataRect.c0 + 1;
   const height = dataRect.r1 - dataRect.r0 + 1;
@@ -779,24 +1470,71 @@ function buildGridWorkbook(
   dataRect: ReportRect,
   spec: unknown,
   markPreview: boolean,
+  previewHighlights: WorkbookPreviewHighlight[],
 ) {
   const normalized = normalizeWorkbookForGrid(workbookData, dataRect);
-  return markPreview ? markPreviewRegions(normalized, spec, dataRect) : normalized;
+  if (!markPreview) {
+    return { workbookData: normalized, previewBackup: new Map<string, Backup>() };
+  }
+  return markPreviewRegions(normalized, spec, dataRect, previewHighlights);
 }
 
-function markPreviewRegions(workbookData: Sheet[], spec: unknown, dataRect: ReportRect) {
+function markPreviewRegions(
+  workbookData: Sheet[],
+  spec: unknown,
+  dataRect: ReportRect,
+  previewHighlights: WorkbookPreviewHighlight[],
+) {
   const cloned = cloneDeepJson(workbookData) as Sheet[];
   const sheet = cloned[0] as any;
-  if (!sheet) return cloned;
-
   const backup = new Map<string, Backup>();
+  if (!sheet) return { workbookData: cloned, previewBackup: backup };
+
   const headerRects = getHeaderRects(spec);
   for (const rect of headerRects) {
     markRect(sheet, toMarkRect(rect), MARK_COLORS.HEADER_BG, backup);
   }
   markRect(sheet, toMarkRect(dataRect), MARK_COLORS.DATA_BG, backup);
+  if (isHeaderSpec(spec)) {
+    markIgnoredCells(sheet, spec, dataRect, backup);
+    for (const range of getSpecialRanges(spec)) {
+      markRect(sheet, toMarkRect(range), SPECIAL_RANGE_COLORS[range.role], backup);
+    }
+  }
+  for (const highlight of previewHighlights) {
+    markRect(sheet, toMarkRect(highlight.rect), highlight.color, backup);
+  }
 
-  return cloned;
+  return { workbookData: cloned, previewBackup: backup };
+}
+
+function markIgnoredCells(
+  sheet: any,
+  spec: HeaderSpec,
+  dataRect: ReportRect,
+  backup: Map<string, Backup>,
+) {
+  const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
+  for (let r = dataRect.r0; r <= dataRect.r1; r += 1) {
+    for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
+      if (!isInputDataCell(normalizedSpec, dataRect, r, c)) continue;
+      if (getCellDataType(normalizedSpec, dataRect, r, c) !== "IGNORE") continue;
+      markRect(sheet, { r0: r, c0: c, r1: r, c1: c }, DATA_TYPE_COLORS.IGNORE, backup);
+    }
+  }
+}
+
+function buildPreviewMarkedBackgrounds(previewHighlights: WorkbookPreviewHighlight[]) {
+  return new Set<string>([
+    MARK_COLORS.HEADER_BG,
+    MARK_COLORS.DATA_BG,
+    MARK_COLORS.ACTIVE_BG,
+    MARK_COLORS.RANGE_BG,
+    MARK_COLORS.LOCK_BG,
+    ...Object.values(SPECIAL_RANGE_COLORS),
+    ...Object.values(DATA_TYPE_COLORS),
+    ...previewHighlights.map((highlight) => highlight.color),
+  ]);
 }
 
 function getHeaderRects(spec: unknown): RegionRect[] {

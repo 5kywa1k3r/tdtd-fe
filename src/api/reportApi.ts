@@ -20,6 +20,12 @@ import type {
   AggregateTableResponse,
   DynamicFormAggregateRequest,
   DynamicFormAggregateResponse,
+  SaveWorkAssignmentAggregateConfigRequest,
+  SaveWorkAssignmentBasicSummaryConfigRequest,
+  WorkAssignmentBasicSummaryRequest,
+  WorkAssignmentBasicSummaryConfigDto,
+  WorkAssignmentBasicSummaryResponse,
+  WorkAssignmentAggregateConfigDto,
 } from "../types/reportAggregate";
 
 import type {
@@ -51,10 +57,12 @@ export const reportApi = baseApi.injectEndpoints({
 
     getMyReportTemplateDetail: build.query<
       MyReportTemplateDetailResponse,
-      { workId: string; dynamicFormTemplateId: string }
+      { workId: string; dynamicFormTemplateId: string; scopeAssignmentId?: string | null }
     >({
-      query: ({ workId, dynamicFormTemplateId }) => ({
-        url: `works/${workId}/my-report-templates/${dynamicFormTemplateId}`,
+      query: ({ workId, dynamicFormTemplateId, scopeAssignmentId }) => ({
+        url: `works/${workId}/my-report-templates/${dynamicFormTemplateId}${
+          scopeAssignmentId ? `?scopeAssignmentId=${encodeURIComponent(scopeAssignmentId)}` : ""
+        }`,
         method: "GET",
       }),
     }),
@@ -296,6 +304,63 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
+    getWorkAssignmentAggregateConfig: build.query<
+      WorkAssignmentAggregateConfigDto | null,
+      string
+    >({
+      query: (assignmentId) => ({
+        url: `work-assignment-aggregate-table/assignments/${assignmentId}/config`,
+        method: "GET",
+      }),
+    }),
+
+    saveWorkAssignmentAggregateConfig: build.mutation<
+      WorkAssignmentAggregateConfigDto,
+      { assignmentId: string; data: SaveWorkAssignmentAggregateConfigRequest }
+    >({
+      query: ({ assignmentId, data }) => ({
+        url: `work-assignment-aggregate-table/assignments/${assignmentId}/config`,
+        method: "PUT",
+        data,
+      }),
+    }),
+
+    getWorkAssignmentBasicSummary: build.mutation<
+      WorkAssignmentBasicSummaryResponse,
+      WorkAssignmentBasicSummaryRequest
+    >({
+      query: (data) => ({
+        url: `work-assignment-basic-summary/once`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    getWorkAssignmentBasicSummaryConfig: build.query<
+      WorkAssignmentBasicSummaryConfigDto | null,
+      { assignmentId: string; dynamicFormTemplateId: string }
+    >({
+      query: ({ assignmentId, dynamicFormTemplateId }) => ({
+        url: `work-assignment-basic-summary/assignments/${assignmentId}/templates/${dynamicFormTemplateId}/config`,
+        method: "GET",
+      }),
+    }),
+
+    saveWorkAssignmentBasicSummaryConfig: build.mutation<
+      WorkAssignmentBasicSummaryConfigDto,
+      {
+        assignmentId: string;
+        dynamicFormTemplateId: string;
+        data: SaveWorkAssignmentBasicSummaryConfigRequest;
+      }
+    >({
+      query: ({ assignmentId, dynamicFormTemplateId, data }) => ({
+        url: `work-assignment-basic-summary/assignments/${assignmentId}/templates/${dynamicFormTemplateId}/config`,
+        method: "PUT",
+        data,
+      }),
+    }),
+
     evaluateAssignment: build.mutation<
       void,
       { assignmentId: string; data: EvaluateAssignmentRequest }
@@ -362,6 +427,11 @@ export const {
   useReactivateReviewReportMutation,
   useGetAggregateTableMutation,
   useGetDynamicFormAggregateTableMutation,
+  useGetWorkAssignmentAggregateConfigQuery,
+  useGetWorkAssignmentBasicSummaryConfigQuery,
+  useGetWorkAssignmentBasicSummaryMutation,
+  useSaveWorkAssignmentBasicSummaryConfigMutation,
+  useSaveWorkAssignmentAggregateConfigMutation,
 
   useEvaluateAssignmentMutation,
   useGetEvaluationLogsQuery,

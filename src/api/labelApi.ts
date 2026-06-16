@@ -4,6 +4,19 @@ import { type PagedResult } from "../types/pagedResult";
 export type LabelScopeType = "GLOBAL" | "LEVEL" | "UNIT";
 export type LabelDataType = "NUMBER" | "SHORT_TEXT" | "STRING_LIST" | "LONG_TEXT" | "DATE" | "BOOLEAN";
 export type LabelUsage = "CLASSIFICATION" | "STATISTIC" | "TABLE_TARGET";
+export type LabelValueSourceType =
+  | "NONE"
+  | "FIXED_ENUM"
+  | "ENUM_CATALOG"
+  | "SYSTEM_UNIT"
+  | "SYSTEM_USER"
+  | "SYSTEM_POSITION"
+  | "SYSTEM_UNIT_TYPE";
+
+export type LabelValueOption = {
+  code: string;
+  label: string;
+};
 
 export type LabelRow = {
   id: string;
@@ -14,6 +27,11 @@ export type LabelRow = {
   groupCode?: string | null;
   usage: LabelUsage;
   dataType: LabelDataType;
+  valueSourceType: LabelValueSourceType;
+  valueOptions: LabelValueOption[];
+  valueSourceCatalogId?: string | null;
+  valueSourceCatalogCode?: string | null;
+  valueSourceCatalogName?: string | null;
   scopeType: LabelScopeType;
   scopeId?: string | null;
   isSystem: boolean;
@@ -46,6 +64,9 @@ export type CreateLabelReq = {
   groupCode?: string | null;
   usage?: LabelUsage | null;
   dataType?: LabelDataType | null;
+  valueSourceType?: LabelValueSourceType | null;
+  valueOptions?: LabelValueOption[] | null;
+  valueSourceCatalogId?: string | null;
   scopeType?: LabelScopeType | null;
   scopeId?: string | null;
   isActive?: boolean;
@@ -58,6 +79,9 @@ export type UpdateLabelReq = {
   groupCode?: string | null;
   usage?: LabelUsage | null;
   dataType?: LabelDataType | null;
+  valueSourceType?: LabelValueSourceType | null;
+  valueOptions?: LabelValueOption[] | null;
+  valueSourceCatalogId?: string | null;
   isActive?: boolean;
 };
 

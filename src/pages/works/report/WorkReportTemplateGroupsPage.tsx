@@ -18,6 +18,7 @@ import { UITextKey, uiText } from "../../../constants/uiText";
 export interface WorkReportTemplateGroupsPageProps {
   workId?: string;
   active?: boolean;
+  scopeAssignmentId?: string | null;
   onOpenGroup?: (row: MyReportTemplateRow) => void;
 }
 
@@ -41,7 +42,7 @@ const defaultSearchRequest = (): MyReportTemplateSearchRequest => ({
 export default function WorkReportTemplateGroupsPage(
   props: WorkReportTemplateGroupsPageProps
 ) {
-  const { workId, active = true, onOpenGroup } = props;
+  const { workId, active = true, scopeAssignmentId = null, onOpenGroup } = props;
 
   const [filterValue, setFilterValue] = React.useState<WorkReportTemplateGroupFilterValue>(
     defaultFilterBarValue()
@@ -58,14 +59,26 @@ export default function WorkReportTemplateGroupsPage(
       trigger(
         {
           workId,
-          req: nextFilter,
+          req: {
+            ...nextFilter,
+            scopeAssignmentId: scopeAssignmentId || null,
+          },
         },
         true
       );
       setHasLoadedOnce(true);
     },
-    [trigger, workId]
+    [scopeAssignmentId, trigger, workId]
   );
+
+  React.useEffect(() => {
+    setHasLoadedOnce(false);
+    setFilter((prev) => ({
+      ...prev,
+      page: 0,
+      scopeAssignmentId: scopeAssignmentId || null,
+    }));
+  }, [scopeAssignmentId]);
 
   React.useEffect(() => {
     if (!active || !workId || hasLoadedOnce) return;

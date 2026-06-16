@@ -12,6 +12,7 @@ import {
 import { useGetDashboardMindMapNodeSummaryQuery } from "../../../api/dashboardMindMapApi";
 import type {
   DashboardMindMapBucket,
+  DashboardMindMapCoverageDto,
   DashboardMindMapFieldSummaryDto,
   DashboardMindMapLabelSummaryDto,
   DashboardMindMapScopeRequest,
@@ -121,6 +122,27 @@ function getFieldMetricTitle(item: DashboardMindMapFieldSummaryDto): string {
     .join(" | ");
 }
 
+function coverageChips(coverage?: DashboardMindMapCoverageDto | null) {
+  if (!coverage) return [];
+
+  return [
+    {
+      key: "required",
+      label: `Bắt buộc ${coverage.requiredCount}`,
+      color: coverage.missingCount > 0 ? "warning" as const : "success" as const,
+    },
+    { key: "reported", label: `Đã tạo ${coverage.reportedCount}`, color: "info" as const },
+    { key: "submitted", label: `Đã nộp ${coverage.submittedCount}`, color: "primary" as const },
+    { key: "approved", label: `Đã duyệt ${coverage.approvedCount}`, color: "success" as const },
+    ...(coverage.missingCount > 0
+      ? [{ key: "missing", label: `Thiếu ${coverage.missingCount}`, color: "error" as const }]
+      : []),
+    ...(coverage.adHocCount > 0
+      ? [{ key: "adhoc", label: `Chủ động ${coverage.adHocCount}`, color: "warning" as const }]
+      : []),
+  ];
+}
+
 export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
   const {
     open,
@@ -207,6 +229,9 @@ export default function NodeSummaryPopover(props: NodeSummaryPopoverProps) {
               <Chip size="small" label={`${data?.descendantAssignmentCount ?? 0} công việc con`} />
               <Chip size="small" label={`${data?.totalAssigneeCount ?? 0} đơn vị/người`} />
               <Chip size="small" label={`${data?.reportSummary.total ?? 0} báo cáo`} />
+              {coverageChips(data?.coverage).map((item) => (
+                <Chip key={item.key} size="small" color={item.color} variant="outlined" label={item.label} />
+              ))}
             </>
           )}
         </Stack>

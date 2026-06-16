@@ -51,6 +51,10 @@ function noteBlock(label: string, value?: string | null) {
   );
 }
 
+function getPeriodKindLabel(periodKind?: string | null): string {
+  return (periodKind ?? "").toUpperCase() === "USER_CREATED" ? "Chủ động" : "Bắt buộc";
+}
+
 export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps) {
   const { open, nodeId, bucket, scope, onClose } = props;
   const bucketLabel = getDashboardMindMapBucketLabel(bucket);
@@ -89,6 +93,13 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
             <Typography variant="caption" color="text.secondary">
               {row.periodKey || "-"}
             </Typography>
+            <Chip
+              size="small"
+              variant="outlined"
+              color={(row.periodKind ?? "").toUpperCase() === "USER_CREATED" ? "warning" : "default"}
+              label={getPeriodKindLabel(row.periodKind)}
+              sx={{ width: "fit-content" }}
+            />
           </Stack>
         ),
       },
@@ -127,13 +138,9 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
       },
       {
         field: "notes",
-        header: "Nội dung báo cáo / đánh giá",
+        header: "Ghi chú duyệt / trễ hạn",
         render: (row) => (
           <Stack spacing={1}>
-            {noteBlock("Trạng thái tiến độ", row.currentProgressStatus)}
-            {noteBlock("Lý do báo cáo", row.reportReason)}
-            {noteBlock("Khó khăn", row.difficulties)}
-            {noteBlock("Giải pháp đề xuất", row.proposedSolution)}
             {noteBlock("Lý do chậm", row.lateReason)}
             {noteBlock("Phản hồi / trả lại", row.reviewerComment || row.returnReason)}
             {noteBlock("Đánh giá của người duyệt", row.reviewerEvaluation)}

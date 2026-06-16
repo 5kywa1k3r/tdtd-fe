@@ -34,6 +34,8 @@ import {
   type LabelScopeType,
   type LabelSearchReq,
   type LabelUsage,
+  type LabelValueOption,
+  type LabelValueSourceType,
   useCreateLabelMutation,
   useDeleteLabelMutation,
   useSearchLabelsMutation,
@@ -44,14 +46,19 @@ import { getApiErrorMessage } from "../../utils/apiError";
 import {
   formatLabelDataType,
   formatLabelUsage,
+  formatLabelValueSourceType,
   isValidLabelColor,
   LABEL_DATA_TYPE_OPTIONS,
   LABEL_USAGE_OPTIONS,
   LabelColorPalette,
   LabelColorPreview,
   LabelPreviewChip,
+  LabelValueSourceEditor,
+  labelValueSourceApplies,
   labelUsageUsesDataType,
+  normalizeLabelValueOptions,
 } from "../../components/labels/labelUi";
+import LabelEnumCatalogManagerDialog from "../../components/labels/LabelEnumCatalogManagerDialog";
 
 type LabelFormState = {
   id?: string;
@@ -62,6 +69,11 @@ type LabelFormState = {
   groupCode: string;
   usage: LabelUsage;
   dataType: LabelRow["dataType"];
+  valueSourceType: LabelValueSourceType;
+  valueOptions: LabelValueOption[];
+  valueSourceCatalogId: string;
+  valueSourceCatalogCode: string;
+  valueSourceCatalogName: string;
   scopeType: LabelScopeType;
   scopeId: string;
   isActive: boolean;
@@ -75,6 +87,11 @@ const defaultFormState = (): LabelFormState => ({
   groupCode: "",
   usage: "CLASSIFICATION",
   dataType: "NUMBER",
+  valueSourceType: "NONE",
+  valueOptions: [],
+  valueSourceCatalogId: "",
+  valueSourceCatalogCode: "",
+  valueSourceCatalogName: "",
   scopeType: "GLOBAL",
   scopeId: "",
   isActive: true,
@@ -129,6 +146,7 @@ export default function LabelListPage() {
   const [deleteLabel, deleteState] = useDeleteLabelMutation();
 
   const [formOpen, setFormOpen] = useState(false);
+  const [enumCatalogOpen, setEnumCatalogOpen] = useState(false);
   const [form, setForm] = useState<LabelFormState>(defaultFormState());
   const [deleteTarget, setDeleteTarget] = useState<LabelRow | null>(null);
   const [snackbar, setSnackbar] = useState("");
@@ -239,6 +257,14 @@ export default function LabelListPage() {
         render: (row) => labelUsageUsesDataType(row.usage) ? formatLabelDataType(row.dataType) : "Không áp dụng",
       },
       {
+        field: "valueSourceType",
+        header: "Nguồn giá trị",
+        render: (row) =>
+          labelUsageUsesDataType(row.usage) && labelValueSourceApplies(row.dataType)
+            ? formatLabelValueSourceType(row.valueSourceType)
+            : "Không áp dụng",
+      },
+      {
         field: "scopeType",
         header: "Phạm vi",
         render: (row) => scopeLabel(row),
@@ -251,7 +277,7 @@ export default function LabelListPage() {
             size="small"
             color={row.isActive ? "success" : "default"}
             variant={row.isActive ? "filled" : "outlined"}
-            label={row.isActive ? "Active" : "Inactive"}
+            label={row.isActive ? "Hoạt động" : "Ngừng hoạt động"}
           />
         ),
       },
@@ -293,6 +319,11 @@ export default function LabelListPage() {
       groupCode: row.groupCode ?? "",
       usage: row.usage ?? "CLASSIFICATION",
       dataType: row.dataType ?? "NUMBER",
+      valueSourceType: row.valueSourceType ?? "NONE",
+      valueOptions: normalizeLabelValueOptions(row.valueOptions),
+      valueSourceCatalogId: row.valueSourceCatalogId ?? "",
+      valueSourceCatalogCode: row.valueSourceCatalogCode ?? "",
+      valueSourceCatalogName: row.valueSourceCatalogName ?? "",
       scopeType: row.scopeType,
       scopeId: row.scopeId ?? "",
       isActive: row.isActive,
@@ -309,6 +340,18 @@ export default function LabelListPage() {
       groupCode: form.groupCode.trim() || null,
       usage: form.usage,
       dataType: form.dataType,
+      valueSourceType:
+        labelUsageUsesDataType(form.usage) && labelValueSourceApplies(form.dataType)
+          ? form.valueSourceType
+          : "NONE",
+      valueOptions:
+        form.valueSourceType === "FIXED_ENUM" && labelValueSourceApplies(form.dataType)
+          ? normalizeLabelValueOptions(form.valueOptions)
+          : [],
+      valueSourceCatalogId:
+        form.valueSourceType === "ENUM_CATALOG" && labelValueSourceApplies(form.dataType)
+          ? form.valueSourceCatalogId.trim() || null
+          : null,
       scopeType: isSystemAdmin ? form.scopeType : null,
       scopeId: isSystemAdmin ? form.scopeId.trim() || null : null,
       isActive: form.isActive,
@@ -325,6 +368,9 @@ export default function LabelListPage() {
             groupCode: payload.groupCode,
             usage: payload.usage,
             dataType: payload.dataType,
+            valueSourceType: payload.valueSourceType,
+            valueOptions: payload.valueOptions,
+            valueSourceCatalogId: payload.valueSourceCatalogId,
             isActive: payload.isActive,
           },
         }).unwrap();
@@ -423,6 +469,9 @@ export default function LabelListPage() {
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ ...listToolbarButtonSx, ml: { xs: 0, lg: "auto" } }}>
             {uiText(UITextKey.TextTaoNhanMoi)}
           </Button>
+          <Button variant="outlined" onClick={() => setEnumCatalogOpen(true)} sx={listToolbarButtonSx}>
+            Danh mục enum riêng
+          </Button>
         </Stack>
 
         <AppTable<LabelRow, NonNullable<LabelSearchReq["sortField"]>>
@@ -501,7 +550,15 @@ export default function LabelListPage() {
               disabled={busy}
               helperText={labelUsageUsesDataType(form.usage) ? "Kiểu dữ liệu bắt buộc và phải khớp với nơi gắn nhãn." : "Nhãn này chỉ dùng để phân loại, không tham gia thống kê."}
               onChange={(event) =>
-                setForm((prev) => ({ ...prev, usage: event.target.value as LabelUsage }))
+                setForm((prev) => ({
+                  ...prev,
+                  usage: event.target.value as LabelUsage,
+                  valueSourceType: labelUsageUsesDataType(event.target.value) ? prev.valueSourceType : "NONE",
+                  valueOptions: labelUsageUsesDataType(event.target.value) ? prev.valueOptions : [],
+                  valueSourceCatalogId: labelUsageUsesDataType(event.target.value) ? prev.valueSourceCatalogId : "",
+                  valueSourceCatalogCode: labelUsageUsesDataType(event.target.value) ? prev.valueSourceCatalogCode : "",
+                  valueSourceCatalogName: labelUsageUsesDataType(event.target.value) ? prev.valueSourceCatalogName : "",
+                }))
               }
               InputLabelProps={{ shrink: true }}
             >
@@ -542,7 +599,15 @@ export default function LabelListPage() {
                 disabled={busy}
                 helperText={uiText(UITextKey.TextChiApDungKhiGanNhanThongKe)}
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, dataType: event.target.value as LabelRow["dataType"] }))
+                  setForm((prev) => ({
+                    ...prev,
+                    dataType: event.target.value as LabelRow["dataType"],
+                    valueSourceType: labelValueSourceApplies(event.target.value) ? prev.valueSourceType : "NONE",
+                    valueOptions: labelValueSourceApplies(event.target.value) ? prev.valueOptions : [],
+                    valueSourceCatalogId: labelValueSourceApplies(event.target.value) ? prev.valueSourceCatalogId : "",
+                    valueSourceCatalogCode: labelValueSourceApplies(event.target.value) ? prev.valueSourceCatalogCode : "",
+                    valueSourceCatalogName: labelValueSourceApplies(event.target.value) ? prev.valueSourceCatalogName : "",
+                  }))
                 }
                 InputLabelProps={{ shrink: true }}
               >
@@ -552,6 +617,38 @@ export default function LabelListPage() {
                   </MenuItem>
                 ))}
               </TextField>
+            )}
+            {labelUsageUsesDataType(form.usage) && (
+              <LabelValueSourceEditor
+                dataType={form.dataType}
+                valueSourceType={form.valueSourceType}
+                valueOptions={form.valueOptions}
+                valueSourceCatalogId={form.valueSourceCatalogId}
+                valueSourceCatalogName={form.valueSourceCatalogName}
+                disabled={busy}
+                onSourceTypeChange={(valueSourceType) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    valueSourceType,
+                    valueOptions:
+                      valueSourceType === "FIXED_ENUM" && prev.valueOptions.length === 0
+                        ? [{ code: "OPT_1", label: "Lựa chọn 1" }]
+                        : prev.valueOptions,
+                    valueSourceCatalogId: valueSourceType === "ENUM_CATALOG" ? prev.valueSourceCatalogId : "",
+                    valueSourceCatalogCode: valueSourceType === "ENUM_CATALOG" ? prev.valueSourceCatalogCode : "",
+                    valueSourceCatalogName: valueSourceType === "ENUM_CATALOG" ? prev.valueSourceCatalogName : "",
+                  }))
+                }
+                onOptionsChange={(valueOptions) => setForm((prev) => ({ ...prev, valueOptions }))}
+                onCatalogChange={(catalog) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    valueSourceCatalogId: catalog?.id ?? "",
+                    valueSourceCatalogCode: catalog?.code ?? "",
+                    valueSourceCatalogName: catalog?.name ?? "",
+                  }))
+                }
+              />
             )}
             {isSystemAdmin && !form.id && (
               <Stack direction="row" spacing={1}>
@@ -642,6 +739,7 @@ export default function LabelListPage() {
         onClose={() => setSnackbar("")}
         message={snackbar}
       />
+      <LabelEnumCatalogManagerDialog open={enumCatalogOpen} onClose={() => setEnumCatalogOpen(false)} />
     </Box>
   );
 }

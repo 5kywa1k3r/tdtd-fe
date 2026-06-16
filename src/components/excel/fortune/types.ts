@@ -1,16 +1,37 @@
 export type HeaderKind = "TOP" | "LEFT" | "MATRIX";
 
+export type HeaderSpecialRole = "FORMULA" | "TITLE" | "BLANK" | "HEADER" | "STYLE";
+
 export type DynamicExcelDataType =
   | "NUMBER"
   | "DATE"
   | "FULL_DATE"
   | "BOOLEAN"
   | "SHORT_TEXT"
-  | "MULTI_SELECT";
+  | "MULTI_SELECT"
+  | "IGNORE";
 
 export type DynamicExcelStringListOption = {
   code: string;
   label: string;
+};
+
+export type DynamicExcelValueSourceType =
+  | "FIXED_ENUM"
+  | "ENUM_CATALOG"
+  | "SYSTEM_UNIT"
+  | "SYSTEM_USER"
+  | "SYSTEM_POSITION"
+  | "SYSTEM_UNIT_TYPE";
+
+export type DynamicExcelValueSource = {
+  sourceType: DynamicExcelValueSourceType;
+  labelCode?: string;
+  labelName?: string;
+  catalogId?: string;
+  catalogCode?: string;
+  catalogName?: string;
+  options?: DynamicExcelStringListOption[];
 };
 
 export type DataTypeOverride =
@@ -19,12 +40,14 @@ export type DataTypeOverride =
       index: number;
       dataType: DynamicExcelDataType;
       options?: DynamicExcelStringListOption[];
+      valueSource?: DynamicExcelValueSource | null;
     }
   | {
       scope: "ROW";
       index: number;
       dataType: DynamicExcelDataType;
       options?: DynamicExcelStringListOption[];
+      valueSource?: DynamicExcelValueSource | null;
     }
   | {
       scope: "RANGE";
@@ -35,12 +58,24 @@ export type DataTypeOverride =
       c1: number;
       dataType: DynamicExcelDataType;
       options?: DynamicExcelStringListOption[];
+      valueSource?: DynamicExcelValueSource | null;
     };
+
+export type HeaderSpecialRange = {
+  id?: string;
+  role: HeaderSpecialRole;
+  r0: number;
+  c0: number;
+  r1: number;
+  c1: number;
+  label?: string;
+};
 
 export type HeaderSpecMetadata = {
   defaultDataType?: DynamicExcelDataType;
   defaultOptions?: DynamicExcelStringListOption[];
   dataTypeOverrides?: DataTypeOverride[];
+  specialRanges?: HeaderSpecialRange[];
 };
 
 export type HeaderSpec = (

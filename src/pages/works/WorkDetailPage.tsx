@@ -15,6 +15,7 @@ import {
   DialogTitle,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
@@ -36,10 +37,22 @@ import UpdateOutlinedIcon from "@mui/icons-material/UpdateOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 
 import type { AssignmentTableRow } from "../../components/works/assignments/WorkAssignmentTable";
+import AssignmentBranchTree, {
+  findAssignmentPath,
+  getAssignmentLabel,
+  getAssignmentScopeIds,
+  getEntryAssignmentRows,
+  toAssignmentRow,
+} from "../../components/works/assignments/AssignmentBranchTree";
 import { useCompleteWorkMutation, useGetWorkQuery } from "../../api/workApi";
-import { useGetMyReportAssignmentsByWorkQuery } from "../../api/workAssignmentApi";
+import {
+  useGetChildrenAssignmentsQuery,
+  useGetMyReportAssignmentsByWorkQuery,
+  useGetWorkAssignmentsByWorkQuery,
+} from "../../api/workAssignmentApi";
 
 import type { MyReportTemplateRow } from "../../types/report";
+import type { WorkAssignmentListResponse } from "../../types/workAssignment";
 import { getMeSnapshot } from "../../stores/authStorage";
 import { UITextKey, uiText } from "../../constants/uiText";
 import { getWorkStatusLabel, WORK_STATUS, WORK_TYPE } from "../../types/work";
@@ -91,6 +104,14 @@ function formatCompactDate(value?: string | null) {
 function toDayKey(value?: string | null) {
   const matched = String(value ?? "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return matched ? `${matched[1]}${matched[2]}${matched[3]}` : "";
+}
+
+function laterDateValue(left?: string | null, right?: string | null) {
+  const leftKey = toDayKey(left);
+  const rightKey = toDayKey(right);
+  if (!leftKey) return right ?? null;
+  if (!rightKey) return left ?? null;
+  return rightKey > leftKey ? right ?? null : left ?? null;
 }
 
 function dayKeyToInputDate(dayKey?: string | null) {
@@ -165,6 +186,9 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
       ? { parentAssignmentId: queryAggregationAssignmentId }
       : null
   );
+  const [selectedBranchPath, setSelectedBranchPath] = useState<AssignmentTableRow[]>([]);
+  const [branchChildrenByParentId, setBranchChildrenByParentId] = useState<Record<string, AssignmentTableRow[]>>({});
+  const [branchTreeCollapsed, setBranchTreeCollapsed] = useState(false);
 
   const workId = id ?? "";
   const [completeWork, completeWorkState] = useCompleteWorkMutation();
@@ -183,6 +207,59 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const { data: myReportAssignments } = useGetMyReportAssignmentsByWorkQuery(
     { workId },
     { skip: !workId || !detail }
+  );
+
+  const {
+    data: assignmentTreeData,
+    isFetching: assignmentTreeLoading,
+  } = useGetWorkAssignmentsByWorkQuery(
+    { workId },
+    { skip: !workId || !detail }
+  );
+
+  const assignmentRows = useMemo(
+    () => ((assignmentTreeData ?? []) as WorkAssignmentListResponse[]).map(toAssignmentRow),
+    [assignmentTreeData]
+  );
+  const entryAssignmentRows = useMemo(
+    () => getEntryAssignmentRows(assignmentRows),
+    [assignmentRows]
+  );
+  const selectedBranch = selectedBranchPath[selectedBranchPath.length - 1] ?? null;
+  const selectedBranchId = selectedBranch?.id ?? null;
+  const selectedBranchScopeIds = useMemo(
+    () => getAssignmentScopeIds(selectedBranch, assignmentRows),
+    [assignmentRows, selectedBranch]
+  );
+
+  const branchTreeChildrenByParentId = useMemo(() => {
+    const next: Record<string, AssignmentTableRow[]> = {};
+
+    assignmentRows.forEach((row) => {
+      const parentId = row.parentAssignmentId?.trim();
+      if (!parentId || parentId === row.id) return;
+      next[parentId] = [...(next[parentId] ?? []), row];
+    });
+
+    Object.entries(branchChildrenByParentId).forEach(([parentId, children]) => {
+      next[parentId] = children.filter((child) => child.id && child.id !== parentId);
+    });
+
+    return next;
+  }, [assignmentRows, branchChildrenByParentId]);
+
+  const {
+    data: selectedBranchChildrenData,
+    isFetching: selectedBranchChildrenLoading,
+    error: selectedBranchChildrenError,
+  } = useGetChildrenAssignmentsQuery(
+    { parentAssignmentId: selectedBranchId ?? "" },
+    { skip: !selectedBranchId || !detail }
+  );
+
+  const selectedBranchChildrenRows = useMemo(
+    () => ((selectedBranchChildrenData ?? []) as WorkAssignmentListResponse[]).map(toAssignmentRow),
+    [selectedBranchChildrenData]
   );
 
   const effectiveType: WorkType =
@@ -207,6 +284,35 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
 
   const handleBack = () => navigate(-1);
 
+  const setBranchAssignmentParam = (assignmentId: string | null, nextTab: DetailTab | null = tab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextTab) nextParams.set("tab", nextTab);
+    if (assignmentId) nextParams.set("assignmentId", assignmentId);
+    else nextParams.delete("assignmentId");
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const resolveBranchPath = (row: AssignmentTableRow) =>
+    findAssignmentPath(row.id, entryAssignmentRows, branchTreeChildrenByParentId) ??
+    (selectedBranchId && row.parentAssignmentId === selectedBranchId
+      ? [...selectedBranchPath, row]
+      : [row]);
+
+  const handleSelectBranchId = (assignmentId: string) => {
+    const knownPath = findAssignmentPath(assignmentId, entryAssignmentRows, branchTreeChildrenByParentId);
+    if (!knownPath) return;
+    setSelectedBranchPath(knownPath);
+    setSelectedReportTemplateGroup(null);
+    setBranchAssignmentParam(assignmentId);
+  };
+
+  const handleClearBranch = () => {
+    setSelectedBranchPath([]);
+    setSelectedReportTemplateGroup(null);
+    if (tab === "AGGREGATION") setAggregationSeed(null);
+    setBranchAssignmentParam(null);
+  };
+
   const handleOpenFunction = (next: DetailTab) => {
     setTab(next);
 
@@ -224,7 +330,9 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("tab", next);
-    if (next !== "AGGREGATION") {
+    if (selectedBranchId) {
+      nextParams.set("assignmentId", selectedBranchId);
+    } else if (next !== "AGGREGATION") {
       nextParams.delete("assignmentId");
     }
     if (next !== "ASSIGN") {
@@ -238,6 +346,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
     setSelectedReportTemplateGroup(null);
     setAggregationSeed(null);
     setCommonMode("view");
+    setSelectedBranchPath([]);
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("tab");
@@ -247,6 +356,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   };
 
   const handleOpenAggregation = (row: AssignmentTableRow) => {
+    setSelectedBranchPath(resolveBranchPath(row));
     setAggregationSeed({
       parentAssignmentId: row.id,
       dynamicExcelId: row.dynamicExcelId ?? null,
@@ -318,6 +428,56 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
       setCompleteError(err?.data?.message || err?.message || "Xác nhận hoàn thành thất bại.");
     }
   };
+
+  useEffect(() => {
+    setBranchChildrenByParentId({});
+    setSelectedBranchPath([]);
+  }, [workId]);
+
+  useEffect(() => {
+    if (!selectedBranchId || !selectedBranchChildrenData) return;
+    setBranchChildrenByParentId((prev) => ({
+      ...prev,
+      [selectedBranchId]: selectedBranchChildrenRows,
+    }));
+  }, [selectedBranchChildrenData, selectedBranchChildrenRows, selectedBranchId]);
+
+  useEffect(() => {
+    if (!queryAggregationAssignmentId) {
+      setSelectedBranchPath((prev) => (prev.length > 0 ? [] : prev));
+      return;
+    }
+
+    if (assignmentRows.length === 0) return;
+
+    const knownPath = findAssignmentPath(
+      queryAggregationAssignmentId,
+      entryAssignmentRows,
+      branchTreeChildrenByParentId
+    );
+    if (knownPath) {
+      setSelectedBranchPath((prev) =>
+        prev[prev.length - 1]?.id === queryAggregationAssignmentId ? prev : knownPath
+      );
+      return;
+    }
+
+    const row = assignmentRows.find((item) => item.id === queryAggregationAssignmentId);
+    if (row) {
+      setSelectedBranchPath((prev) =>
+        prev[prev.length - 1]?.id === queryAggregationAssignmentId ? prev : [row]
+      );
+    }
+  }, [
+    assignmentRows,
+    branchTreeChildrenByParentId,
+    entryAssignmentRows,
+    queryAggregationAssignmentId,
+  ]);
+
+  useEffect(() => {
+    setSelectedReportTemplateGroup(null);
+  }, [selectedBranchId]);
 
   useEffect(() => {
     setSelectedReportTemplateGroup(null);
@@ -436,6 +596,13 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const reportCountLabel = reportAssignmentsLoaded
     ? String(myReportAssignments?.length ?? 0)
     : "...";
+  const selectedBranchLabel = selectedBranch ? getAssignmentLabel(selectedBranch) : "";
+  const branchViewChipLabel = selectedBranch
+    ? `Đang xem nhánh: ${selectedBranchLabel}`
+    : "Đang xem nhánh gốc";
+  const branchViewTooltip = selectedBranch
+    ? `Đang xem nhánh công việc: ${selectedBranchLabel}`
+    : "Đang xem nhánh gốc của công việc";
 
   const summaryCards = [
     {
@@ -594,7 +761,14 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                 )}
               </Stack>
 
-              <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                justifyContent="flex-end"
+                useFlexGap
+                sx={{ flexWrap: "wrap", minWidth: 0 }}
+              >
                 {tab === "COMMON" && canEditCommon && (
                   isEdit ? (
                     <Button
@@ -617,6 +791,34 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                     </Button>
                   )
                 )}
+
+                <Tooltip title={branchViewTooltip}>
+                  <Chip
+                    size="small"
+                    icon={<AssignmentTurnedInOutlinedIcon />}
+                    label={branchViewChipLabel}
+                    variant="outlined"
+                    sx={{
+                      maxWidth: { xs: "100%", sm: 280, md: 340 },
+                      height: 32,
+                      borderRadius: "8px",
+                      color: selectedBranch ? "#0f5bd8" : "#475569",
+                      bgcolor: selectedBranch ? "#eff6ff" : "#f8fafc",
+                      borderColor: selectedBranch ? "#bfdbfe" : "#e2e8f0",
+                      fontWeight: 850,
+                      "& .MuiChip-icon": {
+                        color: selectedBranch ? "#0f5bd8" : "#64748b",
+                        fontSize: 18,
+                      },
+                      "& .MuiChip-label": {
+                        display: "block",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      },
+                    }}
+                  />
+                </Tooltip>
 
                 {canCompleteWork && (
                   <Button
@@ -718,6 +920,25 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                       }}
                     />
                   )}
+                  {tab && selectedBranch && (
+                    <Chip
+                      size="small"
+                      label={selectedBranchLabel}
+                      sx={{
+                        maxWidth: { xs: "100%", md: 420 },
+                        color: "#0f5bd8",
+                        bgcolor: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "6px",
+                        fontWeight: 800,
+                        "& .MuiChip-label": {
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        },
+                      }}
+                    />
+                  )}
                   <Chip
                     size="small"
                     label={statusLabel}
@@ -753,6 +974,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                     xs: "1fr",
                     sm: "repeat(2, minmax(0, 1fr))",
                     lg: "repeat(4, minmax(0, 1fr))",
+                    xl: selectedBranch ? "repeat(5, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
                   },
                   gap: 1.25,
                 }}
@@ -803,14 +1025,70 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                     </CardContent>
                   </Card>
                 ))}
+                <Card
+                  key="owner"
+                  elevation={0}
+                  sx={{
+                    borderRadius: "8px",
+                    border: "1px solid #e2e8f0",
+                    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+                  }}
+                >
+                  <CardContent sx={{ p: 1.75, "&:last-child": { pb: 1.75 } }}>
+                    <Stack direction="row" spacing={1.25} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: "8px",
+                          display: "grid",
+                          placeItems: "center",
+                          color: "#2563eb",
+                          bgcolor: alpha("#2563eb", 0.1),
+                          flexShrink: 0,
+                        }}
+                      >
+                        <PersonOutlineOutlinedIcon fontSize="small" />
+                      </Box>
+                      <Stack spacing={0.15} sx={{ minWidth: 0 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "#0f172a",
+                            fontFamily: workPageFont,
+                            fontWeight: 850,
+                            lineHeight: 1.25,
+                          }}
+                          noWrap
+                        >
+                          {ownerLabel}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }} noWrap>
+                          Phụ trách
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {leaderLabel}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
               </Box>
 
               <Box
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1fr) 280px" },
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    xl: branchTreeCollapsed ? "minmax(0, 1fr) 44px" : "minmax(0, 1fr) 292px",
+                  },
                   gap: 2,
                   alignItems: "start",
+                  transition: (theme) =>
+                    theme.transitions.create("grid-template-columns", {
+                      duration: 220,
+                      easing: theme.transitions.easing.easeInOut,
+                    }),
                 }}
               >
                 <Box
@@ -912,7 +1190,20 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                   ))}
                 </Box>
 
-                <Stack spacing={1.5}>
+                <AssignmentBranchTree
+                  rootRows={entryAssignmentRows}
+                  childrenByParentId={branchTreeChildrenByParentId}
+                  activeId={selectedBranchId}
+                  pathIds={selectedBranchPath.map((row) => row.id)}
+                  collapsed={branchTreeCollapsed}
+                  loading={assignmentTreeLoading || selectedBranchChildrenLoading}
+                  error={Boolean(selectedBranchChildrenError)}
+                  onToggleCollapsed={() => setBranchTreeCollapsed((prev) => !prev)}
+                  onSelectRoot={handleClearBranch}
+                  onSelectNode={handleSelectBranchId}
+                />
+
+                <Stack spacing={1.5} sx={{ display: "none" }}>
                   <Card
                     elevation={0}
                     sx={{
@@ -1004,6 +1295,27 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
               overflow: tab === "COMMON" ? "auto" : "hidden",
             }}
           >
+            <Stack
+              direction={{ xs: "column", xl: "row" }}
+              spacing={1.5}
+              sx={{ flex: 1, minHeight: 0 }}
+            >
+              {false && (
+                <AssignmentBranchTree
+                  rootRows={entryAssignmentRows}
+                  childrenByParentId={branchTreeChildrenByParentId}
+                  activeId={selectedBranchId}
+                  pathIds={selectedBranchPath.map((row) => row.id)}
+                  collapsed={branchTreeCollapsed}
+                  loading={assignmentTreeLoading || selectedBranchChildrenLoading}
+                  error={Boolean(selectedBranchChildrenError)}
+                  onToggleCollapsed={() => setBranchTreeCollapsed((prev) => !prev)}
+                  onSelectRoot={handleClearBranch}
+                  onSelectNode={handleSelectBranchId}
+                />
+              )}
+
+              <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
             <Suspense fallback={<DetailTabFallback />}>
               {tab === "COMMON" && (
                 <WorkForm
@@ -1032,12 +1344,16 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                   <WorkAssignTab
                     workId={workId}
                     workStartDate={detail.startDate ?? null}
-                    workEndDate={detail.endDate ?? null}
+                    workEndDate={laterDateValue(detail.endDate, detail.dueDate)}
                     isWorkOwner={isWorkOwner}
                     workType={effectiveType}
                     onOpenAggregation={handleOpenAggregation}
                     onOpenReports={() => handleOpenFunction("REPORT")}
                     onOpenReview={() => handleOpenFunction("REVIEW")}
+                    selectedBranch={selectedBranch}
+                    branchRows={selectedBranchChildrenRows}
+                    branchLoading={selectedBranchChildrenLoading}
+                    branchError={Boolean(selectedBranchChildrenError)}
                   />
                 </Box>
               )}
@@ -1056,6 +1372,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                 <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                   <WorkReportTemplateGroupsPage
                     workId={workId}
+                    scopeAssignmentId={selectedBranchId}
                     onOpenGroup={(row: MyReportTemplateRow) => setSelectedReportTemplateGroup(row)}
                   />
                 </Box>
@@ -1066,6 +1383,8 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                   <WorkReportTemplateDetailPage
                     workId={workId}
                     group={selectedReportTemplateGroup}
+                    scopeAssignmentId={selectedBranchId}
+                    scopeAssignmentIds={selectedBranchScopeIds}
                     onBack={() => setSelectedReportTemplateGroup(null)}
                   />
                 </Box>
@@ -1075,7 +1394,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                 <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                   <WorkAggregationTab
                     workId={workId}
-                    parentAssignmentId={aggregationSeed?.parentAssignmentId ?? null}
+                    parentAssignmentId={aggregationSeed?.parentAssignmentId ?? selectedBranchId ?? null}
                     defaultDynamicExcelId={aggregationSeed?.dynamicExcelId ?? null}
                     defaultDynamicExcelCode={aggregationSeed?.dynamicExcelCode ?? null}
                     defaultDynamicExcelName={aggregationSeed?.dynamicExcelName ?? null}
@@ -1088,10 +1407,12 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
 
               {tab === "REVIEW" && (
                 <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                  <WorkReviewTab workId={workId} />
+                  <WorkReviewTab workId={workId} scopeAssignmentId={selectedBranchId} />
                 </Box>
               )}
             </Suspense>
+              </Box>
+            </Stack>
           </Box>
         )}
       </Box>

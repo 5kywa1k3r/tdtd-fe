@@ -2,13 +2,16 @@ import type {
   DataTypeOverride,
   DynamicExcelDataType,
   DynamicExcelStringListOption,
+  DynamicExcelValueSource,
+  DynamicExcelValueSourceType,
   HeaderSpec,
 } from "./types";
 import type { Rect } from "./regions";
+import { normalizeSpecialRanges } from "./specialRanges";
 
 export const DEFAULT_DYNAMIC_EXCEL_DATA_TYPE: DynamicExcelDataType = "NUMBER";
 
-export const DATA_TYPE_OPTIONS: Array<{ value: DynamicExcelDataType; label: string; tooltip?: string }> = [
+const RAW_DATA_TYPE_OPTIONS: Array<{ value: DynamicExcelDataType; label: string; tooltip?: string }> = [
   { value: "NUMBER", label: "Số" },
   { value: "SHORT_TEXT", label: "Nội dung cố định" },
   { value: "MULTI_SELECT", label: "Nội dung cố định (chọn nhiều)" },
@@ -17,6 +20,24 @@ export const DATA_TYPE_OPTIONS: Array<{ value: DynamicExcelDataType; label: stri
   { value: "BOOLEAN", label: "Đúng/Sai" },
 ];
 
+const DATA_TYPE_VI_LABELS: Record<DynamicExcelDataType, { label: string; tooltip?: string }> = {
+  NUMBER: { label: "Số" },
+  SHORT_TEXT: { label: "Nội dung cố định" },
+  MULTI_SELECT: { label: "Nội dung cố định (chọn nhiều)" },
+  DATE: { label: "Ngày/kỳ", tooltip: "Định dạng: dd/MM/yyyy, MM/yyyy hoặc yyyy." },
+  FULL_DATE: { label: "Ngày đầy đủ", tooltip: "Định dạng: dd/MM/yyyy." },
+  BOOLEAN: { label: "Đúng/Sai" },
+  IGNORE: {
+    label: "Bỏ qua nhập",
+    tooltip: "Tương thích dữ liệu cũ; cấu hình mới nên dùng vùng Bỏ trống không nhập.",
+  },
+};
+
+export const DATA_TYPE_OPTIONS = RAW_DATA_TYPE_OPTIONS.map((option) => ({
+  ...option,
+  ...DATA_TYPE_VI_LABELS[option.value],
+}));
+
 export const DATA_TYPE_COLORS: Record<DynamicExcelDataType, string> = {
   NUMBER: "#E8F5E9",
   DATE: "#E3F2FD",
@@ -24,11 +45,21 @@ export const DATA_TYPE_COLORS: Record<DynamicExcelDataType, string> = {
   BOOLEAN: "#FFF3E0",
   SHORT_TEXT: "#F3E5F5",
   MULTI_SELECT: "#E8EAF6",
+  IGNORE: "#ECEFF1",
 };
 
 const DATA_TYPE_SET = new Set<DynamicExcelDataType>(
   DATA_TYPE_OPTIONS.map((option) => option.value),
 );
+
+const VALUE_SOURCE_TYPE_SET = new Set<DynamicExcelValueSourceType>([
+  "FIXED_ENUM",
+  "ENUM_CATALOG",
+  "SYSTEM_UNIT",
+  "SYSTEM_USER",
+  "SYSTEM_POSITION",
+  "SYSTEM_UNIT_TYPE",
+]);
 
 export function normalizeDataType(value: unknown): DynamicExcelDataType {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
@@ -36,6 +67,7 @@ export function normalizeDataType(value: unknown): DynamicExcelDataType {
   if (normalized === "SHORTTEXT" || normalized === "TEXT" || normalized === "STRING") return "SHORT_TEXT";
   if (normalized === "MULTISELECT" || normalized === "MULTI_SELECT") return "MULTI_SELECT";
   if (normalized === "STRINGLIST" || normalized === "STRING_LIST") return "SHORT_TEXT";
+  if (normalized === "IGNORE" || normalized === "IGNORED" || normalized === "SKIP") return "IGNORE";
   return DATA_TYPE_SET.has(normalized as DynamicExcelDataType)
     ? (normalized as DynamicExcelDataType)
     : DEFAULT_DYNAMIC_EXCEL_DATA_TYPE;
@@ -43,6 +75,9 @@ export function normalizeDataType(value: unknown): DynamicExcelDataType {
 
 export function dataTypeLabel(value: unknown) {
   const dataType = normalizeDataType(value);
+  if (DATA_TYPE_VI_LABELS[dataType]?.label) return DATA_TYPE_VI_LABELS[dataType].label;
+  const label = DATA_TYPE_OPTIONS.find((option) => option.value === dataType)?.label;
+  if (label) return label;
   return DATA_TYPE_OPTIONS.find((option) => option.value === dataType)?.label ?? "Số";
 }
 
@@ -51,9 +86,8 @@ export function isDynamicExcelEnumDataType(dataType: DynamicExcelDataType) {
 }
 
 export function getDefaultEnumOptions(dataType: DynamicExcelDataType): DynamicExcelStringListOption[] {
-  return dataType === "SHORT_TEXT"
-    ? [{ code: "NOI_DUNG", label: "Nội dung" }]
-    : [{ code: "OPT_1", label: "Lựa chọn 1" }];
+  if (dataType === "SHORT_TEXT") return [{ code: "NOI_DUNG", label: "Nội dung" }];
+  return [{ code: "OPT_1", label: "Lựa chọn 1" }];
 }
 
 export function normalizeStringListOptions(value: unknown): DynamicExcelStringListOption[] {
@@ -83,6 +117,40 @@ export function normalizeStringListOptions(value: unknown): DynamicExcelStringLi
   return options;
 }
 
+export function normalizeValueSource(
+  value: unknown,
+  fallbackOptions: DynamicExcelStringListOption[] = [],
+): DynamicExcelValueSource | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const sourceTypeRaw = String(raw.sourceType ?? raw.type ?? raw.valueSourceType ?? "").trim().toUpperCase();
+  const sourceType = VALUE_SOURCE_TYPE_SET.has(sourceTypeRaw as DynamicExcelValueSourceType)
+    ? (sourceTypeRaw as DynamicExcelValueSourceType)
+    : null;
+  if (!sourceType) return null;
+
+  const options = sourceType === "FIXED_ENUM"
+    ? normalizeStringListOptions(Array.isArray(raw.options) ? raw.options : fallbackOptions)
+    : [];
+  const catalogId = String(raw.catalogId ?? raw.valueSourceCatalogId ?? "").trim();
+  const catalogCode = String(raw.catalogCode ?? raw.valueSourceCatalogCode ?? "").trim();
+  const catalogName = String(raw.catalogName ?? raw.valueSourceCatalogName ?? "").trim();
+
+  return {
+    sourceType,
+    labelCode: typeof raw.labelCode === "string" && raw.labelCode.trim() ? raw.labelCode.trim() : undefined,
+    labelName: typeof raw.labelName === "string" && raw.labelName.trim() ? raw.labelName.trim() : undefined,
+    catalogId: catalogId || undefined,
+    catalogCode: catalogCode || undefined,
+    catalogName: catalogName || undefined,
+    options,
+  };
+}
+
+export function isSystemValueSource(value?: DynamicExcelValueSource | null) {
+  return Boolean(value && value.sourceType !== "FIXED_ENUM");
+}
+
 export function normalizeDataTypeOverrides(value: unknown): DataTypeOverride[] {
   if (!Array.isArray(value)) return [];
 
@@ -95,27 +163,31 @@ export function normalizeDataTypeOverrides(value: unknown): DataTypeOverride[] {
 
       if (scope === "COLUMN") {
         const index = toNonNegativeInt(row.index);
+        const options = normalizeStringListOptions(row.options);
         return index == null
           ? null
-          : { scope: "COLUMN", index, dataType, options: normalizeStringListOptions(row.options) };
+          : { scope: "COLUMN", index, dataType, options, valueSource: normalizeValueSource(row.valueSource, options) };
       }
 
       if (scope === "ROW") {
         const index = toNonNegativeInt(row.index);
+        const options = normalizeStringListOptions(row.options);
         return index == null
           ? null
-          : { scope: "ROW", index, dataType, options: normalizeStringListOptions(row.options) };
+          : { scope: "ROW", index, dataType, options, valueSource: normalizeValueSource(row.valueSource, options) };
       }
 
       if (scope === "RANGE") {
         const rect = normalizeRect(row);
         if (!rect) return null;
+        const options = normalizeStringListOptions(row.options);
         return {
           scope: "RANGE",
           id: typeof row.id === "string" && row.id.trim() ? row.id.trim() : undefined,
           ...rect,
           dataType,
-          options: normalizeStringListOptions(row.options),
+          options,
+          valueSource: normalizeValueSource(row.valueSource, options),
         };
       }
 
@@ -130,6 +202,7 @@ export function normalizeSpecDataTypeMetadata<T extends HeaderSpec>(spec: T): T 
     defaultDataType: normalizeDataType(spec.defaultDataType),
     defaultOptions: normalizeStringListOptions(spec.defaultOptions),
     dataTypeOverrides: normalizeDataTypeOverrides(spec.dataTypeOverrides),
+    specialRanges: normalizeSpecialRanges(spec.specialRanges),
   };
 }
 
@@ -161,6 +234,16 @@ export function getColumnStringListOptions(
   return normalizeStringListOptions(override?.options?.length ? override.options : spec.defaultOptions);
 }
 
+export function getColumnValueSource(
+  spec: HeaderSpec,
+  columnIndex: number,
+): DynamicExcelValueSource | null {
+  const override = normalizeDataTypeOverrides(spec.dataTypeOverrides)
+    .filter((item) => item.scope === "COLUMN" && item.index === columnIndex)
+    .at(-1);
+  return override?.valueSource ?? null;
+}
+
 export function getRowDataType(spec: HeaderSpec, rowIndex: number): DynamicExcelDataType {
   const override = normalizeDataTypeOverrides(spec.dataTypeOverrides)
     .filter((item) => item.scope === "ROW" && item.index === rowIndex)
@@ -176,6 +259,13 @@ export function getRowStringListOptions(
     .filter((item) => item.scope === "ROW" && item.index === rowIndex)
     .at(-1);
   return normalizeStringListOptions(override?.options?.length ? override.options : spec.defaultOptions);
+}
+
+export function getRowValueSource(spec: HeaderSpec, rowIndex: number): DynamicExcelValueSource | null {
+  const override = normalizeDataTypeOverrides(spec.dataTypeOverrides)
+    .filter((item) => item.scope === "ROW" && item.index === rowIndex)
+    .at(-1);
+  return override?.valueSource ?? null;
 }
 
 export function getRangeDataType(
@@ -212,6 +302,20 @@ export function getRangeStringListOptions(
   return normalizeStringListOptions(override?.options?.length ? override.options : spec.defaultOptions);
 }
 
+export function getRangeValueSource(spec: HeaderSpec, rect: Rect): DynamicExcelValueSource | null {
+  const override = normalizeDataTypeOverrides(spec.dataTypeOverrides)
+    .filter(
+      (item) =>
+        item.scope === "RANGE" &&
+        item.r0 === rect.r0 &&
+        item.c0 === rect.c0 &&
+        item.r1 === rect.r1 &&
+        item.c1 === rect.c1,
+    )
+    .at(-1);
+  return override?.valueSource ?? null;
+}
+
 export function getCellDataType(
   spec: HeaderSpec,
   dataRect: Rect,
@@ -246,6 +350,24 @@ export function getCellStringListOptions(
     columnIndex <= item.c1
   );
   return normalizeStringListOptions(range?.options?.length ? range.options : spec.defaultOptions);
+}
+
+export function getCellValueSource(
+  spec: HeaderSpec,
+  dataRect: Rect,
+  rowIndex: number,
+  columnIndex: number,
+): DynamicExcelValueSource | null {
+  if (spec.kind === "TOP") return getColumnValueSource(spec, columnIndex);
+  if (spec.kind === "LEFT") return getRowValueSource(spec, rowIndex);
+
+  const range = getMatrixDataTypeRanges(spec, dataRect).find((item) =>
+    rowIndex >= item.r0 &&
+    rowIndex <= item.r1 &&
+    columnIndex >= item.c0 &&
+    columnIndex <= item.c1
+  );
+  return range?.valueSource ?? null;
 }
 
 export function getMatrixDataTypeRanges(
@@ -292,6 +414,7 @@ export function setMatrixRangeDataType(
         ...piece,
         dataType: range.dataType,
         options: range.options,
+        valueSource: range.valueSource,
       });
     }
   }
@@ -347,8 +470,11 @@ export function setColumnStringListOptions(
   columnIndex: number,
   options: DynamicExcelStringListOption[],
   dataType: DynamicExcelDataType = "SHORT_TEXT",
+  valueSource?: DynamicExcelValueSource | null,
 ): HeaderSpec {
   const nextType = normalizeDataType(dataType);
+  const normalizedOptions = normalizeStringListOptions(options);
+  const normalizedSource = normalizeValueSource(valueSource, normalizedOptions);
   const overrides = normalizeDataTypeOverrides(spec.dataTypeOverrides).filter(
     (item) => !(item.scope === "COLUMN" && item.index === columnIndex),
   );
@@ -356,7 +482,10 @@ export function setColumnStringListOptions(
     scope: "COLUMN",
     index: columnIndex,
     dataType: isDynamicExcelEnumDataType(nextType) ? nextType : "SHORT_TEXT",
-    options: normalizeStringListOptions(options),
+    options: normalizedSource?.sourceType === "FIXED_ENUM"
+      ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
+      : normalizedOptions,
+    valueSource: normalizedSource,
   });
   return { ...spec, dataTypeOverrides: overrides };
 }
@@ -389,8 +518,11 @@ export function setRowStringListOptions(
   rowIndex: number,
   options: DynamicExcelStringListOption[],
   dataType: DynamicExcelDataType = "SHORT_TEXT",
+  valueSource?: DynamicExcelValueSource | null,
 ): HeaderSpec {
   const nextType = normalizeDataType(dataType);
+  const normalizedOptions = normalizeStringListOptions(options);
+  const normalizedSource = normalizeValueSource(valueSource, normalizedOptions);
   const overrides = normalizeDataTypeOverrides(spec.dataTypeOverrides).filter(
     (item) => !(item.scope === "ROW" && item.index === rowIndex),
   );
@@ -398,7 +530,10 @@ export function setRowStringListOptions(
     scope: "ROW",
     index: rowIndex,
     dataType: isDynamicExcelEnumDataType(nextType) ? nextType : "SHORT_TEXT",
-    options: normalizeStringListOptions(options),
+    options: normalizedSource?.sourceType === "FIXED_ENUM"
+      ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
+      : normalizedOptions,
+    valueSource: normalizedSource,
   });
   return { ...spec, dataTypeOverrides: overrides };
 }
@@ -433,9 +568,11 @@ export function setMatrixRangeStringListOptions(
   rect: Rect,
   options: DynamicExcelStringListOption[],
   dataType: DynamicExcelDataType = "SHORT_TEXT",
+  valueSource?: DynamicExcelValueSource | null,
 ): HeaderSpec {
   const normalizedRect = clampRectToBounds(rect, dataRect);
   const normalizedOptions = normalizeStringListOptions(options);
+  const normalizedSource = normalizeValueSource(valueSource, normalizedOptions);
   const nextType = normalizeDataType(dataType);
   const enumType = isDynamicExcelEnumDataType(nextType) ? nextType : "SHORT_TEXT";
   const existing = getMatrixDataTypeRanges(spec, dataRect);
@@ -454,7 +591,10 @@ export function setMatrixRangeStringListOptions(
         ? {
             ...range,
             dataType: enumType,
-            options: normalizedOptions,
+            options: normalizedSource?.sourceType === "FIXED_ENUM"
+              ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
+              : normalizedOptions,
+            valueSource: normalizedSource,
           }
         : range,
     );
@@ -466,7 +606,10 @@ export function setMatrixRangeStringListOptions(
       id: `range_${nextRanges.length + 1}`,
       ...normalizedRect,
       dataType: enumType,
-      options: normalizedOptions,
+      options: normalizedSource?.sourceType === "FIXED_ENUM"
+        ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
+        : normalizedOptions,
+      valueSource: normalizedSource,
     });
   }
 

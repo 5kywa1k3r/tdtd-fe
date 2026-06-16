@@ -54,6 +54,24 @@ export type DynamicFormMetricLabelTarget = {
   dataType?: string | null;
 };
 
+export type DynamicFormValueSourceType =
+  | "FIXED_ENUM"
+  | "ENUM_CATALOG"
+  | "SYSTEM_UNIT"
+  | "SYSTEM_USER"
+  | "SYSTEM_POSITION"
+  | "SYSTEM_UNIT_TYPE";
+
+export type DynamicFormValueSource = {
+  sourceType: DynamicFormValueSourceType;
+  labelCode?: string | null;
+  labelName?: string | null;
+  catalogId?: string | null;
+  catalogCode?: string | null;
+  catalogName?: string | null;
+  options?: Array<{ code: string; label: string }>;
+};
+
 export type DynamicFormSummaryTemplateRepeatFor =
   | "selectedUnits"
   | "scopeAssignments"
@@ -92,6 +110,7 @@ export type DynamicFormField = {
   minHeight: number;
   order: number;
   options?: Array<{ code: string; label: string }>;
+  valueSource?: DynamicFormValueSource | null;
   statisticLabelCodes?: string[];
   isStatistic: boolean;
   statistic?: DynamicFormStatisticConfig;

@@ -1,12 +1,10 @@
 import React from "react";
 import {
-  Alert,
   Box,
   Card,
   CardContent,
   Checkbox,
   Chip,
-  CircularProgress,
   FormControlLabel,
   Grid,
   MenuItem,
@@ -16,12 +14,11 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
 
-import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import type { DynamicFormDetail } from "../../../api/dynamicFormApi";
-import WorkbookDataGrid from "../../../components/excel/fortune/WorkbookDataGrid";
 import type { DynamicFormField, DynamicFormSection } from "../dynamicForm.types";
+import DynamicFormExcelBlockPreview from "./DynamicFormExcelBlockPreview";
+import DynamicFormSectionSelect from "./DynamicFormSectionSelect";
 import {
   buildEditorValue,
   excelSpecKindLabels,
@@ -75,7 +72,52 @@ export default function DynamicFormPreview({ detail, dense = false }: DynamicFor
     [value.blocksJson, value.excelBlockJson, value.sections]
   );
 
-  const blocksWithoutSection = blocks.filter((block) => !block.sectionId);
+  const fieldsBySection = React.useMemo(
+    () =>
+      value.fields.reduce<Record<string, DynamicFormField[]>>((acc, field) => {
+        (acc[field.sectionId] ??= []).push(field);
+        return acc;
+      }, {}),
+    [value.fields],
+  );
+  const blocksBySection = React.useMemo(() => {
+    const sectionIds = new Set(value.sections.map((section) => section.id));
+    const fallbackSectionId = value.sections[0]?.id ?? "";
+
+    return blocks.reduce<Record<string, BlockPreview[]>>((acc, block) => {
+      const targetSectionId =
+        block.sectionId && sectionIds.has(block.sectionId)
+          ? block.sectionId
+          : fallbackSectionId;
+      if (!targetSectionId) return acc;
+      (acc[targetSectionId] ??= []).push(block);
+      return acc;
+    }, {});
+  }, [blocks, value.sections]);
+  const sectionItems = React.useMemo(
+    () =>
+      [...value.sections]
+        .sort((a, b) => a.order - b.order)
+        .map((section) => ({
+          section,
+          fields: [...(fieldsBySection[section.id] ?? [])].sort((a, b) => a.order - b.order),
+          blocks: blocksBySection[section.id] ?? [],
+        })),
+    [blocksBySection, fieldsBySection, value.sections],
+  );
+  const [selectedSectionId, setSelectedSectionId] = React.useState("");
+  const selectedSectionItem =
+    sectionItems.find((item) => item.section.id === selectedSectionId) ??
+    sectionItems[0] ??
+    null;
+
+  React.useEffect(() => {
+    setSelectedSectionId((prev) =>
+      sectionItems.some((item) => item.section.id === prev)
+        ? prev
+        : sectionItems[0]?.section.id ?? "",
+    );
+  }, [sectionItems]);
 
   return (
     <Stack spacing={dense ? 1.5 : 2}>
@@ -110,26 +152,45 @@ export default function DynamicFormPreview({ detail, dense = false }: DynamicFor
         </Stack>
       </Paper>
 
-      {value.sections.map((section) => (
-        <SectionPreview
-          key={section.id}
-          section={section}
-          fields={value.fields.filter((field) => field.sectionId === section.id)}
-          blocks={blocks.filter((block) => block.sectionId === section.id)}
-          dense={dense}
-        />
-      ))}
+      {selectedSectionItem && (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            gap: dense ? 1 : 1.5,
+            minWidth: 0,
+          }}
+        >
+          <Paper
+            variant="outlined"
+            sx={{
+              p: dense ? 1 : 1.25,
+              borderRadius: 1,
+              bgcolor: "background.default",
+            }}
+          >
+            <DynamicFormSectionSelect
+              dense={dense}
+              label="Phần"
+              value={selectedSectionItem.section.id}
+              items={sectionItems.map((item) => ({
+                section: item.section,
+                fieldCount: item.fields.length,
+                blockCount: item.blocks.length,
+              }))}
+              onChange={(section) => setSelectedSectionId(section.id)}
+            />
+          </Paper>
 
-      {blocksWithoutSection.length > 0 && (
-        <Stack spacing={1}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-            Phần bảng
-          </Typography>
-          {blocksWithoutSection.map((block) => (
-            <TableBlockPreview key={`${block.index}_${block.title}`} block={block} />
-          ))}
-        </Stack>
+          <SectionPreview
+            section={selectedSectionItem.section}
+            fields={selectedSectionItem.fields}
+            blocks={selectedSectionItem.blocks}
+            dense={dense}
+          />
+        </Box>
       )}
+
     </Stack>
   );
 }
@@ -302,93 +363,11 @@ function FieldControlPreview({ field }: { field: DynamicFormField }) {
 
 function TableBlockPreview({ block }: { block: BlockPreview }) {
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1, bgcolor: "background.default" }}>
-      <Stack spacing={1}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-          <TableChartOutlinedIcon fontSize="small" />
-          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-            {block.title}
-          </Typography>
-          {block.code && <Chip size="small" label={block.code} variant="outlined" />}
-          {block.excelSpecKind && (
-            <Chip size="small" label={excelSpecKindLabels[block.excelSpecKind]} variant="outlined" />
-          )}
-          {block.tableMode && <Chip size="small" label={tableModeLabels[block.tableMode]} variant="outlined" />}
-        </Stack>
-
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-          {block.dataRect && <Chip size="small" label={`Vùng dữ liệu: ${block.dataRect}`} />}
-          <Chip size="small" label="Cấu hình bảng Excel động" variant="outlined" />
-        </Stack>
-
-        <Box
-          sx={{
-            width: "100%",
-            minHeight: 72,
-            border: "1px dashed",
-            borderColor: "divider",
-            borderRadius: 1,
-            px: 2,
-            py: 1.5,
-          }}
-        >
-          <DynamicExcelBlockWorkbookPreview block={block} />
-        </Box>
-      </Stack>
-    </Paper>
-  );
-}
-
-function DynamicExcelBlockWorkbookPreview({ block }: { block: BlockPreview }) {
-  const dynamicExcelId = block.dynamicExcelTemplateId?.trim() ?? "";
-  const { data, isLoading, isError } = useGetDynamicExcelQuery(
-    { id: dynamicExcelId },
-    { skip: !dynamicExcelId },
-  );
-
-  const parsed = React.useMemo(() => {
-    if (!data) return null;
-    const dataRect = block.dataRectValue ?? normalizeDataRectValue(data.dataRect);
-    if (!dataRect) return null;
-
-    return {
-      spec: safeParseJson<any>(data.specJson, null),
-      workbook: safeParseJson<any[]>(data.rawWorkbookDataJson, []) ?? [],
-      dataRect,
-    };
-  }, [block.dataRectValue, data]);
-
-  if (!dynamicExcelId) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        Bảng chưa có mã biểu mẫu Excel động để xem trước.
-      </Typography>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 120 }}>
-        <CircularProgress size={24} />
-      </Stack>
-    );
-  }
-
-  if (isError || !parsed) {
-    return <Alert severity="error">Không tải được biểu mẫu Excel động để xem trước.</Alert>;
-  }
-
-  return (
-    <Box sx={{ width: "100%" }}>
-      <WorkbookDataGrid
-        initialSpec={parsed.spec}
-        initialWorkbookData={parsed.workbook}
-        dataRect={parsed.dataRect ?? { r0: 0, c0: 0, r1: 0, c1: 0 }}
-        mode="view"
-        readOnly
-        showActions={false}
-      />
-    </Box>
+    <DynamicFormExcelBlockPreview
+      blockJson={block.json}
+      title={block.title}
+      tableMode={block.tableMode}
+    />
   );
 }
 
@@ -428,15 +407,6 @@ function parseObject(json: string | null | undefined): Record<string, any> | nul
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
-  }
-}
-
-function safeParseJson<T>(input?: string | null, fallback?: T): T | undefined {
-  if (!input) return fallback;
-  try {
-    return JSON.parse(input) as T;
-  } catch {
-    return fallback;
   }
 }
 

@@ -22,8 +22,26 @@ export type UserPickRow = {
   positionCode?: string | null;
 };
 
+export type CatalogPickRow = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export type LabelEnumOptionPickRow = {
+  id: string;
+  catalogId: string;
+  catalogCode: string;
+  code: string;
+  label: string;
+  order: number;
+};
+
 type Tag =
   | { type: 'PickersUnits'; id: string }
+  | { type: 'PickersUsers'; id: string }
+  | { type: 'PickersCatalog'; id: string }
+  | { type: 'LabelEnumCatalog'; id: string }
   | { type: 'PickersLeaders'; id: string }
   | { type: 'PickersAssignees'; id: string };
 
@@ -139,6 +157,108 @@ export const pickersApi = baseApi.injectEndpoints({
         { type: 'PickersUnits', id: 'SEARCH' },
       ],
 
+      ...pickerQueryDefaults,
+    }),
+
+    searchPickerUsers: b.query<
+      PagedResult<UserPickRow>,
+      { q?: string; unitId?: string | null; page?: number; pageSize?: number }
+    >({
+      query: ({ q, unitId, page = 0, pageSize = 20 }) => ({
+        url: '/pickers/users/search',
+        method: 'GET',
+        params: {
+          q: normStr(q) || undefined,
+          unitId: normStr(unitId) || undefined,
+          page,
+          pageSize,
+        },
+      }),
+      transformResponse: (res: any): PagedResult<UserPickRow> => ({
+        rows: (res?.rows ?? []).map((x: any) => ({
+          id: x.id,
+          username: x.username,
+          fullName: x.fullName,
+          unitId: x.unitId ?? null,
+          positionCode: x.positionCode ?? null,
+        })),
+        totalRows: Number(res?.totalRows ?? 0),
+        page: Number(res?.page ?? 0),
+        pageSize: Number(res?.pageSize ?? 20),
+      }),
+      providesTags: (): Tag[] => [{ type: 'PickersUsers', id: 'SEARCH' }],
+      ...pickerQueryDefaults,
+    }),
+
+    searchPickerPositions: b.query<
+      PagedResult<CatalogPickRow>,
+      { q?: string; page?: number; pageSize?: number }
+    >({
+      query: ({ q, page = 0, pageSize = 20 }) => ({
+        url: '/pickers/positions/search',
+        method: 'GET',
+        params: { q: normStr(q) || undefined, page, pageSize },
+      }),
+      transformResponse: (res: any): PagedResult<CatalogPickRow> => ({
+        rows: (res?.rows ?? []).map((x: any) => ({
+          id: x.id,
+          code: x.code,
+          name: x.name,
+        })),
+        totalRows: Number(res?.totalRows ?? 0),
+        page: Number(res?.page ?? 0),
+        pageSize: Number(res?.pageSize ?? 20),
+      }),
+      providesTags: (): Tag[] => [{ type: 'PickersCatalog', id: 'POSITIONS' }],
+      ...pickerQueryDefaults,
+    }),
+
+    searchPickerUnitTypes: b.query<
+      PagedResult<CatalogPickRow>,
+      { q?: string; page?: number; pageSize?: number }
+    >({
+      query: ({ q, page = 0, pageSize = 20 }) => ({
+        url: '/pickers/unit-types/search',
+        method: 'GET',
+        params: { q: normStr(q) || undefined, page, pageSize },
+      }),
+      transformResponse: (res: any): PagedResult<CatalogPickRow> => ({
+        rows: (res?.rows ?? []).map((x: any) => ({
+          id: x.id,
+          code: x.code,
+          name: x.name,
+        })),
+        totalRows: Number(res?.totalRows ?? 0),
+        page: Number(res?.page ?? 0),
+        pageSize: Number(res?.pageSize ?? 20),
+      }),
+      providesTags: (): Tag[] => [{ type: 'PickersCatalog', id: 'UNIT_TYPES' }],
+      ...pickerQueryDefaults,
+    }),
+
+    searchPickerLabelEnumOptions: b.query<
+      PagedResult<LabelEnumOptionPickRow>,
+      { catalogId: string; q?: string; page?: number; pageSize?: number }
+    >({
+      query: ({ catalogId, q, page = 0, pageSize = 20 }) => ({
+        url: `/pickers/label-enums/${catalogId}/options/search`,
+        method: 'GET',
+        params: { q: normStr(q) || undefined, page, pageSize },
+      }),
+      transformResponse: (res: any): PagedResult<LabelEnumOptionPickRow> => ({
+        rows: (res?.rows ?? []).map((x: any) => ({
+          id: x.id,
+          catalogId: x.catalogId,
+          catalogCode: x.catalogCode,
+          code: x.code,
+          label: x.label,
+          order: Number(x.order ?? 0),
+        })),
+        totalRows: Number(res?.totalRows ?? 0),
+        page: Number(res?.page ?? 0),
+        pageSize: Number(res?.pageSize ?? 20),
+      }),
+      providesTags: (_res, _err, arg): Tag[] => [{ type: 'LabelEnumCatalog', id: `OPTIONS:${arg.catalogId}` }],
       ...pickerQueryDefaults,
     }),
 
@@ -301,6 +421,10 @@ export const pickersApi = baseApi.injectEndpoints({
 export const {
   useGetPickerUnitChildrenQuery,
   useLazySearchPickerUnitsByCodeQuery,
+  useLazySearchPickerUsersQuery,
+  useLazySearchPickerPositionsQuery,
+  useLazySearchPickerUnitTypesQuery,
+  useLazySearchPickerLabelEnumOptionsQuery,
   useLazySearchPickerLeadersByUnitQuery,
   useLazyLookupPickerLeaderByUsernameQuery,
   useLazySearchPickerAssigneesByUnitQuery,

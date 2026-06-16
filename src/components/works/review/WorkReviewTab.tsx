@@ -59,6 +59,7 @@ import { UITextKey, uiText } from '../../../constants/uiText';
 
 type Props = {
   workId: string;
+  scopeAssignmentId?: string | null;
 };
 
 type ReviewActionKind = "return" | "recallApproved" | "deactivate" | "reactivate";
@@ -397,7 +398,8 @@ const DETAIL_STATUS_OPTIONS: Array<{ value: ReviewStatusBucket; label: string }>
   { value: "ALL", label: "Tất cả" },
 ];
 
-const WorkReviewTab: React.FC<Props> = ({ workId }) => {
+const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) => {
+  const readOnly = Boolean(scopeAssignmentId);
   const [searchSummary, searchSummaryState] = useSearchReviewSummaryMutation();
   const [searchReviewReports, searchReviewReportsState] = useSearchReviewReportsMutation();
   const [approveReviewReport, approveState] = useApproveReviewReportMutation();
@@ -530,6 +532,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
     try {
       const payload: any = {
         workId,
+        scopeAssignmentId: scopeAssignmentId || null,
         waitingReviewOnly: reviewStatusBucket === "SUBMITTED" ? true : null,
         reviewStatusBucket,
         periodKey: normalizeDayKey(summaryPeriodDayKey) || null,
@@ -556,6 +559,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
     reviewStatusBucket,
     searchSummary,
     showMessage,
+    scopeAssignmentId,
     summaryPeriodDayKey,
     summaryUnitId,
     summaryUserId,
@@ -588,6 +592,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
       const payload: any = {
         workId,
         assignmentId: summary.assignmentId,
+        scopeAssignmentId: scopeAssignmentId || null,
         periodKey: normalizeDayKey(summaryPeriodDayKey) || null,
         reviewStatusBucket: bucket,
         waitingReviewOnly: bucket === "SUBMITTED" ? true : null,
@@ -609,7 +614,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
       setDetailPage(res?.page ?? page);
       setDetailPageSize(res?.pageSize ?? pageSize);
     },
-    [detailUnitId, detailUserId, searchReviewReports, summaryPeriodDayKey, workId]
+    [detailUnitId, detailUserId, scopeAssignmentId, searchReviewReports, summaryPeriodDayKey, workId]
   );
 
   const openPeriods = React.useCallback(
@@ -653,6 +658,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
   }, []);
 
   const submitApprove = async (row: ReviewReportFlatRowDto, confirmHistoricalDataApproval = false) => {
+    if (readOnly) return;
+
     if (!row.reportId) {
       showMessage("Không tìm thấy báo cáo để duyệt.");
       return;
@@ -671,6 +678,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
   };
 
   const handleApprove = async (row: ReviewReportFlatRowDto) => {
+    if (readOnly) return;
+
     if (isHistoricalReviewRow(row) && !row.historicalDataApproved) {
       setHistoricalApproveTarget(row);
       return;
@@ -680,6 +689,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
   };
 
   const openActionDialog = (kind: ReviewActionKind, row: ReviewReportFlatRowDto) => {
+    if (readOnly) return;
+
     if (!row.reportId) {
       showMessage("Không tìm thấy báo cáo để thao tác.");
       return;
@@ -692,6 +703,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
   };
 
   const handleConfirmAction = async () => {
+    if (readOnly) return;
+
     if (!actionTarget?.reportId) {
       showMessage("Không tìm thấy báo cáo để thao tác.");
       return;
@@ -879,7 +892,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   size="small"
                   color="success"
                   onClick={() => void handleApprove(row)}
-                  disabled={!canApprove(row) || approveState.isLoading}
+                  disabled={readOnly || !canApprove(row) || approveState.isLoading}
                 >
                   <CheckCircleOutlineIcon fontSize="small" />
                 </IconButton>
@@ -892,7 +905,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   size="small"
                   color="warning"
                   onClick={() => openActionDialog("return", row)}
-                  disabled={!canReturn(row) || returnState.isLoading}
+                  disabled={readOnly || !canReturn(row) || returnState.isLoading}
                 >
                   <UndoOutlinedIcon fontSize="small" />
                 </IconButton>
@@ -905,7 +918,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   size="small"
                   color="secondary"
                   onClick={() => openActionDialog("recallApproved", row)}
-                  disabled={!canRecallApproved(row) || recallState.isLoading}
+                  disabled={readOnly || !canRecallApproved(row) || recallState.isLoading}
                 >
                   <ReplayOutlinedIcon fontSize="small" />
                 </IconButton>
@@ -918,7 +931,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   size="small"
                   color="error"
                   onClick={() => openActionDialog("deactivate", row)}
-                  disabled={!canDeactivate(row) || deactivateState.isLoading}
+                  disabled={readOnly || !canDeactivate(row) || deactivateState.isLoading}
                 >
                   <BlockOutlinedIcon fontSize="small" />
                 </IconButton>
@@ -931,7 +944,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
                   size="small"
                   color="primary"
                   onClick={() => openActionDialog("reactivate", row)}
-                  disabled={!canReactivate(row) || reactivateState.isLoading}
+                  disabled={readOnly || !canReactivate(row) || reactivateState.isLoading}
                 >
                   <RestoreOutlinedIcon fontSize="small" />
                 </IconButton>
@@ -1021,7 +1034,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
         render: (row) => <CommonLabelText text={row.returnReason || row.reviewerComment || "-"} />,
       },
     ],
-    [approveState.isLoading, deactivateState.isLoading, reactivateState.isLoading, recallState.isLoading, returnState.isLoading]
+    [approveState.isLoading, deactivateState.isLoading, reactivateState.isLoading, readOnly, recallState.isLoading, returnState.isLoading]
   );
 
   const summaryLoading = searchSummaryState.isLoading;
@@ -1308,7 +1321,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
           <Button
             variant="contained"
             color="warning"
-            disabled={approveState.isLoading || !historicalApproveTarget}
+            disabled={readOnly || approveState.isLoading || !historicalApproveTarget}
             onClick={() =>
               historicalApproveTarget &&
               void submitApprove(historicalApproveTarget, true)
@@ -1355,7 +1368,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId }) => {
             variant="contained"
             color={getActionButtonColor(actionKind)}
             onClick={() => void handleConfirmAction()}
-            disabled={busyAction}
+            disabled={readOnly || busyAction}
           >
             {getActionButtonLabel(actionKind)}
           </Button>

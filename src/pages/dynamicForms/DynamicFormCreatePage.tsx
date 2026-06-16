@@ -90,6 +90,7 @@ function buildDynamicExcelBlockJson(
     defaultDataType: specMetadata.defaultDataType,
     defaultOptions: specMetadata.defaultOptions,
     dataTypeOverrides: specMetadata.dataTypeOverrides,
+    specialRanges: specMetadata.specialRanges,
   };
 
   return JSON.stringify(block);
@@ -100,6 +101,7 @@ function readExcelSpecMetadata(specJson?: string | null): {
   defaultDataType: string;
   defaultOptions: unknown[];
   dataTypeOverrides: unknown[];
+  specialRanges: unknown[];
 } {
   try {
     const parsed = specJson ? JSON.parse(specJson) : null;
@@ -113,9 +115,12 @@ function readExcelSpecMetadata(specJson?: string | null): {
       dataTypeOverrides: Array.isArray(parsed?.dataTypeOverrides)
         ? parsed.dataTypeOverrides.filter(isPlainObject)
         : [],
+      specialRanges: Array.isArray(parsed?.specialRanges)
+        ? parsed.specialRanges.filter(isPlainObject)
+        : [],
     };
   } catch {
-    return { kind: null, defaultDataType: "NUMBER", defaultOptions: [], dataTypeOverrides: [] };
+    return { kind: null, defaultDataType: "NUMBER", defaultOptions: [], dataTypeOverrides: [], specialRanges: [] };
   }
 }
 
@@ -124,7 +129,8 @@ function normalizeExcelDataType(value: unknown) {
   if (raw === "STRINGLIST" || raw === "STRING_LIST" || raw === "TEXT" || raw === "STRING" || raw === "SHORTTEXT") return "SHORT_TEXT";
   if (raw === "MULTISELECT" || raw === "MULTI_SELECT") return "MULTI_SELECT";
   if (raw === "FULLDATE" || raw === "STRICT_DATE") return "FULL_DATE";
-  if (raw === "DATE" || raw === "FULL_DATE" || raw === "BOOLEAN" || raw === "SHORT_TEXT" || raw === "MULTI_SELECT") {
+  if (raw === "IGNORE" || raw === "IGNORED" || raw === "SKIP") return "IGNORE";
+  if (raw === "DATE" || raw === "FULL_DATE" || raw === "BOOLEAN" || raw === "SHORT_TEXT" || raw === "MULTI_SELECT" || raw === "IGNORE") {
     return raw;
   }
   return "NUMBER";

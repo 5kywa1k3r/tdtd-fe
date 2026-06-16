@@ -16,6 +16,9 @@ export function parseJsonSafe<T>(value?: string | null, fallback?: T): T {
 }
 
 export function cloneDeepJson<T>(value: T): T {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
   return JSON.parse(JSON.stringify(value));
 }
 
@@ -93,7 +96,7 @@ function ensureSheetData(sheet: any, rows: number, cols: number) {
   }
 }
 
-function setCellValue(sheet: any, r: number, c: number, v: any) {
+export function setCellValue(sheet: any, r: number, c: number, v: any) {
   ensureSheetData(sheet, r + 1, c + 1);
   const oldCell = sheet.data[r][c];
   if (oldCell && typeof oldCell === "object") {
@@ -101,9 +104,6 @@ function setCellValue(sheet: any, r: number, c: number, v: any) {
       ...oldCell,
       v,
       m: v == null ? "" : String(v),
-      fs: 12,
-      ht: 0,
-      vt: 0,
     };
     return;
   }
