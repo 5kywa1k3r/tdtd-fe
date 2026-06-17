@@ -235,7 +235,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
               size="small"
               fullWidth
               label="Phạm vi thống kê"
-              value="Tất cả báo cáo đã duyệt cùng template"
+              value="Tất cả báo cáo đã duyệt cùng loại biểu mẫu động"
               InputProps={{ readOnly: true }}
             />
           </Box>
