@@ -163,6 +163,10 @@ const SEMANTIC_EDITABLE_SPECIAL_ROLES = new Set<HeaderSpecialRole>();
 const DANGEROUS_TEMPLATE_TEXT_RE =
   /<\s*(script|iframe|object|embed|svg|img|style|link|meta)\b|javascript\s*:|vbscript\s*:|data\s*:\s*text\/html|on[a-z]+\s*=/i;
 
+function cloneWorkbookData(workbook: any[]) {
+  return JSON.parse(JSON.stringify(Array.isArray(workbook) ? workbook : []));
+}
+
 function withSaveTimeout<T>(operation: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
@@ -676,6 +680,8 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   const regions = useMemo(() => computeRegions(spec, table), [spec, table]);
 
   const visualBackupRef = useRef<Map<string, Backup>>(new Map());
+  const sheetFullscreenSnapshotRef = useRef<any[] | null>(null);
+  const sheetFullscreenGuideSnapshotRef = useRef<boolean | null>(null);
   const mountedRef = useRef(true);
   const [sheetGuideVisible, setSheetGuideVisible] = useState(true);
 
@@ -718,6 +724,16 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     }
 
     return [{ ...sheet }];
+  };
+
+  const getCleanWorkbook = (raw: any[], nextSpec: HeaderSpec) => {
+    const nextTable = getTableRect(nextSpec);
+    const normalized = normalizeToSingleSheet(raw, rectRows(nextTable), rectCols(nextTable));
+    const sheet = normalized[0];
+    if (sheet) {
+      stripMarksForSave(sheet, visualBackupRef.current, MARKED_BACKGROUNDS);
+    }
+    return normalized;
   };
 
   const [workbookData, setWorkbookData] = useState<any[]>(() => {
@@ -1120,12 +1136,39 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     workbookRef.current = nextWorkbook;
     setWorkbookKey((k) => k + 1);
   };
-  const closeSheetFullscreen = () => {
+  const openSheetFullscreen = () => {
+    const current = workbookRef.current?.length ? workbookRef.current : workbookData;
+    const cleanCurrent = getCleanWorkbook(current, spec);
+    const nextWorkbook = normalizeAndMarkWorkbook(cleanCurrent, spec, activeTarget, sheetGuideVisible);
+    setWorkbookData(nextWorkbook);
+    workbookRef.current = nextWorkbook;
+    sheetFullscreenSnapshotRef.current = cloneWorkbookData(cleanCurrent);
+    sheetFullscreenGuideSnapshotRef.current = sheetGuideVisible;
+    setSheetFullscreenOpen(true);
+    setWorkbookKey((k) => k + 1);
+  };
+  const applySheetFullscreenChanges = () => {
+    const current = workbookRef.current?.length ? workbookRef.current : workbookData;
+    const nextWorkbook = normalizeAndMarkWorkbook(current, spec, activeTarget, sheetGuideVisible);
+    setWorkbookData(nextWorkbook);
+    workbookRef.current = nextWorkbook;
+    sheetFullscreenSnapshotRef.current = null;
+    sheetFullscreenGuideSnapshotRef.current = null;
     setSheetFullscreenOpen(false);
     setWorkbookKey((k) => k + 1);
   };
-  const openSheetFullscreen = () => {
-    setSheetFullscreenOpen(true);
+  const discardSheetFullscreenChanges = () => {
+    const snapshot = sheetFullscreenSnapshotRef.current;
+    const guideVisible = sheetFullscreenGuideSnapshotRef.current ?? sheetGuideVisible;
+    if (snapshot) {
+      const restored = normalizeAndMarkWorkbook(snapshot, spec, activeTarget, guideVisible);
+      setWorkbookData(restored);
+      workbookRef.current = restored;
+    }
+    setSheetGuideVisible(guideVisible);
+    sheetFullscreenSnapshotRef.current = null;
+    sheetFullscreenGuideSnapshotRef.current = null;
+    setSheetFullscreenOpen(false);
     setWorkbookKey((k) => k + 1);
   };
   const renderSheetSurface = (fullscreen = false) => (
@@ -1306,7 +1349,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
         </CardContent>
       </Card>
 
-      <Dialog fullScreen open={sheetFullscreenOpen} onClose={closeSheetFullscreen}>
+      <Dialog fullScreen open={sheetFullscreenOpen} onClose={discardSheetFullscreenChanges}>
         <DialogTitle component="div" sx={{ py: 1, pr: 1.25 }}>
           <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
             <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
@@ -1315,11 +1358,26 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
               </Typography>
               <GuideToggleButton enabled={sheetGuideVisible} onToggle={toggleSheetGuide} />
             </Stack>
-            <Tooltip title="Đóng toàn màn hình">
-              <IconButton size="small" onClick={closeSheetFullscreen} aria-label="Đóng toàn màn hình">
-                <CloseOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {canEdit && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<SaveOutlinedIcon fontSize="small" />}
+                  onClick={applySheetFullscreenChanges}
+                >
+                  Áp dụng thay đổi
+                </Button>
+              )}
+              <Button size="small" variant="outlined" onClick={discardSheetFullscreenChanges}>
+                {canEdit ? "Đóng không lưu" : "Đóng"}
+              </Button>
+              <Tooltip title={canEdit ? "Đóng không lưu" : "Đóng"}>
+                <IconButton size="small" onClick={discardSheetFullscreenChanges} aria-label={canEdit ? "Đóng không lưu" : "Đóng"}>
+                  <CloseOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
           </Stack>
         </DialogTitle>
         <DialogContent dividers sx={{ p: 0, display: "flex", minHeight: 0 }}>

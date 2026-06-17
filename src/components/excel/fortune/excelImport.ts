@@ -76,8 +76,7 @@ export async function importXlsxForDynamicExcelSpec(
   spec: HeaderSpec,
   options: { sourceRange?: ExcelImportSourceRange } = {},
 ): Promise<ImportedDynamicExcelWorkbook> {
-  const workbook = await createExcelJsWorkbook();
-  await workbook.xlsx.load((await file.arrayBuffer()) as any);
+  const workbook = await loadExcelWorkbook(file);
 
   const worksheet = workbook.worksheets[0];
   if (!worksheet) {
@@ -155,9 +154,7 @@ export async function importXlsxForDynamicExcelSpec(
 }
 
 export async function previewXlsxForDynamicExcelImport(file: File): Promise<DynamicExcelImportPreview> {
-  const workbook = await createExcelJsWorkbook();
-  const buffer = await file.arrayBuffer();
-  await workbook.xlsx.load(buffer as any);
+  const workbook = await loadExcelWorkbook(file);
 
   const worksheet = workbook.worksheets[0];
   if (!worksheet) {
@@ -210,6 +207,113 @@ async function createExcelJsWorkbook() {
     throw new Error("Không tải được thư viện đọc Excel. Vui lòng tải lại trang rồi thử lại.");
   }
   return new WorkbookCtor();
+}
+
+async function loadExcelWorkbook(file: File) {
+  const buffer = await file.arrayBuffer();
+  const workbook = await createExcelJsWorkbook();
+
+  try {
+    await workbook.xlsx.load(buffer as any);
+    return workbook;
+  } catch (error) {
+    const normalized = await normalizeSpreadsheetNamespacePrefixesInXlsx(buffer);
+    if (!normalized.changed) {
+      throw createExcelReadError(error);
+    }
+
+    const retryWorkbook = await createExcelJsWorkbook();
+    try {
+      await retryWorkbook.xlsx.load(normalized.buffer as any);
+      return retryWorkbook;
+    } catch (retryError) {
+      throw createExcelReadError(retryError, error);
+    }
+  }
+}
+
+async function normalizeSpreadsheetNamespacePrefixesInXlsx(
+  buffer: ArrayBuffer,
+): Promise<{ buffer: ArrayBuffer; changed: boolean }> {
+  const module = await import("jszip");
+  const JSZipCtor = (module as any).default ?? module;
+  if (typeof JSZipCtor?.loadAsync !== "function") {
+    throw new Error("Không tải được bộ đọc file Excel. Vui lòng tải lại trang rồi thử lại.");
+  }
+
+  const zip = await JSZipCtor.loadAsync(buffer);
+  const updates: Array<{ name: string; xml: string }> = [];
+
+  for (const [name, entry] of Object.entries(zip.files ?? {}) as Array<[string, any]>) {
+    if (entry?.dir || !/\.(xml|rels)$/i.test(name)) continue;
+    const xml = await entry.async("string");
+    const normalized = normalizeSpreadsheetMainNamespaceElementPrefixes(stripUnsupportedImportXml(xml, name));
+    if (normalized !== xml) {
+      updates.push({ name, xml: normalized });
+    }
+  }
+
+  if (!updates.length) {
+    return { buffer, changed: false };
+  }
+
+  for (const update of updates) {
+    zip.file(update.name, update.xml);
+  }
+
+  const normalizedBuffer = await zip.generateAsync({ type: "arraybuffer" });
+  return { buffer: normalizedBuffer, changed: true };
+}
+
+function normalizeSpreadsheetMainNamespaceElementPrefixes(xml: string) {
+  const prefixes = new Set<string>();
+  const namespacePattern =
+    /xmlns:([A-Za-z_][\w.-]*)=(["'])http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main\2/g;
+  let match: RegExpExecArray | null;
+  while ((match = namespacePattern.exec(xml))) {
+    prefixes.add(match[1]);
+  }
+
+  let normalized = xml;
+  for (const prefix of prefixes) {
+    normalized = normalized.replace(new RegExp(`<(/?)${escapeRegExp(prefix)}:`, "g"), "<$1");
+  }
+  return normalized;
+}
+
+function stripUnsupportedImportXml(xml: string, name: string) {
+  if (/\.rels$/i.test(name)) {
+    // ExcelJS 4.4 can fail to reconcile comments/VML when WPS-style files use
+    // absolute relationship targets. Comments are not part of the import contract.
+    return xml.replace(
+      /<Relationship\b(?=[^>]*Type=["'][^"']*(?:comments|vmlDrawing|person)[^"']*["'])[^>]*\/>\s*/gi,
+      "",
+    );
+  }
+
+  if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(name)) {
+    return xml.replace(/<([A-Za-z_][\w.-]*:)?legacyDrawing\b[^>]*\/>\s*/gi, "");
+  }
+
+  return xml;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function createExcelReadError(error: unknown, originalError?: unknown) {
+  const message = getErrorMessage(error);
+  const originalMessage = originalError ? getErrorMessage(originalError) : "";
+  const detail = [message, originalMessage].filter(Boolean).join(" / ");
+  return new Error(
+    `Không đọc được file Excel. File có thể đang dùng cấu trúc OOXML không tương thích hoặc không phải .xlsx hợp lệ. Hãy mở file bằng Excel/WPS rồi Save As .xlsx và thử lại.${detail ? ` Chi tiết: ${detail}` : ""}`,
+  );
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error ?? "");
 }
 
 function buildFortuneSheetFromWorksheet(
