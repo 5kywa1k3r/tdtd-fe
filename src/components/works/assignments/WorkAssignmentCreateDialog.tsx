@@ -91,7 +91,6 @@ export interface AssignmentCreateValue {
 
   description: string;
   isActive: boolean;
-  allowUserCreatedReports: boolean;
   dueAtUtc?: string | null;
 }
 
@@ -125,7 +124,6 @@ export function defaultAssignmentCreateValue(): AssignmentCreateValue {
 
     description: "",
     isActive: true,
-    allowUserCreatedReports: true,
     dueAtUtc: null,
   };
 }
@@ -135,7 +133,7 @@ interface Props {
   value: AssignmentCreateValue;
   onChange: (value: AssignmentCreateValue) => void;
   onClose: () => void;
-  onSubmit?: () => void;
+  onSubmit?: (value?: AssignmentCreateValue) => void;
 
   parentCandidates: ParentCandidateOption[];
   parentCandidatesLoading?: boolean;
@@ -749,6 +747,28 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
   const isView = mode === "view";
   const readonly = disabled || isView;
   const mustChooseParent = !isWorkOwner || value.createMode === "child";
+  const externalNameValue = React.useMemo(
+    () => value.name || (isView ? getTemplateFallbackName(value) : ""),
+    [
+      isView,
+      value.dynamicExcelCode,
+      value.dynamicExcelId,
+      value.dynamicExcelName,
+      value.dynamicFormTemplateCode,
+      value.dynamicFormTemplateId,
+      value.dynamicFormTemplateName,
+      value.name,
+    ]
+  );
+  const [nameDraft, setNameDraft] = React.useState(externalNameValue);
+  const nameDraftRef = React.useRef(externalNameValue);
+
+  React.useEffect(() => {
+    if (!open) return;
+    nameDraftRef.current = externalNameValue;
+    setNameDraft(externalNameValue);
+  }, [externalNameValue, open]);
+
   const selectedDynamicFormQuery = useGetDynamicFormQuery(
     { id: value.dynamicFormTemplateId },
     { skip: !open || !value.dynamicFormTemplateId }
@@ -793,6 +813,23 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
     [onChange, value]
   );
 
+  const commitNameDraft = React.useCallback(
+    (nextName = nameDraftRef.current) => {
+      if ((value.name ?? "") === nextName) return;
+      emitChange({ name: nextName });
+    },
+    [emitChange, value.name]
+  );
+
+  React.useEffect(() => {
+    if (!open || readonly) return;
+    const timer = window.setTimeout(() => {
+      commitNameDraft();
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [commitNameDraft, nameDraft, open, readonly]);
+
   const handleChangeMode = React.useCallback(
     (_: React.MouseEvent<HTMLElement>, modeValue: "root" | "child" | null) => {
       if (!modeValue || isView) return;
@@ -816,8 +853,12 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
 
   const handleTemplateChange = React.useCallback(
     (item: { id: string; code: string; name: string } | null) => {
+      const currentName = nameDraftRef.current;
+      const nextName = currentName.trim() ? currentName : item?.name ?? "";
+      nameDraftRef.current = nextName;
+      setNameDraft(nextName);
       emitChange({
-        name: value.name?.trim() ? value.name : item?.name ?? "",
+        name: nextName,
         dynamicFormTemplateId: item?.id ?? "",
         dynamicFormTemplateCode: item?.code ?? "",
         dynamicFormTemplateName: item?.name ?? "",
@@ -828,15 +869,24 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
         dynamicExcelName: "",
       });
     },
-    [emitChange, value.name]
+    [emitChange]
   );
 
   const handleNameChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      emitChange({ name: e.target.value });
+      nameDraftRef.current = e.target.value;
+      setNameDraft(e.target.value);
     },
-    [emitChange]
+    []
   );
+
+  const handleSubmitClick = React.useCallback(() => {
+    const nextValue = { ...value, name: nameDraftRef.current };
+    if (!isView && (value.name ?? "") !== nextValue.name) {
+      onChange(nextValue);
+    }
+    onSubmit?.(nextValue);
+  }, [isView, onChange, onSubmit, value]);
 
   const handleSectionSourceRuleChange = React.useCallback(
     (sectionId: string, sourceRule: DynamicFormDataSourceRuleType) => {
@@ -957,9 +1007,10 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
           <TextField
             size="small"
             label="Tên công việc được giao"
-            value={value.name || (isView ? getTemplateFallbackName(value) : "")}
+            value={nameDraft}
             disabled={readonly}
             onChange={handleNameChange}
+            onBlur={() => commitNameDraft()}
             fullWidth
             required={!isView}
             InputProps={isView ? { readOnly: true } : undefined}
@@ -1316,7 +1367,7 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
         </Button>
 
         {!hideSubmit && !isView && (
-          <Button variant="contained" onClick={onSubmit} disabled={disabled}>
+          <Button variant="contained" onClick={handleSubmitClick} disabled={disabled}>
             {submitLabel}
           </Button>
         )}

@@ -5,21 +5,11 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 
 import WorkReportPeriodTable from "../../../components/reports/WorkReportPeriodTable";
 import WorkReportPeriodFilterBar, {
@@ -27,13 +17,9 @@ import WorkReportPeriodFilterBar, {
 } from "../../../components/reports/WorkReportPeriodFilterBar";
 
 import {
-  useCreateUserCreatedReportMutation,
   useGetMyReportTemplateDetailQuery,
   useOpenWorkReportPeriodMutation,
 } from "../../../api/reportApi";
-import SingleDayKeyField, {
-  dayKeyToIsoDate,
-} from "../../../components/common/SingleDayKeyField";
 
 import type {
   MyReportTemplateAssignmentOption,
@@ -105,16 +91,6 @@ function todayDayKey() {
   return `${yyyy}${mm}${dd}`;
 }
 
-function dayKeyToApiDate(dayKey?: string | null) {
-  const normalized = normalizeDayKey(dayKey);
-  return normalized.length === 8 ? `${dayKeyToIsoDate(normalized)}T00:00:00.000Z` : null;
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  const anyError = error as any;
-  return anyError?.data?.message || anyError?.data?.title || anyError?.message || fallback;
-}
-
 function getPeriodAnchorDayKey(row: WorkReportPeriodRow) {
   return (
     normalizeDayKey(row.periodEnd) ||
@@ -146,29 +122,6 @@ function formatAssignmentOptionLabel(option: MyReportTemplateAssignmentOption) {
   return `${code || compactId(option.workAssignmentId) || "Phân công"} - ${type}${suffix}`;
 }
 
-function getAssignmentHardDueDayKey(option?: MyReportTemplateAssignmentOption | null) {
-  return normalizeDayKey(option?.dueAtUtc || option?.dueDate || option?.completedDate);
-}
-
-function getCreateAssignmentId(
-  options: MyReportTemplateAssignmentOption[],
-  fallback?: string | null
-) {
-  if (options.length > 0) {
-    return (
-      options.find((x) => x.isActive !== false && x.allowUserCreatedReports !== false)
-        ?.workAssignmentId ||
-      options.find((x) => x.isActive !== false)?.workAssignmentId ||
-      ""
-    );
-  }
-
-  return (
-    fallback ||
-    ""
-  );
-}
-
 export default function WorkReportTemplateDetailPage(
   props: WorkReportTemplateDetailPageProps
 ) {
@@ -182,11 +135,6 @@ export default function WorkReportTemplateDetailPage(
   const [filterValue, setFilterValue] = useState<WorkReportPeriodFilterValue>(
     defaultFilterValue()
   );
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createTitle, setCreateTitle] = useState("");
-  const [createReportDay, setCreateReportDay] = useState("");
-  const [createAssignmentId, setCreateAssignmentId] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, error, refetch } = useGetMyReportTemplateDetailQuery(
     {
@@ -200,8 +148,6 @@ export default function WorkReportTemplateDetailPage(
   );
 
   const [openWorkReportPeriod] = useOpenWorkReportPeriodMutation();
-  const [createUserCreatedReport, createUserCreatedReportState] =
-    useCreateUserCreatedReportMutation();
 
   const parsed = useMemo(() => {
     if (!data) return null;
@@ -246,10 +192,6 @@ export default function WorkReportTemplateDetailPage(
   }, [assignmentOptions]);
   const showAssignmentColumn =
     assignmentOptions.filter((x) => x.workAssignmentId).length > 1;
-  const defaultCreateAssignmentId = getCreateAssignmentId(
-    assignmentOptions,
-    parsed?.workAssignmentId
-  );
   const filteredPeriods = useMemo(
     () => allPeriods.filter((row) => matchStatusBucket(row, filterValue.statusBucket)),
     [allPeriods, filterValue.statusBucket]
@@ -291,62 +233,6 @@ export default function WorkReportTemplateDetailPage(
       setSelectedReportId(rs.id);
     } catch (err: any) {
       setOpenError(err?.data?.message || err?.message || "Không mở được kỳ báo cáo.");
-    }
-  };
-
-  const handleOpenCreateUserReport = () => {
-    const assignmentId = defaultCreateAssignmentId;
-    const assignmentDueDay = getAssignmentHardDueDayKey(
-      assignmentOptions.find((option) => option.workAssignmentId === assignmentId)
-    );
-    const day = assignmentDueDay && assignmentDueDay < todayDayKey()
-      ? assignmentDueDay
-      : todayDayKey();
-    setCreateTitle("");
-    setCreateAssignmentId(assignmentId);
-    setCreateReportDay(day);
-    setCreateError(null);
-    setCreateOpen(true);
-  };
-
-  const handleCloseCreateUserReport = () => {
-    if (createUserCreatedReportState.isLoading) return;
-    setCreateOpen(false);
-    setCreateError(null);
-  };
-
-  const handleCreateUserReport = async () => {
-    const targetAssignmentId =
-      createAssignmentId || getCreateAssignmentId(assignmentOptions, parsed?.workAssignmentId);
-
-    if (!targetAssignmentId) {
-      setCreateError("Thiếu công việc để tạo báo cáo chủ động.");
-      return;
-    }
-
-    const reportDay = normalizeDayKey(createReportDay);
-
-    if (reportDay.length !== 8) {
-      setCreateError("Nhập ngày báo cáo.");
-      return;
-    }
-
-    try {
-      setCreateError(null);
-      const created = await createUserCreatedReport({
-        workAssignmentId: targetAssignmentId,
-        data: {
-          reportDate: dayKeyToApiDate(reportDay),
-          reportTitle: createTitle.trim() || `Báo cáo chủ động ${reportDay}`,
-        },
-      }).unwrap();
-
-      setCreateOpen(false);
-      setSelectedWorkReportPeriodId(created.workReportPeriodId);
-      setSelectedReportId(created.id);
-      void refetch();
-    } catch (err: unknown) {
-      setCreateError(getErrorMessage(err, "Không tạo được báo cáo chủ động."));
     }
   };
 
@@ -399,16 +285,6 @@ export default function WorkReportTemplateDetailPage(
           </Box>
 
           <Button
-            variant="contained"
-            startIcon={<AddCircleOutlineIcon />}
-            onClick={handleOpenCreateUserReport}
-            disabled={isBranchView || !defaultCreateAssignmentId || createUserCreatedReportState.isLoading}
-            sx={{ borderRadius: 2 }}
-          >
-            Tạo báo cáo chủ động
-          </Button>
-
-          <Button
             variant="outlined"
             startIcon={<ArrowBackIcon />}
             onClick={onBack}
@@ -425,7 +301,7 @@ export default function WorkReportTemplateDetailPage(
       </Alert>
 
       <Alert severity={pastReportStats.missing > 0 ? "warning" : "success"} sx={{ borderRadius: 2 }}>
-        Kỳ quá khứ: cần {pastReportStats.required} báo cáo, đã có {pastReportStats.reported} báo cáo, còn {pastReportStats.missing} báo cáo chưa báo cáo. Job tự động chỉ xử lý từ hiện tại trở đi.
+        Kỳ quá khứ: cần {pastReportStats.required} báo cáo, đã có {pastReportStats.reported} báo cáo, còn {pastReportStats.missing} báo cáo chưa báo cáo. Job tự động sinh cửa sổ kỳ gần nhất theo cấu hình.
       </Alert>
 
       <WorkReportPeriodFilterBar
@@ -466,90 +342,6 @@ export default function WorkReportTemplateDetailPage(
           Đang đồng bộ dữ liệu kỳ báo cáo...
         </Typography>
       )}
-
-      <Dialog open={createOpen} onClose={handleCloseCreateUserReport} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>Tạo báo cáo chủ động</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5} sx={{ pt: 1 }}>
-            <TextField
-              size="small"
-              label="Tiêu đề"
-              value={createTitle}
-              onChange={(event) => setCreateTitle(event.target.value)}
-              disabled={createUserCreatedReportState.isLoading}
-              fullWidth
-              autoFocus
-            />
-            {assignmentOptions.length > 1 && (
-              <FormControl size="small" fullWidth>
-                <InputLabel id="create-report-assignment-label">Phân công</InputLabel>
-                <Select
-                  labelId="create-report-assignment-label"
-                  label="Phân công"
-                  value={createAssignmentId}
-                  onChange={(event) => {
-                    const nextAssignmentId = event.target.value;
-                    setCreateAssignmentId(nextAssignmentId);
-                    const nextAssignmentDueDay = getAssignmentHardDueDayKey(
-                      assignmentOptions.find((option) => option.workAssignmentId === nextAssignmentId)
-                    );
-                    if (nextAssignmentDueDay && nextAssignmentDueDay < todayDayKey()) {
-                      setCreateReportDay(nextAssignmentDueDay);
-                    }
-                  }}
-                  disabled={createUserCreatedReportState.isLoading}
-                >
-                  {assignmentOptions.map((option) => (
-                    <MenuItem
-                      key={option.workTemplateAssigneeId || option.workAssignmentId}
-                      value={option.workAssignmentId}
-                      disabled={
-                        option.isActive === false ||
-                        option.allowUserCreatedReports === false
-                      }
-                    >
-                      {formatAssignmentOptionLabel(option)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-            <SingleDayKeyField
-              label="Ngày báo cáo"
-              value={createReportDay}
-              onChange={setCreateReportDay}
-              disabled={createUserCreatedReportState.isLoading}
-              fullWidth
-            />
-            <Alert severity="warning">
-              Báo cáo chủ động là báo cáo phát sinh, không thay thế kỳ định kỳ bắt buộc. Khoảng báo cáo và hạn hoàn thành được xác định theo phân công đã giao.
-            </Alert>
-            {createError ? (
-              <Alert severity="error">{createError}</Alert>
-            ) : (
-              <Alert severity="info">
-                Báo cáo chủ động sẽ được tạo dạng bản nháp; có thể nhập dữ liệu và nộp ngay sau khi mở.
-              </Alert>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCreateUserReport} disabled={createUserCreatedReportState.isLoading}>
-            Hủy
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleCreateUserReport()}
-            disabled={
-              createUserCreatedReportState.isLoading ||
-              !createAssignmentId ||
-              !createReportDay
-            }
-          >
-            {createUserCreatedReportState.isLoading ? "Đang tạo..." : "Tạo bản nháp"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {openError && <Alert severity="error">{openError}</Alert>}
     </Stack>

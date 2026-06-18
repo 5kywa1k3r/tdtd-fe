@@ -247,6 +247,41 @@ export const WorkForm: React.FC<WorkFormProps> = ({
     return "Cập nhật";
   }, [isView, isCreate]);
 
+  const readableLockedFieldSx = isView
+    ? {
+        "& .MuiInputBase-root.Mui-disabled": {
+          bgcolor: "#f8fafc",
+          color: "#0f172a",
+          opacity: 1,
+        },
+        "& .MuiInputBase-input.Mui-disabled": {
+          WebkitTextFillColor: "#0f172a",
+          color: "#0f172a",
+          opacity: 1,
+        },
+        "& .MuiInputLabel-root.Mui-disabled": {
+          color: "#475569",
+          opacity: 1,
+        },
+        "& .MuiOutlinedInput-root.Mui-disabled .MuiOutlinedInput-notchedOutline": {
+          borderColor: "#cbd5e1",
+        },
+        "& .MuiSelect-icon.Mui-disabled, & .MuiAutocomplete-endAdornment .MuiSvgIcon-root": {
+          color: "#475569",
+          opacity: 1,
+        },
+        "& input:disabled, & textarea:disabled": {
+          WebkitTextFillColor: "#0f172a",
+          color: "#0f172a",
+          opacity: 1,
+        },
+        "& .MuiSelect-nativeInput": {
+          opacity: 0,
+          pointerEvents: "none",
+        },
+      }
+    : undefined;
+
   const handleSave = async () => {
     const draft = {
       ...textDraftRef.current,
@@ -284,7 +319,7 @@ export const WorkForm: React.FC<WorkFormProps> = ({
 
   return (
     <>
-      <Stack spacing={2}>
+      <Stack spacing={2} sx={readableLockedFieldSx}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <Chip
             size="small"

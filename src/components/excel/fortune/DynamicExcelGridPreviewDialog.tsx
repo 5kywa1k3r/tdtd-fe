@@ -26,6 +26,8 @@ type Props = {
   onClose: () => void;
 };
 
+const PREVIEW_WORKBOOK_ZOOM_RATIO = 0.5;
+
 function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
   try {
     return raw ? (JSON.parse(raw) as T) : fallback;
@@ -85,7 +87,7 @@ export default function DynamicExcelGridPreviewDialog({
 
   const settings = React.useMemo(() => {
     return {
-      data: (parsed?.workbook ?? []) as Sheet[],
+      data: withWorkbookZoom((parsed?.workbook ?? []) as Sheet[], PREVIEW_WORKBOOK_ZOOM_RATIO),
       row: parsed?.workbook?.[0]?.row,
       column: parsed?.workbook?.[0]?.column,
       allowEdit: false,
@@ -187,5 +189,13 @@ export default function DynamicExcelGridPreviewDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function withWorkbookZoom(workbookData: Sheet[], zoomRatio: number) {
+  return workbookData.map((sheet) =>
+    sheet && typeof sheet === "object"
+      ? { ...sheet, zoomRatio }
+      : sheet,
   );
 }

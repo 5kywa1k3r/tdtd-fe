@@ -64,9 +64,9 @@ import { extractMasterCells, extractNumericValues1D } from "./fortuneAdapter";
 import { DESIGNER_LIMITS, validateHeader, validateNoMergeInDataRange, validateSpecLimits } from "./validate";
 import {
   buildInputCellRefs,
+  createInputDataCellChecker,
   findSpecialRangeAt,
   getSpecialRanges,
-  isInputDataCell,
   removeSpecialRange,
   SPECIAL_RANGE_COLORS,
   upsertSpecialRange,
@@ -124,6 +124,11 @@ import {
   type DynamicExcelImportPreview,
   type ExcelImportSourceRange,
 } from "./excelImport";
+import {
+  normalizeWorkbookNumberInputCells,
+  recalculateSimpleNumericFormulas,
+  stripEmptyNumberInputCellMetadata,
+} from "./workbookRuntime";
 
 export type ExcelDesignerMeta = HeaderMeta;
 
@@ -157,6 +162,8 @@ const MARKED_BACKGROUNDS = new Set<string>([
 ]);
 
 const SAVE_TIMEOUT_MS = 30_000;
+const INLINE_WORKBOOK_ZOOM_RATIO = 0.5;
+const FULLSCREEN_WORKBOOK_ZOOM_RATIO = 1;
 const SAVE_FAILED_MESSAGE = "Không lưu được bảng biểu động.";
 const SAVE_TIMEOUT_MESSAGE = "Quá thời gian chờ phản hồi từ máy chủ. Vui lòng kiểm tra kết nối và thử lưu lại.";
 const SEMANTIC_EDITABLE_SPECIAL_ROLES = new Set<HeaderSpecialRole>();
@@ -165,6 +172,22 @@ const DANGEROUS_TEMPLATE_TEXT_RE =
 
 function cloneWorkbookData(workbook: any[]) {
   return JSON.parse(JSON.stringify(Array.isArray(workbook) ? workbook : []));
+}
+
+function withWorkbookZoom(workbook: any[], zoomRatio: number) {
+  return (Array.isArray(workbook) ? workbook : []).map((sheet) =>
+    sheet && typeof sheet === "object"
+      ? { ...sheet, zoomRatio }
+      : sheet,
+  );
+}
+
+function stripWorkbookZoom(workbook: any[]) {
+  return (Array.isArray(workbook) ? workbook : []).map((sheet) => {
+    if (!sheet || typeof sheet !== "object") return sheet;
+    const { zoomRatio: _zoomRatio, ...rest } = sheet as any;
+    return rest;
+  });
 }
 
 function withSaveTimeout<T>(operation: Promise<T>): Promise<T> {
@@ -356,10 +379,11 @@ function validateNoDataInRect(
   spec: HeaderSpec,
 ) {
   const cdMap = buildCelldataMap(sheet);
+  const isInputCell = createInputDataCellChecker(rect, spec);
 
   for (let r = rect.r0; r <= rect.r1; r++) {
     for (let c = rect.c0; c <= rect.c1; c++) {
-      if (!isInputDataCell(spec, rect, r, c)) continue;
+      if (!isInputCell(r, c)) continue;
       const cell = getCellAny(sheet, r, c, cdMap);
       if (hasMeaningfulCellValue(cell)) {
         return [
@@ -683,7 +707,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   const sheetFullscreenSnapshotRef = useRef<any[] | null>(null);
   const sheetFullscreenGuideSnapshotRef = useRef<boolean | null>(null);
   const mountedRef = useRef(true);
-  const [sheetGuideVisible, setSheetGuideVisible] = useState(true);
+  const [sheetGuideVisible, setSheetGuideVisible] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -701,7 +725,10 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     const nextTable = getTableRect(nextSpec);
     const rows = rectRows(nextTable);
     const cols = rectCols(nextTable);
-    const normalized = normalizeToSingleSheet(raw, rows, cols);
+    const nextRegions = computeRegions(nextSpec, nextTable);
+    const normalized = stripWorkbookZoom(normalizeToSingleSheet(raw, rows, cols));
+    normalizeWorkbookNumberInputCells(normalized, nextRegions.dataRect, nextSpec);
+    recalculateSimpleNumericFormulas(normalized);
     const sheet = normalized[0];
     if (!sheet) return normalized;
 
@@ -710,7 +737,6 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
 
     if (!showGuide) return [{ ...sheet }];
 
-    const nextRegions = computeRegions(nextSpec, nextTable);
     const headerRects = (nextRegions as any).headerRects?.length
       ? ((nextRegions as any).headerRects as RegionRect[])
       : [nextRegions.headerRect];
@@ -728,7 +754,10 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
 
   const getCleanWorkbook = (raw: any[], nextSpec: HeaderSpec) => {
     const nextTable = getTableRect(nextSpec);
-    const normalized = normalizeToSingleSheet(raw, rectRows(nextTable), rectCols(nextTable));
+    const nextRegions = computeRegions(nextSpec, nextTable);
+    const normalized = stripWorkbookZoom(normalizeToSingleSheet(raw, rectRows(nextTable), rectCols(nextTable)));
+    normalizeWorkbookNumberInputCells(normalized, nextRegions.dataRect, nextSpec);
+    recalculateSimpleNumericFormulas(normalized);
     const sheet = normalized[0];
     if (sheet) {
       stripMarksForSave(sheet, visualBackupRef.current, MARKED_BACKGROUNDS);
@@ -746,6 +775,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   });
 
   const workbookRef = useRef<any[]>(workbookData);
+  const fortuneWorkbookRef = useRef<any>(null);
   useEffect(() => {
     workbookRef.current = workbookData;
   }, [workbookData]);
@@ -779,6 +809,18 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   const [importSpecDraft, setImportSpecDraft] = useState<HeaderSpec | null>(null);
 
   useEffect(() => {
+    if (!sheetFullscreenOpen) return undefined;
+
+    const notifyResize = () => window.dispatchEvent(new Event("resize"));
+    const frame = window.requestAnimationFrame(notifyResize);
+    const timeout = window.setTimeout(notifyResize, 80);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [sheetFullscreenOpen]);
+
+  useEffect(() => {
     const nextSpec = normalizeDesignerSpec(initialSpec);
     setSpec(nextSpec);
     setTableMode(normalizeTableModeForKind(props.initialTableMode, nextSpec.kind));
@@ -795,26 +837,47 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     setWorkbookKey((k) => k + 1);
   }, [initialSpec, initialWorkbookData, mode, props.initialTableMode]);
 
+  const getLiveWorkbookData = () => {
+    try {
+      const live = fortuneWorkbookRef.current?.getAllSheets?.();
+      if (Array.isArray(live) && live.length > 0) return cloneWorkbookData(stripWorkbookZoom(live));
+    } catch {
+      // Fortune may be between mounts while switching inline/fullscreen surfaces.
+    }
+
+    return workbookRef.current?.length ? workbookRef.current : workbookData;
+  };
+
   const settings = useMemo(() => {
+    const zoomRatio = sheetFullscreenOpen ? FULLSCREEN_WORKBOOK_ZOOM_RATIO : INLINE_WORKBOOK_ZOOM_RATIO;
     return {
-      data: workbookData,
+      data: withWorkbookZoom(workbookData, zoomRatio),
       row: workbookData?.[0]?.row,
       column: workbookData?.[0]?.column,
       allowEdit: canEdit,
       showSheetTabs: false,
       onChange: (data: any) => {
         if (!canEdit) return;
-        if (Array.isArray(data)) workbookRef.current = data;
+        if (Array.isArray(data)) {
+          const base = cloneWorkbookData(stripWorkbookZoom(data));
+          const next = cloneWorkbookData(base);
+          normalizeWorkbookNumberInputCells(next, regions.dataRect, spec);
+          recalculateSimpleNumericFormulas(next);
+          workbookRef.current = next;
+        }
       },
     };
-  }, [workbookData, canEdit]);
+  }, [workbookData, canEdit, regions.dataRect, sheetFullscreenOpen, spec]);
 
   const getNormalizedLatest = (s: HeaderSpec) => {
     const nextTable = getTableRect(s);
     const rows = rectRows(nextTable);
     const cols = rectCols(nextTable);
-    const raw = workbookRef.current?.length ? workbookRef.current : workbookData;
-    const normalized = normalizeToSingleSheet(raw, rows, cols);
+    const nextRegions = computeRegions(s, nextTable);
+    const raw = getLiveWorkbookData();
+    const normalized = stripWorkbookZoom(normalizeToSingleSheet(raw, rows, cols));
+    normalizeWorkbookNumberInputCells(normalized, nextRegions.dataRect, s);
+    recalculateSimpleNumericFormulas(normalized);
     const sheet = normalized[0];
     return { table: nextTable, rows, cols, normalized, sheet };
   };
@@ -846,7 +909,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     setActiveTarget(nextActive);
 
     if (layoutChanged) {
-      const raw = workbookRef.current?.length ? workbookRef.current : workbookData;
+      const raw = getLiveWorkbookData();
       const nextWorkbook = normalizeAndMarkWorkbook(raw, normalizedSpec, nextActive);
       setWorkbookData(nextWorkbook);
       workbookRef.current = nextWorkbook;
@@ -940,6 +1003,13 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
         setDlgOpen(true);
         return;
       }
+      const nextSpecialIssues = validateSpecialRanges(nextSpec, nextLimitResult.dataRect);
+      if (nextSpecialIssues.length) {
+        setDlgOk(false);
+        setDlgIssues(nextSpecialIssues);
+        setDlgOpen(true);
+        return;
+      }
 
       const nextWorkbook = normalizeAndMarkWorkbook(imported.workbookData, nextSpec, { kind: "DATA" });
       setSpec(nextSpec);
@@ -1010,7 +1080,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     }
 
     const { normalized } = getNormalizedLatest(specToSave);
-    const normalizedForSave = normalizeToSingleSheet(normalized, rectRows(vlim.table), rectCols(vlim.table));
+    const normalizedForSave = stripWorkbookZoom(normalizeToSingleSheet(normalized, rectRows(vlim.table), rectCols(vlim.table)));
     const sheetForSave = normalizedForSave[0];
 
     if (!sheetForSave) {
@@ -1075,6 +1145,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     }
 
     const values1D = extractNumericValues1D(sheetForSave, dataRect, specToSave);
+    stripEmptyNumberInputCellMetadata(normalizedForSave, dataRect, specToSave);
 
     const payload = {
       code: meta.code,
@@ -1131,13 +1202,13 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
   const toggleSheetGuide = () => {
     const nextVisible = !sheetGuideVisible;
     setSheetGuideVisible(nextVisible);
-    const nextWorkbook = normalizeAndMarkWorkbook(workbookRef.current, spec, activeTarget, nextVisible);
+    const nextWorkbook = normalizeAndMarkWorkbook(getLiveWorkbookData(), spec, activeTarget, nextVisible);
     setWorkbookData(nextWorkbook);
     workbookRef.current = nextWorkbook;
     setWorkbookKey((k) => k + 1);
   };
   const openSheetFullscreen = () => {
-    const current = workbookRef.current?.length ? workbookRef.current : workbookData;
+    const current = getLiveWorkbookData();
     const cleanCurrent = getCleanWorkbook(current, spec);
     const nextWorkbook = normalizeAndMarkWorkbook(cleanCurrent, spec, activeTarget, sheetGuideVisible);
     setWorkbookData(nextWorkbook);
@@ -1148,7 +1219,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
     setWorkbookKey((k) => k + 1);
   };
   const applySheetFullscreenChanges = () => {
-    const current = workbookRef.current?.length ? workbookRef.current : workbookData;
+    const current = getLiveWorkbookData();
     const nextWorkbook = normalizeAndMarkWorkbook(current, spec, activeTarget, sheetGuideVisible);
     setWorkbookData(nextWorkbook);
     workbookRef.current = nextWorkbook;
@@ -1178,9 +1249,9 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
       sx={{
         flex: fullscreen ? "1 1 auto" : 1,
         width: "100%",
-        height: fullscreen ? "calc(100dvh - 90px)" : undefined,
-        minHeight: fullscreen ? "calc(100dvh - 90px)" : 0,
-        border: "1px solid rgba(255,255,255,0.12)",
+        height: fullscreen ? "100%" : undefined,
+        minHeight: 0,
+        border: fullscreen ? 0 : "1px solid rgba(255,255,255,0.12)",
         borderRadius: fullscreen ? 0 : 1,
         overflow: "hidden",
         "& .fortune-sheettab-button": { display: "none !important" },
@@ -1191,7 +1262,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
         },
       }}
     >
-      {shouldRenderWorkbook ? <LazyFortuneWorkbook key={workbookKey} {...settings} /> : null}
+      {shouldRenderWorkbook ? <LazyFortuneWorkbook ref={fortuneWorkbookRef} key={workbookKey} {...settings} /> : null}
     </Box>
   );
 
@@ -1349,8 +1420,24 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
         </CardContent>
       </Card>
 
-      <Dialog fullScreen open={sheetFullscreenOpen} onClose={discardSheetFullscreenChanges}>
-        <DialogTitle component="div" sx={{ py: 1, pr: 1.25 }}>
+      <Dialog
+        fullScreen
+        open={sheetFullscreenOpen}
+        onClose={discardSheetFullscreenChanges}
+        PaperProps={{
+          sx: {
+            m: 0,
+            width: "100vw",
+            maxWidth: "100vw",
+            height: "100dvh",
+            maxHeight: "100dvh",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 0,
+          },
+        }}
+      >
+        <DialogTitle component="div" sx={{ py: 1, pr: 1.25, flex: "0 0 auto" }}>
           <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
             <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 800 }} noWrap>
@@ -1380,7 +1467,17 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
             </Stack>
           </Stack>
         </DialogTitle>
-        <DialogContent dividers sx={{ p: 0, display: "flex", minHeight: 0 }}>
+        <DialogContent
+          dividers
+          sx={{
+            p: 0,
+            display: "flex",
+            flexDirection: "column",
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
           {sheetFullscreenOpen ? renderSheetSurface(true) : null}
         </DialogContent>
       </Dialog>
@@ -1724,7 +1821,7 @@ function ExcelImportPreviewDialog({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const [showPreviewGuide, setShowPreviewGuide] = useState(true);
+  const [showPreviewGuide, setShowPreviewGuide] = useState(false);
   const preview = pendingImport?.preview ?? null;
   const workbookData = preview?.workbookData ?? [];
   const sheet = Array.isArray(workbookData) ? workbookData[0] : null;
@@ -3509,6 +3606,35 @@ function removeNonInputSpecialRangesOverlapping(
   return { ...spec, specialRanges };
 }
 
+function getNonInputSpecialRanges(spec: HeaderSpec) {
+  return getSpecialRanges(spec).filter(
+    (range) => range.role === "BLANK" || range.role === "FORMULA" || range.role === "TITLE",
+  );
+}
+
+function subtractRegionRect(source: RegionRect, cut: RegionRect): RegionRect[] {
+  const r0 = Math.max(source.r0, cut.r0);
+  const c0 = Math.max(source.c0, cut.c0);
+  const r1 = Math.min(source.r1, cut.r1);
+  const c1 = Math.min(source.c1, cut.c1);
+  if (r1 < r0 || c1 < c0) return [source];
+
+  const pieces: RegionRect[] = [];
+  if (source.r0 < r0) pieces.push({ r0: source.r0, c0: source.c0, r1: r0 - 1, c1: source.c1 });
+  if (r1 < source.r1) pieces.push({ r0: r1 + 1, c0: source.c0, r1: source.r1, c1: source.c1 });
+  if (source.c0 < c0) pieces.push({ r0, c0: source.c0, r1, c1: c0 - 1 });
+  if (c1 < source.c1) pieces.push({ r0, c0: c1 + 1, r1, c1: source.c1 });
+  return pieces.filter((piece) => piece.r1 >= piece.r0 && piece.c1 >= piece.c0);
+}
+
+function subtractRegionRects(source: RegionRect, cuts: RegionRect[]) {
+  let pieces: RegionRect[] = [source];
+  for (const cut of cuts) {
+    pieces = pieces.flatMap((piece) => subtractRegionRect(piece, cut));
+  }
+  return pieces;
+}
+
 function ColumnTypeConfig({
   spec,
   dataRect,
@@ -3823,24 +3949,25 @@ function MatrixRangeTypeConfig({
       : selectedKind === "IGNORE"
         ? "Vùng này dùng cấu hình cũ Bỏ qua nhập; cấu hình mới nên dùng vùng Bỏ trống không nhập."
         : "Có thể chọn kiểu dữ liệu nhập hoặc đánh dấu vùng là công thức/tiêu đề/bỏ trống không nhập.";
+  const specialRanges = getNonInputSpecialRanges(spec);
   const displayRanges = [
-    ...ranges.map((range) => ({
-      kind: "DATA_TYPE" as const,
+    ...ranges.flatMap((range) =>
+      subtractRegionRects(range, specialRanges).map((rect) => ({
+        kind: "DATA_TYPE" as const,
+        id: `${range.id ?? "range"}:${formatRectRef(rect)}`,
+        rect,
+        label: dataTypeLabel(range.dataType),
+        color: DATA_TYPE_COLORS[range.dataType],
+        dataType: range.dataType,
+      })),
+    ),
+    ...specialRanges.map((range) => ({
+      kind: range.role as "BLANK" | "FORMULA" | "TITLE",
       id: range.id,
       rect: range,
-      label: dataTypeLabel(range.dataType),
-      color: DATA_TYPE_COLORS[range.dataType],
-      dataType: range.dataType,
+      label: specialRoleLabel(range.role),
+      color: SPECIAL_RANGE_COLORS[range.role],
     })),
-    ...getSpecialRanges(spec)
-      .filter((range) => range.role === "BLANK" || range.role === "FORMULA" || range.role === "TITLE")
-      .map((range) => ({
-        kind: range.role as "BLANK" | "FORMULA" | "TITLE",
-        id: range.id,
-        rect: range,
-        label: specialRoleLabel(range.role),
-        color: SPECIAL_RANGE_COLORS[range.role],
-      })),
   ].sort((a, b) => a.rect.r0 - b.rect.r0 || a.rect.c0 - b.rect.c0 || a.rect.r1 - b.rect.r1 || a.rect.c1 - b.rect.c1);
 
   const applyKind = (kind: MatrixRangeKind) => {

@@ -1,7 +1,8 @@
-import type { HeaderSpecialRange, HeaderSpec } from "./types";
+import type { HeaderSpec } from "./types";
 import { computeRegions, getTableRect, rectCols, rectRows } from "./regions";
 import { DESIGNER_LIMITS } from "./validate";
 import { sanitizeMergeBorderInfo, syncFormulaCalcChain } from "./normalizeWorkbook";
+import { compressCellsToSpecialRanges, normalizeSpecialRanges } from "./specialRanges";
 
 export type ExcelImportSourceRange = {
   r0: number;
@@ -127,11 +128,11 @@ export async function importXlsxForDynamicExcelSpec(
     }
   }
 
-  const specialRanges = [
-    ...compressCellsToRanges(formulaCells, "FORMULA"),
-    ...compressCellsToRanges(blankCells, "BLANK"),
-    ...compressCellsToRanges(titleCells, "TITLE"),
-  ];
+  const specialRanges = normalizeSpecialRanges([
+    ...compressCellsToSpecialRanges(formulaCells, "FORMULA", "import_formula"),
+    ...compressCellsToSpecialRanges(blankCells, "BLANK", "import_blank"),
+    ...compressCellsToSpecialRanges(titleCells, "TITLE", "import_title"),
+  ]);
 
   return {
     workbookData: [importedSheet],
@@ -678,12 +679,6 @@ function detectWorksheetImportRange(worksheet: any): {
   previewRows: number;
   previewCols: number;
 } {
-  const used = {
-    r0: Number.POSITIVE_INFINITY,
-    c0: Number.POSITIVE_INFINITY,
-    r1: -1,
-    c1: -1,
-  };
   const markerCells: Array<{ r: number; c: number }> = [];
 
   worksheet.eachRow({ includeEmpty: false }, (row: any, rowNumber: number) => {
@@ -692,24 +687,9 @@ function detectWorksheetImportRange(worksheet: any): {
       const c = colNumber - 1;
       if (isEndMarkerCell(cell)) {
         markerCells.push({ r, c });
-        return;
       }
-      if (!hasWorksheetCellData(cell)) return;
-      used.r0 = Math.min(used.r0, r);
-      used.c0 = Math.min(used.c0, c);
-      used.r1 = Math.max(used.r1, r);
-      used.c1 = Math.max(used.c1, c);
     });
   });
-
-  const hasUsedRange = used.r1 >= used.r0 && used.c1 >= used.c0;
-  const fallback: ExcelImportSourceRange = hasUsedRange
-    ? { r0: used.r0, c0: used.c0, r1: used.r1, c1: used.c1 }
-    : { r0: 0, c0: 0, r1: 0, c1: 0 };
-
-  if (!hasUsedRange) {
-    throw new Error("File Excel import phải có dữ liệu và đúng 2 marker #END để xác định vùng import.");
-  }
 
   if (markerCells.length !== 2) {
     throw new Error(
@@ -717,39 +697,34 @@ function detectWorksheetImportRange(worksheet: any): {
     );
   }
 
-  const bottomMarkers = markerCells
-    .filter((marker) => marker.c === fallback.c0 && marker.r > fallback.r0)
-    .sort((a, b) => a.r - b.r);
-  const rightMarkers = markerCells
-    .filter((marker) => marker.r === fallback.r0 && marker.c > fallback.c0)
-    .sort((a, b) => a.c - b.c);
+  const [firstMarker, secondMarker] = markerCells;
+  const pair =
+    firstMarker.r < secondMarker.r && firstMarker.c > secondMarker.c
+      ? { rightMarker: firstMarker, bottomMarker: secondMarker }
+      : secondMarker.r < firstMarker.r && secondMarker.c > firstMarker.c
+        ? { rightMarker: secondMarker, bottomMarker: firstMarker }
+        : null;
 
-  if (bottomMarkers.length !== 1 || rightMarkers.length !== 1) {
+  if (!pair) {
     throw new Error(
       "Marker #END không đúng vị trí. Cần một #END ở ô đầu dòng ngay dưới vùng import và một #END ở ô đầu cột ngay bên phải vùng import.",
     );
   }
 
-  const markerRow = bottomMarkers[0].r;
-  const markerCol = rightMarkers[0].c;
   const sourceRange = {
-    r0: fallback.r0,
-    c0: fallback.c0,
-    r1: markerRow - 1,
-    c1: markerCol - 1,
+    r0: pair.rightMarker.r,
+    c0: pair.bottomMarker.c,
+    r1: pair.bottomMarker.r - 1,
+    c1: pair.rightMarker.c - 1,
   };
   if (sourceRange.r1 < sourceRange.r0 || sourceRange.c1 < sourceRange.c0) {
     throw new Error("Marker #END tạo ra vùng import không hợp lệ.");
   }
-  if (!rectInside(sourceRange, fallback)) {
-    throw new Error("File Excel có dữ liệu nằm ngoài vùng được xác định bởi 2 marker #END.");
-  }
-
   return {
     sourceRange,
     mode: "END_MARKER",
-    previewRows: Math.max(fallback.r0 + 1, markerRow + 1),
-    previewCols: Math.max(fallback.c0 + 1, markerCol + 1),
+    previewRows: pair.bottomMarker.r + 1,
+    previewCols: pair.rightMarker.c + 1,
   };
 }
 
@@ -757,29 +732,8 @@ function sameSourceRange(left: ExcelImportSourceRange, right: ExcelImportSourceR
   return left.r0 === right.r0 && left.c0 === right.c0 && left.r1 === right.r1 && left.c1 === right.c1;
 }
 
-function rectInside(outer: ExcelImportSourceRange, inner: ExcelImportSourceRange) {
-  return inner.r0 >= outer.r0 && inner.c0 >= outer.c0 && inner.r1 <= outer.r1 && inner.c1 <= outer.c1;
-}
-
 function isEndMarkerCell(cell: any) {
   return String(readCellText(cell) ?? normalizeCellValue(readCellValue(cell), cell) ?? "").trim().toUpperCase() === "#END";
-}
-
-function hasWorksheetCellData(cell: any) {
-  if (!cell) return false;
-  const text = readCellText(cell);
-  if (typeof text === "string" && text.trim().length > 0) return true;
-  const value = readCellValue(cell);
-  if (value == null || value === "") return false;
-  if (typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, any>;
-    if (record.formula || record.sharedFormula) return true;
-    if (typeof record.text === "string" && record.text.trim().length > 0) return true;
-    if (Array.isArray(record.richText) && record.richText.some((part: any) => String(part?.text ?? "").trim())) {
-      return true;
-    }
-  }
-  return true;
 }
 
 function buildFortuneCell(cell: any, sourceRange?: ExcelImportSourceRange) {
@@ -799,7 +753,7 @@ function buildFortuneCell(cell: any, sourceRange?: ExcelImportSourceRange) {
     const value = normalizeCellValue(readCellValue(cell), cell);
     if (value !== null && value !== undefined && value !== "") {
       obj.v = value;
-      obj.m = String(readCellText(cell) || value);
+      obj.m = String(readUsableCellText(cell) ?? value);
     }
   }
 
@@ -844,7 +798,10 @@ function readFormula(cell: any): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, any>;
   const formula = typeof record.formula === "string" ? record.formula.trim() : "";
-  return formula || null;
+  if (formula) return formula;
+
+  const sharedFormula = typeof record.sharedFormula === "string" ? record.sharedFormula.trim() : "";
+  return sharedFormula && !isCellAddressLike(sharedFormula) ? sharedFormula : null;
 }
 
 function readFormulaResult(cell: any) {
@@ -857,6 +814,10 @@ function readFormulaResult(cell: any) {
   } catch {
     return null;
   }
+}
+
+function isCellAddressLike(value: string) {
+  return /^\$?[A-Za-z]{1,3}\$?[1-9]\d*$/.test(value.trim());
 }
 
 function shiftFormulaReferencesForSourceRange(formula: string | null, sourceRange?: ExcelImportSourceRange): string | null {
@@ -886,18 +847,28 @@ function shiftFormulaReferencesForSourceRange(formula: string | null, sourceRang
 function normalizeCellValue(value: unknown, cell?: any): string | number | boolean | null {
   if (value == null) return null;
   if (value instanceof Date) {
-    return readCellText(cell) || value.toISOString().slice(0, 10);
+    return readUsableCellText(cell) || value.toISOString().slice(0, 10);
   }
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "string") return value;
   if (typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, any>;
+    if (record.formula || record.sharedFormula) {
+      return "result" in record ? normalizeCellValue(record.result, cell) : null;
+    }
+    if (typeof record.error === "string") return record.error;
     if (typeof record.text === "string") return record.text;
     if (Array.isArray(record.richText)) {
       return record.richText.map((part: any) => part?.text ?? "").join("");
     }
     if (record.hyperlink && typeof record.text === "string") return record.text;
   }
-  return readCellText(cell) || String(value);
+  return readUsableCellText(cell);
+}
+
+function readUsableCellText(cell: any): string | null {
+  const text = readCellText(cell);
+  if (text == null) return null;
+  return text.trim() === "[object Object]" ? null : text;
 }
 
 function colorToHex(color: any): string | null {
@@ -1186,32 +1157,4 @@ function columnIndexToName(index: number) {
     n = Math.floor((n - 1) / 26);
   }
   return out || "A";
-}
-
-function compressCellsToRanges(
-  cells: Array<{ r: number; c: number }>,
-  role: HeaderSpecialRange["role"],
-): HeaderSpecialRange[] {
-  const sorted = [...cells].sort((a, b) => a.r - b.r || a.c - b.c);
-  const ranges: HeaderSpecialRange[] = [];
-  let current: HeaderSpecialRange | null = null;
-
-  for (const cell of sorted) {
-    if (current && current.r0 === cell.r && current.r1 === cell.r && current.c1 + 1 === cell.c) {
-      current.c1 = cell.c;
-      continue;
-    }
-    if (current) ranges.push(current);
-    current = {
-      id: `import_${role.toLowerCase()}_${ranges.length + 1}`,
-      role,
-      r0: cell.r,
-      c0: cell.c,
-      r1: cell.r,
-      c1: cell.c,
-    };
-  }
-
-  if (current) ranges.push(current);
-  return ranges;
 }

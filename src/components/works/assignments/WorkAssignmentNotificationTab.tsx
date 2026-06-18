@@ -39,6 +39,7 @@ type NotificationFilter = "ALL" | "UNREAD" | "ACTION";
 
 type Props = {
   workId: string;
+  workType?: "TASK" | "INDICATOR";
   focusedAssignmentId?: string | null;
   onClearAssignmentFocus?: () => void;
   onOpenAssignment: (assignmentId: string) => void;
@@ -59,6 +60,7 @@ function getNotificationTone(row: NotificationRow) {
 
 function getNotificationActionLabel(row: NotificationRow) {
   const type = String(row.type || "").toUpperCase();
+  if (type === "ASSIGNMENT_ASSIGNED") return "Mở thông tin chung";
   if (type.includes("REPORT")) return "Mở báo cáo";
   if (type.includes("REVIEW")) return "Mở duyệt";
   if (type.includes("HANDOVER") || type.includes("CLONE") || row.requiresAction) {
@@ -68,8 +70,21 @@ function getNotificationActionLabel(row: NotificationRow) {
   return "Mở chi tiết";
 }
 
+function getAssignedWorkCommonPath(
+  row: NotificationRow,
+  fallbackWorkId: string,
+  fallbackWorkType?: "TASK" | "INDICATOR"
+) {
+  const targetWorkId = row.workId?.trim() || fallbackWorkId?.trim();
+  if (!targetWorkId) return null;
+
+  const prefix = row.workType === 2 || fallbackWorkType === "INDICATOR" ? "/indicators" : "/tasks";
+  return `${prefix}/${targetWorkId}`;
+}
+
 export default function WorkAssignmentNotificationTab({
   workId,
+  workType,
   focusedAssignmentId,
   onClearAssignmentFocus,
   onOpenAssignment,
@@ -137,7 +152,7 @@ export default function WorkAssignmentNotificationTab({
   }, [loadFirst]);
 
   React.useEffect(() => {
-    let timer: ReturnType<typeof window.setTimeout> | null = null;
+    let timer: number | null = null;
 
     const unsubscribe = subscribeNotificationRealtime(() => {
       if (timer) window.clearTimeout(timer);
@@ -167,12 +182,20 @@ export default function WorkAssignmentNotificationTab({
     async (row: NotificationRow) => {
       await markRowRead(row);
 
+      const type = String(row.type || "").toUpperCase();
+      if (type === "ASSIGNMENT_ASSIGNED") {
+        const path = getAssignedWorkCommonPath(row, workId, workType);
+        if (path) {
+          navigate(path);
+          return;
+        }
+      }
+
       if (row.actionUrl) {
         navigate(row.actionUrl);
         return;
       }
 
-      const type = String(row.type || "").toUpperCase();
       if (type.includes("REVIEW")) {
         onOpenReview();
         return;
@@ -192,7 +215,7 @@ export default function WorkAssignmentNotificationTab({
         onOpenAssignment(row.workAssignmentId);
       }
     },
-    [markRowRead, navigate, onOpenActions, onOpenAssignment, onOpenReports, onOpenReview]
+    [markRowRead, navigate, onOpenActions, onOpenAssignment, onOpenReports, onOpenReview, workId, workType]
   );
 
   const loading = searchState.isLoading;

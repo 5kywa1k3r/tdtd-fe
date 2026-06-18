@@ -51,8 +51,8 @@ function noteBlock(label: string, value?: string | null) {
   );
 }
 
-function getPeriodKindLabel(periodKind?: string | null): string {
-  return (periodKind ?? "").toUpperCase() === "USER_CREATED" ? "Chủ động" : "Bắt buộc";
+function getPeriodKindLabel(): string {
+  return "Bắt buộc";
 }
 
 export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps) {
@@ -96,8 +96,8 @@ export default function ReportDrilldownDrawer(props: ReportDrilldownDrawerProps)
             <Chip
               size="small"
               variant="outlined"
-              color={(row.periodKind ?? "").toUpperCase() === "USER_CREATED" ? "warning" : "default"}
-              label={getPeriodKindLabel(row.periodKind)}
+              color="default"
+              label={getPeriodKindLabel()}
               sx={{ width: "fit-content" }}
             />
           </Stack>

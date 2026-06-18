@@ -9,7 +9,8 @@ import type {
   ReportCellValue,
 } from "./report.helper";
 import type { HeaderSpec } from "../components/excel/fortune/types";
-import { buildCellRefsForValues } from "../components/excel/fortune/specialRanges";
+import { applyValues1DToWorkbookOrdered } from "../components/excel/fortune/workbookRuntime";
+import { parseValues1DJson } from "../components/excel/fortune/values1DCompression";
 
 export function safeParseJson<T>(input?: string | null, fallback?: T): T | undefined {
   if (!input) return fallback;
@@ -23,13 +24,14 @@ export function safeParseJson<T>(input?: string | null, fallback?: T): T | undef
 export function parseMyReportTemplateDetail(
   detail: MyReportTemplateDetailResponse
 ): ParsedMyReportTemplateDetail {
-  const hasTemplateSnapshot = Boolean(detail.templateSnapshotJson);
-  const templateWorkbookData = hasTemplateSnapshot
-    ? extractTemplateWorkbookFromSnapshot(detail.templateSnapshotJson)
-    : safeParseJson<any[]>(detail.templateWorkbookJson, []) ?? [];
-  const spec = hasTemplateSnapshot
-    ? extractSpecFromSnapshot(detail.templateSnapshotJson)
-    : safeParseJson<any>(detail.specJson, null);
+  const snapshotWorkbookData = extractTemplateWorkbookFromSnapshot(detail.templateSnapshotJson);
+  const templateWorkbookData =
+    snapshotWorkbookData.length > 0
+      ? snapshotWorkbookData
+      : safeParseJson<any[]>(detail.templateWorkbookJson, []) ?? [];
+  const spec =
+    extractSpecFromSnapshot(detail.templateSnapshotJson) ??
+    safeParseJson<any>(detail.specJson, null);
 
   return {
     ...detail,
@@ -194,99 +196,7 @@ export function applyValues1DToWorkbook(
     spec?: HeaderSpec | null;
   }
 ): any[] {
-  if (!Array.isArray(workbook) || workbook.length === 0) return workbook;
-
-  const { values1D, r0, c0, w, h, spec } = input;
-  if (!Array.isArray(values1D) || w <= 0 || h <= 0) return workbook;
-
-  const next = safeClone(workbook);
-  const sheet = next[0];
-  if (!sheet) return next;
-  const sheetId = String(sheet.id ?? sheet.index ?? "sheet-1");
-
-  const rowCount = Math.max(sheet.row ?? 0, r0 + h, 1);
-  const colCount = Math.max(sheet.column ?? 0, c0 + w, 1);
-  const dataRect = { r0, c0, r1: r0 + h - 1, c1: c0 + w - 1 };
-  const cellRefs = buildCellRefsForValues(dataRect, spec, values1D.length);
-  if (cellRefs.length !== values1D.length) return next;
-
-  const data = Array.isArray(sheet.data)
-    ? safeClone(sheet.data)
-    : Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => null));
-
-  while (data.length < rowCount) {
-    data.push(Array.from({ length: colCount }, () => null));
-  }
-
-  for (let r = 0; r < data.length; r++) {
-    while (data[r].length < colCount) {
-      data[r].push(null);
-    }
-  }
-
-  let celldata = Array.isArray(sheet.celldata) ? safeClone(sheet.celldata) : [];
-
-  for (let idx = 0; idx < cellRefs.length; idx += 1) {
-    const { r: row, c: col } = cellRefs[idx];
-    const raw = values1D[idx];
-    const existing = data[row]?.[col] ?? findCelldataValue(celldata, row, col);
-    const nextCell = buildOverlayCell(existing, raw);
-
-    data[row][col] = nextCell;
-    celldata = upsertCelldataCell(celldata, row, col, nextCell);
-  }
-
-  sheet.id = sheetId;
-  sheet.index = sheet.index ?? sheetId;
-  sheet.name = sheet.name ?? "Sheet1";
-  sheet.row = rowCount;
-  sheet.column = colCount;
-  sheet.data = data;
-  sheet.celldata = celldata;
-
-  return next;
-}
-
-function findCelldataValue(celldata: any[], r: number, c: number) {
-  return celldata.find((item) => Number(item?.r) === r && Number(item?.c) === c)?.v ?? null;
-}
-
-function buildOverlayCell(existing: any, raw: ReportCellValue) {
-  if (isBlankReportCellValue(raw)) {
-    if (!existing || typeof existing !== "object") return null;
-    const next = { ...existing };
-    delete next.v;
-    delete next.m;
-    delete next.ct;
-    return Object.keys(next).length > 0 ? next : null;
-  }
-
-  const displayValue = Array.isArray(raw) ? raw.join("; ") : String(raw);
-  return existing && typeof existing === "object"
-    ? { ...existing, v: displayValue, m: displayValue }
-    : { v: displayValue, m: displayValue };
-}
-
-function upsertCelldataCell(celldata: any[], r: number, c: number, cell: any) {
-  const index = celldata.findIndex((item) => Number(item?.r) === r && Number(item?.c) === c);
-  if (cell == null) {
-    return index >= 0 ? celldata.filter((_item, itemIndex) => itemIndex !== index) : celldata;
-  }
-
-  const nextItem = { r, c, v: cell };
-  if (index >= 0) {
-    const next = celldata.slice();
-    next[index] = nextItem;
-    return next;
-  }
-
-  return [...celldata, nextItem];
-}
-
-function isBlankReportCellValue(value: ReportCellValue | undefined) {
-  return value == null ||
-    value === "" ||
-    (Array.isArray(value) && value.length === 0);
+  return applyValues1DToWorkbookOrdered(workbook, input);
 }
 
 export function parseReportDetail(
@@ -300,8 +210,7 @@ export function parseReportDetail(
     extractTemplateWorkbookFromSnapshot(report.templateSnapshotJson)
   );
 
-  const values1D =
-    safeParseJson<ReportCellValue[]>(report.values1DJson, []) ?? [];
+  const values1D = parseValues1DJson(report.values1DJson) as ReportCellValue[];
 
   const hydratedWorkbook = applyValues1DToWorkbook(templateWorkbook, {
     values1D,

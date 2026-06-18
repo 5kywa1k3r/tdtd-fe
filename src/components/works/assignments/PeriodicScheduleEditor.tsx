@@ -136,7 +136,7 @@ export const PeriodicScheduleEditor: React.FC<Props> = React.memo(function Perio
             <Typography variant="subtitle2">
               Cấu hình định kỳ báo cáo
             </Typography>
-            <Tooltip title="Theo tuần mặc định là thứ Hai. Các kỳ tháng, quý, nửa năm chỉ cần chọn ngày chốt trong kỳ; job tự động chỉ chạy từ hiện tại trở đi, không tạo bù các kỳ quá khứ.">
+            <Tooltip title="Theo tuần mặc định là thứ Hai. Job tự động sinh cửa sổ theo số kỳ: ngày là số ngày, tháng là số tháng, quý là số quý; mỗi kỳ được tạo cho các đơn vị trước khi sang kỳ tiếp theo.">
               <InfoOutlinedIcon fontSize="small" color="action" />
             </Tooltip>
           </Stack>

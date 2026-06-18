@@ -28,6 +28,8 @@ import DashboardSummaryCards from "../../components/dashboard/summary/DashboardS
 import DashboardSummaryFilters from "../../components/dashboard/summary/DashboardSummaryFilters";
 import DashboardWorksTable from "../../components/dashboard/summary/DashboardWorksTable";
 import WorkMindMapLaunchDialog from "../../components/dashboard/mindmap/WorkMindMapLaunchDialog";
+import { useAppDispatch } from "../../hooks";
+import { resetMindMapState } from "../../stores/dashboardMindMapSlice";
 import { UITextKey, uiText } from '../../constants/uiText';
 
 const WorkMindMapPage = React.lazy(() => import("./mindmap/WorkMindMapPage"));
@@ -137,6 +139,7 @@ export default function DashboardPage() {
     };
   }
 
+  const dispatch = useAppDispatch();
   const [triggerOverview] = useLazyGetDashboardOverviewQuery();
 
   const [draftFilters, setDraftFilters] = React.useState<DashboardPageFilters>(
@@ -215,6 +218,16 @@ export default function DashboardPage() {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
   }, []);
+
+  const handleOpenMindMapCanvas = React.useCallback(() => {
+    setMindMapPickerOpen(false);
+    setMindMapCanvasOpen(true);
+  }, []);
+
+  const handleCloseMindMapCanvas = React.useCallback(() => {
+    setMindMapCanvasOpen(false);
+    dispatch(resetMindMapState());
+  }, [dispatch]);
 
   const pieData = data?.pie ?? [];
   const selectedPie = pieData.find((item) => item.key === selectedPieKey) ?? pieData[0] ?? null;
@@ -319,16 +332,13 @@ export default function DashboardPage() {
       <WorkMindMapLaunchDialog
         open={mindMapPickerOpen}
         onClose={() => setMindMapPickerOpen(false)}
-        onOpenCanvas={() => {
-          setMindMapPickerOpen(false);
-          setMindMapCanvasOpen(true);
-        }}
+        onOpenCanvas={handleOpenMindMapCanvas}
       />
 
       <Dialog
         fullScreen
         open={mindMapCanvasOpen}
-        onClose={() => setMindMapCanvasOpen(false)}
+        onClose={handleCloseMindMapCanvas}
         PaperProps={{
           sx: {
             bgcolor: "#f8fafc",

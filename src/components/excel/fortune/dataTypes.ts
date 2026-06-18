@@ -61,6 +61,8 @@ const VALUE_SOURCE_TYPE_SET = new Set<DynamicExcelValueSourceType>([
   "SYSTEM_UNIT_TYPE",
 ]);
 
+type MatrixRangeOverride = Extract<DataTypeOverride, { scope: "RANGE" }>;
+
 export function normalizeDataType(value: unknown): DynamicExcelDataType {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (normalized === "FULLDATE" || normalized === "STRICT_DATE") return "FULL_DATE";
@@ -373,9 +375,9 @@ export function getCellValueSource(
 export function getMatrixDataTypeRanges(
   spec: HeaderSpec,
   dataRect: Rect,
-): Array<Extract<DataTypeOverride, { scope: "RANGE" }>> {
+): MatrixRangeOverride[] {
   const ranges = normalizeDataTypeOverrides(spec.dataTypeOverrides)
-    .filter((item): item is Extract<DataTypeOverride, { scope: "RANGE" }> => item.scope === "RANGE")
+    .filter((item): item is MatrixRangeOverride => item.scope === "RANGE")
     .map((item) => ({
       ...item,
       ...clampRectToBounds(item, dataRect),
@@ -383,17 +385,7 @@ export function getMatrixDataTypeRanges(
     }))
     .filter((item) => rectWithin(item, dataRect));
 
-  if (ranges.length > 0) return ranges;
-
-  return [
-    {
-      scope: "RANGE",
-      id: "range_1",
-      ...dataRect,
-      dataType: getDefaultDataType(spec),
-      options: getDefaultStringListOptions(spec),
-    },
-  ];
+  return buildMatrixDataTypePartition(ranges, dataRect, getDefaultDataType(spec), getDefaultStringListOptions(spec));
 }
 
 export function setMatrixRangeDataType(
@@ -405,7 +397,7 @@ export function setMatrixRangeDataType(
   const selected = clampRectToBounds(selectedRect, dataRect);
   const nextType = normalizeDataType(dataType);
   const existing = getMatrixDataTypeRanges(spec, dataRect);
-  const nextRanges: Array<Extract<DataTypeOverride, { scope: "RANGE" }>> = [];
+  const nextRanges: MatrixRangeOverride[] = [];
 
   for (const range of existing) {
     for (const piece of subtractRect(range, selected)) {
@@ -426,10 +418,7 @@ export function setMatrixRangeDataType(
     options: isDynamicExcelEnumDataType(nextType) ? getDefaultEnumOptions(nextType) : undefined,
   });
 
-  const normalized = nextRanges
-    .filter((item) => rectWithin(item, dataRect))
-    .sort((a, b) => a.r0 - b.r0 || a.c0 - b.c0 || a.r1 - b.r1 || a.c1 - b.c1)
-    .map((item, index) => ({ ...item, id: `range_${index + 1}` }));
+  const normalized = normalizeMatrixRangePartition(nextRanges, dataRect);
 
   const nonRangeOverrides = normalizeDataTypeOverrides(spec.dataTypeOverrides).filter(
     (item) => item.scope !== "RANGE",
@@ -576,48 +565,37 @@ export function setMatrixRangeStringListOptions(
   const nextType = normalizeDataType(dataType);
   const enumType = isDynamicExcelEnumDataType(nextType) ? nextType : "SHORT_TEXT";
   const existing = getMatrixDataTypeRanges(spec, dataRect);
-  const nextRanges: Array<Extract<DataTypeOverride, { scope: "RANGE" }>> = [];
-  let replaced = false;
+  const nextRanges: MatrixRangeOverride[] = [];
 
   for (const range of existing) {
-    const same =
-      range.r0 === normalizedRect.r0 &&
-      range.c0 === normalizedRect.c0 &&
-      range.r1 === normalizedRect.r1 &&
-      range.c1 === normalizedRect.c1;
-    if (same) replaced = true;
-    nextRanges.push(
-      same
-        ? {
-            ...range,
-            dataType: enumType,
-            options: normalizedSource?.sourceType === "FIXED_ENUM"
-              ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
-              : normalizedOptions,
-            valueSource: normalizedSource,
-          }
-        : range,
-    );
+    for (const piece of subtractRect(range, normalizedRect)) {
+      nextRanges.push({
+        scope: "RANGE",
+        ...piece,
+        dataType: range.dataType,
+        options: range.options,
+        valueSource: range.valueSource,
+      });
+    }
   }
 
-  if (!replaced) {
-    nextRanges.push({
-      scope: "RANGE",
-      id: `range_${nextRanges.length + 1}`,
-      ...normalizedRect,
-      dataType: enumType,
-      options: normalizedSource?.sourceType === "FIXED_ENUM"
-        ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
-        : normalizedOptions,
-      valueSource: normalizedSource,
-    });
-  }
+  nextRanges.push({
+    scope: "RANGE",
+    ...normalizedRect,
+    dataType: enumType,
+    options: normalizedSource?.sourceType === "FIXED_ENUM"
+      ? normalizeStringListOptions(normalizedSource.options?.length ? normalizedSource.options : normalizedOptions)
+      : normalizedOptions,
+    valueSource: normalizedSource,
+  });
+
+  const normalized = normalizeMatrixRangePartition(nextRanges, dataRect);
 
   const nonRangeOverrides = normalizeDataTypeOverrides(spec.dataTypeOverrides).filter(
     (item) => item.scope !== "RANGE",
   );
 
-  return { ...spec, dataTypeOverrides: [...nonRangeOverrides, ...nextRanges] };
+  return { ...spec, dataTypeOverrides: [...nonRangeOverrides, ...normalized] };
 }
 
 export function removeDataTypeOverride(spec: HeaderSpec, target: DataTypeOverride): HeaderSpec {
@@ -694,6 +672,156 @@ function clampRectToBounds(rect: Rect, bounds: Rect): Rect {
 
 function rectWithin(rect: Rect, bounds: Rect) {
   return rect.r0 >= bounds.r0 && rect.c0 >= bounds.c0 && rect.r1 <= bounds.r1 && rect.c1 <= bounds.c1;
+}
+
+function buildMatrixDataTypePartition(
+  ranges: MatrixRangeOverride[],
+  dataRect: Rect,
+  defaultDataType: DynamicExcelDataType,
+  defaultOptions: DynamicExcelStringListOption[],
+): MatrixRangeOverride[] {
+  let partition: MatrixRangeOverride[] = [
+    {
+      scope: "RANGE",
+      ...dataRect,
+      dataType: defaultDataType,
+      options: defaultOptions,
+    },
+  ];
+
+  for (const range of ranges) {
+    const clipped = clampRectToBounds(range, dataRect);
+    if (!rectWithin(clipped, dataRect)) continue;
+
+    const nextPartition: MatrixRangeOverride[] = [];
+    for (const current of partition) {
+      for (const piece of subtractRect(current, clipped)) {
+        nextPartition.push({
+          scope: "RANGE",
+          ...piece,
+          dataType: current.dataType,
+          options: current.options,
+          valueSource: current.valueSource,
+        });
+      }
+    }
+
+    nextPartition.push({
+      scope: "RANGE",
+      ...clipped,
+      dataType: normalizeDataType(range.dataType),
+      options: normalizeStringListOptions(range.options),
+      valueSource: range.valueSource ?? null,
+    });
+    partition = nextPartition;
+  }
+
+  return normalizeMatrixRangePartition(partition, dataRect);
+}
+
+function normalizeMatrixRangePartition(
+  ranges: MatrixRangeOverride[],
+  dataRect: Rect,
+): MatrixRangeOverride[] {
+  const normalized = ranges
+    .map((item) => ({
+      scope: "RANGE" as const,
+      ...clampRectToBounds(item, dataRect),
+      dataType: normalizeDataType(item.dataType),
+      options: normalizeStringListOptions(item.options),
+      valueSource: item.valueSource ?? null,
+    }))
+    .filter((item) => rectWithin(item, dataRect));
+
+  return coalesceMatrixRanges(normalized)
+    .sort((a, b) => a.r0 - b.r0 || a.c0 - b.c0 || a.r1 - b.r1 || a.c1 - b.c1)
+    .map((item, index) => ({ ...item, id: `range_${index + 1}` }));
+}
+
+function coalesceMatrixRanges(ranges: MatrixRangeOverride[]): MatrixRangeOverride[] {
+  let current = ranges;
+  let changed = true;
+
+  while (changed) {
+    const horizontal = mergeAdjacentMatrixRanges(current, "horizontal");
+    const vertical = mergeAdjacentMatrixRanges(horizontal.ranges, "vertical");
+    current = vertical.ranges;
+    changed = horizontal.changed || vertical.changed;
+  }
+
+  return current;
+}
+
+function mergeAdjacentMatrixRanges(
+  ranges: MatrixRangeOverride[],
+  axis: "horizontal" | "vertical",
+): { ranges: MatrixRangeOverride[]; changed: boolean } {
+  const groups = new Map<string, MatrixRangeOverride[]>();
+  for (const range of ranges) {
+    const key = axis === "horizontal"
+      ? `${matrixRangePayloadKey(range)}:${range.r0}:${range.r1}`
+      : `${matrixRangePayloadKey(range)}:${range.c0}:${range.c1}`;
+    const items = groups.get(key) ?? [];
+    items.push(range);
+    groups.set(key, items);
+  }
+
+  const merged: MatrixRangeOverride[] = [];
+  let changed = false;
+
+  for (const items of groups.values()) {
+    const sorted = [...items].sort((a, b) =>
+      axis === "horizontal"
+        ? a.c0 - b.c0 || a.c1 - b.c1
+        : a.r0 - b.r0 || a.r1 - b.r1,
+    );
+    let current: MatrixRangeOverride | null = null;
+
+    for (const item of sorted) {
+      if (current && areAdjacentMatrixRanges(current, item, axis)) {
+        const base: MatrixRangeOverride = current;
+        current = {
+          scope: "RANGE",
+          r0: Math.min(base.r0, item.r0),
+          c0: Math.min(base.c0, item.c0),
+          r1: Math.max(base.r1, item.r1),
+          c1: Math.max(base.c1, item.c1),
+          dataType: base.dataType,
+          options: base.options,
+          valueSource: base.valueSource,
+        };
+        changed = true;
+        continue;
+      }
+
+      if (current) merged.push(current);
+      current = { ...item };
+    }
+
+    if (current) merged.push(current);
+  }
+
+  return { ranges: merged, changed };
+}
+
+function areAdjacentMatrixRanges(
+  a: MatrixRangeOverride,
+  b: MatrixRangeOverride,
+  axis: "horizontal" | "vertical",
+) {
+  if (matrixRangePayloadKey(a) !== matrixRangePayloadKey(b)) return false;
+  if (axis === "horizontal") {
+    return a.r0 === b.r0 && a.r1 === b.r1 && a.c1 + 1 === b.c0;
+  }
+  return a.c0 === b.c0 && a.c1 === b.c1 && a.r1 + 1 === b.r0;
+}
+
+function matrixRangePayloadKey(range: MatrixRangeOverride) {
+  return [
+    normalizeDataType(range.dataType),
+    JSON.stringify(normalizeStringListOptions(range.options)),
+    JSON.stringify(range.valueSource ?? null),
+  ].join("\u0000");
 }
 
 function rectIntersection(a: Rect, b: Rect): Rect | null {

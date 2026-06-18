@@ -264,13 +264,7 @@ type SummaryMethod =
   | "COUNT"
   | "MEAN"
   | "MIN"
-  | "MAX"
-  | "MIN_DATE"
-  | "MAX_DATE"
-  | "TRUE_COUNT"
-  | "FALSE_COUNT"
-  | "BUCKET_COUNT"
-  | "JOIN";
+  | "MAX";
 
 type SummaryMethodOption = {
   value: SummaryMethod;
@@ -296,12 +290,6 @@ const SUMMARY_METHOD_LABELS: Record<SummaryMethod, string> = {
   MEAN: "Trung bình",
   MIN: "Nhỏ nhất",
   MAX: "Lớn nhất",
-  MIN_DATE: "Ngày sớm nhất",
-  MAX_DATE: "Ngày mới nhất",
-  TRUE_COUNT: "Đếm đúng",
-  FALSE_COUNT: "Đếm sai",
-  BUCKET_COUNT: "Nhóm giá trị",
-  JOIN: "Ghép nội dung",
 };
 
 const SUMMARY_METHOD_OPTIONS: SummaryMethodOption[] = [
@@ -310,20 +298,14 @@ const SUMMARY_METHOD_OPTIONS: SummaryMethodOption[] = [
   "MEAN",
   "MIN",
   "MAX",
-  "MIN_DATE",
-  "MAX_DATE",
-  "TRUE_COUNT",
-  "FALSE_COUNT",
-  "BUCKET_COUNT",
-  "JOIN",
 ].map((value) => ({ value: value as SummaryMethod, label: SUMMARY_METHOD_LABELS[value as SummaryMethod] }));
 
 const DEFAULT_BASIC_SUMMARY_METHODS: Required<WorkAssignmentBasicSummaryDefaultMethodsDto> = {
   number: "SUM",
-  date: "MAX_DATE",
-  boolean: "TRUE_COUNT",
-  text: "JOIN",
-  selection: "BUCKET_COUNT",
+  date: "SUM",
+  boolean: "SUM",
+  text: "SUM",
+  selection: "SUM",
 };
 
 const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
@@ -335,32 +317,15 @@ const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
   pageSize: 10,
 };
 
-function methodOptionsForDataType(dataType: DynamicExcelDataType): SummaryMethodOption[] {
-  const allowed: SummaryMethod[] =
-    dataType === "NUMBER"
-      ? ["SUM", "COUNT", "MEAN", "MIN", "MAX"]
-      : dataType === "DATE" || dataType === "FULL_DATE"
-        ? ["MAX_DATE", "MIN_DATE", "COUNT"]
-        : dataType === "BOOLEAN"
-          ? ["TRUE_COUNT", "FALSE_COUNT", "COUNT"]
-          : dataType === "SHORT_TEXT" || dataType === "MULTI_SELECT"
-            ? ["BUCKET_COUNT", "COUNT", "JOIN"]
-            : ["COUNT"];
-
-  return SUMMARY_METHOD_OPTIONS.filter((option) => allowed.includes(option.value));
+function methodOptionsForDataType(_dataType: DynamicExcelDataType): SummaryMethodOption[] {
+  return SUMMARY_METHOD_OPTIONS;
 }
 
 function defaultSummaryMethodForDataType(
   dataType: DynamicExcelDataType,
   defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto = DEFAULT_BASIC_SUMMARY_METHODS,
 ): SummaryMethod {
-  if (dataType === "NUMBER") return normalizeSummaryMethod(defaultMethods.number, "SUM");
-  if (dataType === "DATE" || dataType === "FULL_DATE") return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
-  if (dataType === "BOOLEAN") return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
-  if (dataType === "SHORT_TEXT" || dataType === "MULTI_SELECT") {
-    return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
-  }
-  return normalizeSummaryMethod(defaultMethods.text, "JOIN");
+  return dataType === "NUMBER" ? normalizeSummaryMethod(defaultMethods.number, "SUM") : "SUM";
 }
 
 function formatRectLabel(rect: ReportRect) {
@@ -383,6 +348,7 @@ function buildTemplateDataTypeMethodRows(
   const inputRefs = buildInputCellRefs(templateRect, normalizedSpec);
 
   return getMatrixDataTypeRanges(normalizedSpec, templateRect)
+    .filter((range) => range.dataType === "NUMBER")
     .map((range, index) => {
       const id = range.id || `range_${index + 1}`;
       const inputIndexes = inputRefs.flatMap((ref, inputIndex) =>
@@ -417,32 +383,15 @@ function normalizeSummaryMethod(value: unknown, fallback: SummaryMethod): Summar
   return raw in SUMMARY_METHOD_LABELS ? (raw as SummaryMethod) : fallback;
 }
 
-function methodOptionsForFieldType(fieldType: DynamicFormField["type"]): SummaryMethodOption[] {
-  const allowed: SummaryMethod[] =
-    fieldType === "number"
-      ? ["SUM", "COUNT", "MEAN", "MIN", "MAX"]
-      : fieldType === "date" || fieldType === "fullDate"
-        ? ["MAX_DATE", "MIN_DATE", "COUNT"]
-        : fieldType === "boolean"
-          ? ["TRUE_COUNT", "FALSE_COUNT", "COUNT"]
-          : fieldType === "shortText" || fieldType === "singleSelect" || fieldType === "multiSelect"
-            ? ["BUCKET_COUNT", "COUNT", "JOIN"]
-            : ["JOIN", "COUNT", "BUCKET_COUNT"];
-
-  return SUMMARY_METHOD_OPTIONS.filter((option) => allowed.includes(option.value));
+function methodOptionsForFieldType(_fieldType: DynamicFormField["type"]): SummaryMethodOption[] {
+  return SUMMARY_METHOD_OPTIONS;
 }
 
 function defaultSummaryMethodForFieldType(
   fieldType: DynamicFormField["type"],
   defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto,
 ): SummaryMethod {
-  if (fieldType === "number") return normalizeSummaryMethod(defaultMethods.number, "SUM");
-  if (fieldType === "date" || fieldType === "fullDate") return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
-  if (fieldType === "boolean") return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
-  if (fieldType === "shortText" || fieldType === "singleSelect" || fieldType === "multiSelect") {
-    return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
-  }
-  return normalizeSummaryMethod(defaultMethods.text, "JOIN");
+  return fieldType === "number" ? normalizeSummaryMethod(defaultMethods.number, "SUM") : "SUM";
 }
 
 function buildBasicSummaryFieldMethodRows(
@@ -466,6 +415,7 @@ function buildBasicSummaryFieldMethodRows(
   });
 
   return [...value.fields]
+    .filter((field) => field.type === "number")
     .sort((a, b) => a.order - b.order)
     .map((field) => {
       const defaultMethod = defaultSummaryMethodForFieldType(field.type, defaultMethods);
@@ -3083,9 +3033,10 @@ const WorkAggregationTab: React.FC<Props> = ({
     });
   }, [aggregateUnitOptions]);
 
+  const shouldLoadTemplateWorkbook = summaryMode === "ADVANCED" && Boolean(filter.dynamicExcelId);
   const templateQuery = useGetDynamicExcelQuery(
     { id: filter.dynamicExcelId },
-    { skip: !filter.dynamicExcelId }
+    { skip: !shouldLoadTemplateWorkbook }
   );
 
   const templateDetail = templateQuery.data;
@@ -3414,20 +3365,63 @@ const WorkAggregationTab: React.FC<Props> = ({
       showMessage("Thiếu công việc để tải thống kê cơ bản.");
       return;
     }
-    if (selectedScopeOption?.assignmentType !== "ONCE") {
-      showMessage("Thống kê cơ bản hiện chỉ áp dụng cho công việc giao một lần.");
+    const isOnceSummary = selectedScopeOption?.assignmentType === "ONCE";
+    const isPeriodicSummary = selectedScopeOption?.assignmentType === "PERIODIC_REPORT";
+    if (!isOnceSummary && !isPeriodicSummary) {
+      showMessage("Thống kê cơ bản hỗ trợ công việc giao một lần và báo cáo định kỳ.");
       return;
     }
     if (!seedDynamicFormTemplateId) {
       showMessage("Thiếu biểu mẫu động để tải thống kê cơ bản.");
       return;
     }
+    if (isPeriodicSummary && filter.periodScopeMode === "CUMULATIVE_TO_PERIOD") {
+      showMessage("Thống kê cơ bản cho dữ liệu lớn không hỗ trợ lũy kế. Hãy chọn một kỳ hoặc khoảng kỳ.");
+      return;
+    }
+    if (isPeriodicSummary && filter.periodScopeMode === "ALL_PERIODS") {
+      showMessage("Thống kê cơ bản định kỳ cần một kỳ hoặc khoảng kỳ để tránh quét toàn bộ lịch sử.");
+      return;
+    }
+    if (isPeriodicSummary && filter.periodScopeMode === "SINGLE_PERIOD" && !filter.periodDate) {
+      showMessage("Bắt buộc chọn ngày/kỳ.");
+      return;
+    }
+    if (
+      isPeriodicSummary &&
+      filter.periodScopeMode === "PERIOD_RANGE" &&
+      (!filter.periodDateFrom || !filter.periodDateTo)
+    ) {
+      showMessage("Bắt buộc chọn từ ngày và đến ngày.");
+      return;
+    }
+
+    let periodKeyFrom = normalizeDayKeyInput(filter.periodDateFrom);
+    let periodKeyTo = normalizeDayKeyInput(filter.periodDateTo);
+
+    if (periodKeyFrom && periodKeyTo && periodKeyFrom > periodKeyTo) {
+      const temp = periodKeyFrom;
+      periodKeyFrom = periodKeyTo;
+      periodKeyTo = temp;
+    }
+
+    const periodScopeMode = isPeriodicSummary ? filter.periodScopeMode : "ALL_PERIODS";
+    const selectedUnitIds = filter.selectedUnitIds.length > 0 ? filter.selectedUnitIds : null;
 
     try {
       const response = await getWorkAssignmentBasicSummary({
         scopeAssignmentId: effectiveParentAssignmentId,
         dynamicFormTemplateId: seedDynamicFormTemplateId,
-        selectedUnitIds: null,
+        selectedUnitIds,
+        periodScopeMode,
+        periodKey:
+          isPeriodicSummary && filter.periodScopeMode === "SINGLE_PERIOD"
+            ? normalizeDayKeyInput(filter.periodDate)
+            : null,
+        periodKeyFrom:
+          isPeriodicSummary && filter.periodScopeMode === "PERIOD_RANGE" ? periodKeyFrom : null,
+        periodKeyTo:
+          isPeriodicSummary && filter.periodScopeMode === "PERIOD_RANGE" ? periodKeyTo : null,
         defaultMethods: basicSummaryDefaultMethods,
         rules: basicSummaryRules.length ? basicSummaryRules : null,
         sourceView: {
@@ -3451,6 +3445,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     effectiveParentAssignmentId,
     basicSummarySourceView,
     basicSummaryRules,
+    filter,
     getWorkAssignmentBasicSummary,
     seedDynamicFormTemplateId,
     selectedScopeOption?.assignmentType,
@@ -3725,9 +3720,34 @@ const WorkAggregationTab: React.FC<Props> = ({
         resolvedSupportedDynamicFormExcelBlock,
         templateWorkbook,
         templateRect,
-      ),
+    ),
     [dynamicFormResult, resolvedSupportedDynamicFormExcelBlock, templateRect, templateWorkbook],
   );
+
+  const basicSummaryPeriodScopeLabel = React.useMemo(() => {
+    if (selectedScopeOption?.assignmentType !== "PERIODIC_REPORT") {
+      return "Tất cả báo cáo đã duyệt";
+    }
+    if (filter.periodScopeMode === "SINGLE_PERIOD") {
+      return `Một kỳ: ${formatDayKeyLabel(normalizeDayKeyInput(filter.periodDate))}`;
+    }
+    if (filter.periodScopeMode === "PERIOD_RANGE") {
+      return `Khoảng kỳ: ${formatPeriodRangeLabel(
+        normalizeDayKeyInput(filter.periodDateFrom),
+        normalizeDayKeyInput(filter.periodDateTo),
+      )}`;
+    }
+    if (filter.periodScopeMode === "CUMULATIVE_TO_PERIOD") {
+      return "Lũy kế không hỗ trợ cho thống kê cơ bản dữ liệu lớn";
+    }
+    return "Toàn bộ kỳ không dùng cho thống kê cơ bản định kỳ";
+  }, [
+    filter.periodDate,
+    filter.periodDateFrom,
+    filter.periodDateTo,
+    filter.periodScopeMode,
+    selectedScopeOption?.assignmentType,
+  ]);
 
   const periodSummary = React.useMemo(() => {
     if (!result) return "Chưa có dữ liệu";
@@ -3930,6 +3950,7 @@ const WorkAggregationTab: React.FC<Props> = ({
               fieldMethodRows={basicSummaryFieldMethodRows}
               rangeMethodRows={templateDataTypeMethodRows}
               sourceView={basicSummarySourceView}
+              periodScopeLabel={basicSummaryPeriodScopeLabel}
               onDefaultMethodsChange={handleBasicSummaryDefaultMethodsChange}
               onFieldMethodChange={handleBasicSummaryFieldMethodChange}
               onRangeMethodChange={handleTemplateSummaryMethodChange}

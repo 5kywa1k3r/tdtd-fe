@@ -5,7 +5,7 @@ import { performLogout } from '../../utils/AuthEvents';
 import { ApiErrorCode } from '../../constants/errorCodes';
 import { normalizeApiError } from '../../utils/apiError';
 
-const baseURL = import.meta.env.VITE_API_URL ?? 'https://localhost:7232/api';
+const baseURL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'https://localhost:7232/api' : '/api');
 
 function isAuthRequest(url: string, path: string): boolean {
   return url === path || url.endsWith(path) || url.includes(path);

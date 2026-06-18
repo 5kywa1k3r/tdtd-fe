@@ -25,7 +25,7 @@ export type NotificationRealtimeConnection = {
 export const NOTIFICATION_REALTIME_EVENT = "tdtd:notification-realtime";
 
 function getHubRootUrl() {
-  const apiBase = import.meta.env.VITE_API_URL ?? "https://localhost:7232/api";
+  const apiBase = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "https://localhost:7232/api" : "/api");
   return apiBase.replace(/\/api\/?$/i, "").replace(/\/$/, "");
 }
 
@@ -77,7 +77,7 @@ export function connectNotificationRealtime(
 ): NotificationRealtimeConnection {
   let socket: WebSocket | null = null;
   let stopped = false;
-  let reconnectTimer: ReturnType<typeof window.setTimeout> | null = null;
+  let reconnectTimer: number | null = null;
 
   const hubUrl = `${getHubRootUrl()}/hubs/notifications`;
 

@@ -44,7 +44,6 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import DynamicExcelGridPreviewDialog from "../../../components/excel/fortune/DynamicExcelGridPreviewDialog";
 import type {
   WorkbookDataGridHandle,
-  WorkbookDataGridSavePayload,
 } from "../../../components/excel/fortune/WorkbookDataGrid";
 import {
   extractTypedValues1D,
@@ -71,6 +70,11 @@ import {
   type DynamicExcelInputCellRef,
 } from "../../../components/excel/fortune/specialRanges";
 import { DESIGNER_LIMITS } from "../../../components/excel/fortune/validate";
+import {
+  attachCompressedValues1D,
+  getTableBlockValues1DLength,
+  readTableBlockValues1D,
+} from "../../../components/excel/fortune/values1DCompression";
 import LabelPicker from "../../../components/labels/LabelPicker";
 import type { LabelDataType } from "../../../api/labelApi";
 import ReportStatusChip from "../../../components/reports/ReportStatusChip";
@@ -83,7 +87,9 @@ import SingleDayKeyField, {
 import {
   useGetWorkAssignmentReportLogsQuery,
   useGetWorkAssignmentReportQuery,
+  useGetWorkAssignmentReportTemplateWorkbookQuery,
   useSaveWorkAssignmentReportDraftMutation,
+  useSaveWorkAssignmentReportDraftPatchMutation,
   useSubmitWorkAssignmentReportMutation,
   useWithdrawSubmittedReportMutation,
 } from "../../../api/reportApi";
@@ -92,10 +98,13 @@ import {
   usePreviewDynamicFormAggregateDraftMutation,
 } from "../../../api/aggregateDataApi";
 import { useGetDynamicFormQuery } from "../../../api/dynamicFormApi";
-import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import { useGetChildrenAssignmentsQuery } from "../../../api/workAssignmentApi";
 
-import { WorkAssignmentReportStatus } from "../../../types/reportStatus";
+import {
+  getWorkAssignmentReportStatusLabel,
+  getWorkReportPeriodStatusLabel,
+  WorkAssignmentReportStatus,
+} from "../../../types/reportStatus";
 import type {
   WorkAssignmentReportLogRow,
   WorkAssignmentReportResponse,
@@ -111,6 +120,7 @@ import {
   parseReportDetail,
   safeParseJson,
 } from "../../../types/report.parses";
+import { buildRuntimeValuesPatch } from "../../../components/excel/fortune/workbookRuntime";
 import type { ReportCellValue } from "../../../types/report.helper";
 import {
   buildEditorValue,
@@ -478,6 +488,11 @@ type ReportTableValuesBlock = {
   h?: number | null;
   dataRect?: ExcelBlockDataRect | null;
   values1D?: ReportCellValue[] | null;
+  values1DCompressed?: boolean | null;
+  values1DCompression?: string | null;
+  values1DLength?: number | null;
+  values1DCompressedIndexes?: number[] | null;
+  values1DCompressedCounts?: number[] | null;
   rowLabels?: ReportRuntimeRowLabel[] | null;
   statisticsDisabled?: boolean | null;
   statisticsInputCellCount?: number | null;
@@ -985,7 +1000,7 @@ function getStoredBlockValues(tableValuesJson: string | null | undefined, blockI
   const block = getReportTableValuesBlocks(tableValuesJson).find(
     (item) => normalizeBlockId(item.blockId) === target,
   );
-  return Array.isArray(block?.values1D) ? block.values1D : null;
+  return readTableBlockValues1D(block) as ReportCellValue[] | null;
 }
 
 function getStoredBlockRuntimeShape(
@@ -1008,7 +1023,7 @@ function getStoredBlockRuntimeShape(
     width,
     height,
     dataRect,
-    valueLength: Array.isArray(block.values1D) ? block.values1D.length : 0,
+    valueLength: getTableBlockValues1DLength(block),
   };
 }
 
@@ -1231,6 +1246,19 @@ function buildTableValuesJson(
   });
 }
 
+function buildTableValuesBlockJson(
+  block: ReportExcelBlockRuntime,
+  valuesByBlock: WorkbookValueMap,
+  rowLabelsByBlock: RowLabelStateMap,
+) {
+  const tableBlock = buildTableValuesBlock(
+    block,
+    valuesByBlock[block.blockId] ?? [],
+    rowLabelsByBlock[block.blockId],
+  );
+  return tableBlock ? JSON.stringify(tableBlock) : null;
+}
+
 function buildTableValuesBlock(
   block: ReportExcelBlockRuntime,
   values1D: ReportCellValue[],
@@ -1279,7 +1307,7 @@ function buildTableValuesBlock(
     return null;
   }
 
-  return {
+  return attachCompressedValues1D({
     blockId,
     dynamicExcelTemplateId:
       getOptionalString(excelBlock.dynamicExcelTemplateId) ?? block.dynamicExcelTemplateId ?? null,
@@ -1292,14 +1320,13 @@ function buildTableValuesBlock(
     statisticsInputCellCount,
     statisticsInputCellLimit: TABLE_STATISTIC_INPUT_CELL_LIMIT,
     statisticsDisabledReason: statisticsDisabled ? getTableStatisticDisabledReason(statisticsInputCellCount) : null,
-    values1D: tableValues,
     indexMap: statisticIndexMap,
     metricDefinitions,
     rowLabels,
     rows: appendRows,
     columns: appendColumns,
     cells: matrixCells,
-  };
+  }, tableValues);
 }
 
 function buildAppendRowsTableRecords(
@@ -1944,62 +1971,100 @@ type HeaderSectionProps = {
   detail: ReturnType<typeof parseReportDetail>;
   overdue: boolean;
   canEdit: boolean;
+  busy: boolean;
   dataOrigin: WorkReportDataOrigin;
   cumulativeContributionMode: WorkReportCumulativeContributionMode;
-  onBack?: () => void;
+  onOpenLogs: () => void;
 };
 
 function ReportHeaderSection(props: HeaderSectionProps) {
-  const { detail, overdue, canEdit, dataOrigin, cumulativeContributionMode, onBack } = props;
+  const { detail, overdue, canEdit, busy, dataOrigin, cumulativeContributionMode, onOpenLogs } = props;
   if (!detail) return null;
+  const reportStatusLabel = getWorkAssignmentReportStatusLabel(detail.status);
+  const periodStatusLabel = getWorkReportPeriodStatusLabel(detail.periodStatus);
+  const showPeriodStatusChip = periodStatusLabel !== reportStatusLabel;
+  const handleOpenLogs = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onOpenLogs();
+  };
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            justifyContent="space-between"
-            alignItems={{ xs: "flex-start", md: "center" }}
-            spacing={1}
-          >
-            <Box>
-              <Typography variant="h6" fontWeight={800}>
-                {detail.dynamicFormTemplateName ||
-                  detail.dynamicExcelTemplateName ||
-                  "Biểu mẫu báo cáo"}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {detail.dynamicFormTemplateCode || detail.dynamicExcelTemplateCode || "-"} • Kỳ{" "}
-                {detail.periodKey}
-              </Typography>
-            </Box>
+    <Accordion
+      defaultExpanded
+      variant="outlined"
+      disableGutters
+      sx={{
+        borderRadius: 1,
+        overflow: "hidden",
+        "&:before": { display: "none" },
+      }}
+    >
+      <AccordionSummary
+        component="div"
+        expandIcon={<ExpandMoreOutlinedIcon />}
+        sx={{
+          px: 2,
+          py: 0.75,
+          "& .MuiAccordionSummary-content": { my: 0.75, minWidth: 0 },
+        }}
+      >
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", md: "center" }}
+          spacing={1}
+          sx={{ width: "100%", minWidth: 0 }}
+        >
+          <Box>
+            <Typography variant="h6" fontWeight={800}>
+              {detail.dynamicFormTemplateName ||
+                detail.dynamicExcelTemplateName ||
+                "Biểu mẫu báo cáo"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {detail.dynamicFormTemplateCode || detail.dynamicExcelTemplateCode || "-"} • Kỳ{" "}
+              {detail.periodKey}
+            </Typography>
+          </Box>
 
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-              <ReportStatusChip status={detail.status} />
-              <ReportPeriodStatusChip status={detail.periodStatus} />
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <ReportStatusChip status={detail.status} />
+            {showPeriodStatusChip ? <ReportPeriodStatusChip status={detail.periodStatus} /> : null}
+            <Chip
+              size="small"
+              variant="outlined"
+              color={cumulativeContributionMode === "INCLUDE" ? "success" : "default"}
+              label={cumulativeContributionMode === "INCLUDE" ? "Tính lũy kế" : "Không tính lũy kế"}
+            />
+            <Chip
+              size="small"
+              variant="outlined"
+              label={getReportDataOriginLabel(dataOrigin)}
+            />
+            {detail.dueAtUtc && (
               <Chip
                 size="small"
                 variant="outlined"
-                color={cumulativeContributionMode === "INCLUDE" ? "success" : "default"}
-                label={cumulativeContributionMode === "INCLUDE" ? "Tính lũy kế" : "Không tính lũy kế"}
+                color={overdue ? "error" : "default"}
+                label={`Hạn: ${formatDate(detail.dueAtUtc)}`}
               />
-              <Chip
-                size="small"
-                variant="outlined"
-                label={getReportDataOriginLabel(dataOrigin)}
-              />
-              {detail.dueAtUtc && (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  color={overdue ? "error" : "default"}
-                  label={`Hạn: ${formatDate(detail.dueAtUtc)}`}
-                />
-              )}
-            </Stack>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<HistoryOutlinedIcon fontSize="small" />}
+              onClick={handleOpenLogs}
+              disabled={busy}
+              sx={{ textTransform: "none" }}
+            >
+              Xem nhật ký
+            </Button>
           </Stack>
+        </Stack>
+      </AccordionSummary>
 
+      <AccordionDetails sx={{ px: 2, pt: 0, pb: 2 }}>
+        <Stack spacing={1.5}>
           {detail.status === WorkAssignmentReportStatus.Submitted && (
             <Alert severity="info">
               Báo cáo đã nộp và đang chờ duyệt. Hiện chỉ có thể xem.
@@ -2045,15 +2110,9 @@ function ReportHeaderSection(props: HeaderSectionProps) {
               <b>Nhận xét:</b> {detail.reviewerComment}
             </Alert>
           )}
-
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Button variant="outlined" onClick={onBack}>
-              Quay lại
-            </Button>
-          </Stack>
         </Stack>
-      </CardContent>
-    </Card>
+      </AccordionDetails>
+    </Accordion>
   );
 }
 
@@ -2064,23 +2123,13 @@ type ActionBarProps = {
   onSaveDraft: () => void;
   onSubmit: () => void;
   onOpenWithdraw: () => void;
-  onOpenLogs: () => void;
 };
 
 function ReportActionBar(props: ActionBarProps) {
-  const { canEdit, canWithdraw, busy, onSaveDraft, onSubmit, onOpenWithdraw, onOpenLogs } = props;
+  const { canEdit, canWithdraw, busy, onSaveDraft, onSubmit, onOpenWithdraw } = props;
 
   return (
     <Stack direction="row" spacing={1} flexWrap="wrap">
-      <Button
-        variant="outlined"
-        startIcon={<HistoryOutlinedIcon />}
-        onClick={onOpenLogs}
-        disabled={busy}
-      >
-        Xem nhật ký
-      </Button>
-
       {canEdit && (
         <>
           <Button
@@ -2849,7 +2898,7 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
 
           {isHistoricalData && (
             <Alert severity="warning">
-              Đây là dữ liệu từ quá khứ. Người báo cáo phải kiểm tra ngày hoàn thành; khi duyệt, reviewer sẽ phải xác nhận riêng.
+              Đây là dữ liệu từ quá khứ. Người báo cáo phải kiểm tra ngày hoàn thành; khi duyệt, người duyệt sẽ xác nhận lại.
             </Alert>
           )}
 
@@ -2891,33 +2940,23 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
 
 type ReportSectionTablePreviewsProps = {
   blocks: ReportExcelBlockRuntime[];
-  detail: ParsedReportDetail;
-  topLevelBlockId: string;
-  latestValues: WorkbookValueMap;
-  latestRaw: WorkbookRawDataMap;
   rowLabelsByBlock: RowLabelStateMap;
   canEdit: boolean;
   busy: boolean;
   onValidateSection?: () => void;
   canValidate?: boolean;
-  onSaveBlock: (block: ReportExcelBlockRuntime, payload: WorkbookDataGridSavePayload) => void;
-  onRowLabelChange: (block: ReportExcelBlockRuntime, rowIndex: number, codes: string[]) => void;
+  onOpenBlock: (block: ReportExcelBlockRuntime) => void;
 };
 
 function ReportSectionTablePreviews(props: ReportSectionTablePreviewsProps) {
   const {
     blocks,
-    detail,
-    topLevelBlockId,
-    latestValues,
-    latestRaw,
     rowLabelsByBlock,
     canEdit,
     busy,
     onValidateSection,
     canValidate = true,
-    onSaveBlock,
-    onRowLabelChange,
+    onOpenBlock,
   } = props;
 
   if (blocks.length === 0) return null;
@@ -2947,143 +2986,57 @@ function ReportSectionTablePreviews(props: ReportSectionTablePreviewsProps) {
         )}
       </Stack>
 
-      {blocks.map((block) => (
-        <ReportWorkbookBlockPreview
-          key={block.key}
-          block={block}
-          detail={detail}
-          values1D={resolveReportBlockValues(detail, block, topLevelBlockId, latestValues)}
-          rawWorkbookData={latestRaw[block.blockId]}
-          rowLabels={rowLabelsByBlock[block.blockId] ?? []}
-          canEdit={canEdit}
-          busy={busy}
-          onSave={(payload) => onSaveBlock(block, payload)}
-          onRowLabelChange={(rowIndex, codes) => onRowLabelChange(block, rowIndex, codes)}
-        />
-      ))}
-    </Stack>
-  );
-}
+      {blocks.map((block) => {
+        const rowLabels = rowLabelsByBlock[block.blockId] ?? [];
+        const labeledRows = rowLabels.filter(
+          (row) => normalizeLabelCodes(row.rowLabelCodes ?? []).length > 0,
+        ).length;
+        const inputCellCount = getExpectedValueLength(block);
 
-type ReportWorkbookBlockPreviewProps = {
-  block: ReportExcelBlockRuntime;
-  detail: ParsedReportDetail;
-  values1D: ReportCellValue[];
-  rawWorkbookData?: any[] | null;
-  rowLabels: ReportRuntimeRowLabel[];
-  canEdit: boolean;
-  busy: boolean;
-  onSave: (payload: WorkbookDataGridSavePayload) => void;
-  onRowLabelChange: (rowIndex: number, codes: string[]) => void;
-};
-
-function ReportWorkbookBlockPreview(props: ReportWorkbookBlockPreviewProps) {
-  const {
-    block,
-    detail,
-    values1D,
-    rawWorkbookData,
-    rowLabels,
-    canEdit,
-    busy,
-    onSave,
-    onRowLabelChange,
-  } = props;
-  const embeddedWorkbookData = React.useMemo(() => getReportBlockTemplateWorkbookData(block), [block]);
-  const shouldFetchTemplate = embeddedWorkbookData.length === 0 && Boolean(block.dynamicExcelTemplateId);
-  const { data: dynamicExcelDetail, isFetching: isFetchingTemplate } = useGetDynamicExcelQuery(
-    { id: block.dynamicExcelTemplateId ?? "" },
-    { skip: !shouldFetchTemplate },
-  );
-  const renderableBlock = React.useMemo(() => {
-    if (!dynamicExcelDetail) return block;
-
-    const templateWorkbookData = normalizeTemplateWorkbook(
-      safeParseJson<any[]>(dynamicExcelDetail.rawWorkbookDataJson, []) ?? [],
-    );
-    const spec = safeParseJson<any>(
-      dynamicExcelDetail.specJson,
-      block.spec,
-    ) ?? block.spec;
-
-    return {
-      ...block,
-      spec,
-      templateWorkbookData:
-        templateWorkbookData.length > 0
-          ? templateWorkbookData
-          : block.templateWorkbookData,
-    };
-  }, [block, dynamicExcelDetail]);
-  const workbookData = React.useMemo(() => {
-    if (Array.isArray(rawWorkbookData) && rawWorkbookData.length > 0) return rawWorkbookData;
-    return hydrateReportBlockWorkbook(renderableBlock, values1D);
-  }, [rawWorkbookData, renderableBlock, values1D]);
-  const excludedDataColumns = React.useMemo(
-    () => getExcelBlockLabelColumns(block.blockJson),
-    [block.blockJson],
-  );
-  const allowedRowLabelCodes = React.useMemo(
-    () => getReportBlockAllowedRowLabelCodes(block),
-    [block],
-  );
-  const rowLabelDataType = React.useMemo(
-    () => getReportBlockRowLabelDataType(block),
-    [block],
-  );
-
-  return (
-    <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 1, bgcolor: "background.default" }}>
-      <Stack spacing={1.25}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <TableChartOutlinedIcon fontSize="small" color="primary" />
-          <Typography variant="body2" fontWeight={800}>
-            {block.label}
-          </Typography>
-          <Chip size="small" variant="outlined" label={getReportBlockButtonSummary(block)} />
-        </Stack>
-
-        {isFetchingTemplate && shouldFetchTemplate ? (
-          <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 240 }}>
-            <CircularProgress size={24} />
-          </Stack>
-        ) : (
-          <React.Suspense
-            fallback={(
-              <Stack sx={{ minHeight: 260 }} alignItems="center" justifyContent="center">
-                <CircularProgress size={24} />
-              </Stack>
-            )}
+        return (
+          <Paper
+            key={block.key}
+            variant="outlined"
+            sx={{ p: 1.25, borderRadius: 1, bgcolor: "background.default" }}
           >
-            <WorkbookDataGrid
-              initialSpec={renderableBlock.spec ?? detail.spec}
-              initialWorkbookData={workbookData.length > 0 ? workbookData : detail.renderWorkbookData}
-              dataRect={renderableBlock.dataRect ?? detail.dataRect}
-              excludedDataColumns={excludedDataColumns}
-              mode={canEdit ? "edit" : "view"}
-              readOnly={!canEdit}
-              inlineReadOnly
-              saving={busy}
-              showActions={false}
-              showFullscreenActions={canEdit}
-              changeCommitMode="manual"
-              saveLabel="Lưu nháp"
-              onSave={onSave}
-            />
-          </React.Suspense>
-        )}
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={1}
+              alignItems={{ xs: "stretch", md: "center" }}
+              justifyContent="space-between"
+            >
+              <Stack spacing={0.75} sx={{ minWidth: 0 }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <TableChartOutlinedIcon fontSize="small" color="primary" />
+                  <Typography variant="body2" fontWeight={800}>
+                    {block.label}
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                  <Chip size="small" variant="outlined" label={getReportBlockButtonSummary(block)} />
+                  <Chip size="small" variant="outlined" label={`${inputCellCount} ô nhập`} />
+                  {labeledRows > 0 && (
+                    <Chip size="small" color="primary" variant="outlined" label={`${labeledRows} dòng gắn nhãn`} />
+                  )}
+                </Stack>
+              </Stack>
 
-        <ReportRowLabelEditor
-          block={block}
-          rowLabels={rowLabels}
-          allowedCodes={allowedRowLabelCodes}
-          allowedDataTypes={[rowLabelDataType]}
-          canEdit={canEdit}
-          busy={busy}
-          onChange={onRowLabelChange}
-        />
-      </Stack>
-    </Paper>
+              <Button
+                data-testid="report-table-open-button"
+                data-block-id={block.blockId || undefined}
+                variant={canEdit ? "contained" : "outlined"}
+                startIcon={<OpenInFullOutlinedIcon fontSize="small" />}
+                disabled={busy}
+                onClick={() => onOpenBlock(block)}
+                sx={{ alignSelf: { xs: "stretch", md: "center" }, textTransform: "none" }}
+              >
+                {canEdit ? "Mở nhập liệu" : "Xem bảng"}
+              </Button>
+            </Stack>
+          </Paper>
+        );
+      })}
+    </Stack>
   );
 }
 
@@ -3232,7 +3185,7 @@ function ReportLogsDialog(props: LogsDialogProps) {
 export default function WorkReportEditorPage(
   props: WorkReportEditorPageProps
 ) {
-  const { reportId, onBack, onSaved, onSubmitted } = props;
+  const { reportId, onSaved, onSubmitted } = props;
 
   const { data, isLoading, isError, refetch } = useGetWorkAssignmentReportQuery(
     reportId,
@@ -3240,10 +3193,12 @@ export default function WorkReportEditorPage(
   );
 
   const [saveDraft, saveDraftState] = useSaveWorkAssignmentReportDraftMutation();
+  const [saveDraftPatch, saveDraftPatchState] = useSaveWorkAssignmentReportDraftPatchMutation();
   const [submitReport, submitState] = useSubmitWorkAssignmentReportMutation();
   const [withdrawSubmittedReport, withdrawState] = useWithdrawSubmittedReportMutation();
   const busy =
     saveDraftState.isLoading ||
+    saveDraftPatchState.isLoading ||
     submitState.isLoading ||
     withdrawState.isLoading;
 
@@ -3281,7 +3236,6 @@ export default function WorkReportEditorPage(
   const latestWorkbookIssuesRef = React.useRef<WorkbookValidationIssueMap>({});
   const latestWorkbookRawRef = React.useRef<WorkbookRawDataMap>({});
   const selectedWorkbookGridRef = React.useRef<WorkbookDataGridHandle | null>(null);
-  const [workbookPreviewVersion, setWorkbookPreviewVersion] = React.useState(0);
   const [sectionValidationState, setSectionValidationState] =
     React.useState<ReportSectionValidationState>({});
   const reportBlocks = React.useMemo(
@@ -3302,9 +3256,10 @@ export default function WorkReportEditorPage(
   );
   const [tableDialogOpen, setTableDialogOpen] = React.useState(false);
   const selectedDynamicExcelId = selectedReportBlock?.dynamicExcelTemplateId?.trim() ?? "";
-  const { data: selectedDynamicExcelDetail } = useGetDynamicExcelQuery(
-    { id: selectedDynamicExcelId },
-    { skip: !tableDialogOpen || !dynamicFormTemplateId || !selectedDynamicExcelId },
+  const selectedReportId = detail?.id?.trim() ?? reportId;
+  const { data: selectedDynamicExcelDetail, isFetching: isFetchingSelectedDynamicExcel } = useGetWorkAssignmentReportTemplateWorkbookQuery(
+    { id: selectedReportId, dynamicExcelTemplateId: selectedDynamicExcelId },
+    { skip: !tableDialogOpen || !selectedReportId || !selectedDynamicExcelId },
   );
   const selectedRenderableBlock = React.useMemo(() => {
     if (!selectedReportBlock) return null;
@@ -3669,37 +3624,12 @@ export default function WorkReportEditorPage(
       return (
         <ReportSectionTablePreviews
           blocks={blocks}
-          detail={detail}
-          topLevelBlockId={topLevelBlockId}
-          latestValues={latestWorkbookPayloadRef.current}
-          latestRaw={latestWorkbookRawRef.current}
           rowLabelsByBlock={rowLabelsByBlock}
           onValidateSection={() => handleValidateReportSection(section.id, "manual")}
           canValidate={canEditReportData && !busy}
           canEdit={canEditReportData}
           busy={busy}
-          onSaveBlock={(block, payload) => {
-            latestWorkbookPayloadRef.current = {
-              ...latestWorkbookPayloadRef.current,
-              [block.blockId]: payload.values1D,
-            };
-            latestWorkbookIssuesRef.current = {
-              ...latestWorkbookIssuesRef.current,
-              [block.blockId]: payload.validationIssues,
-            };
-            latestWorkbookRawRef.current = {
-              ...latestWorkbookRawRef.current,
-              [block.blockId]: payload.rawWorkbookData,
-            };
-            setWorkbookPreviewVersion((value) => value + 1);
-            void handleSaveDraft({
-              blockId: block.blockId,
-              values1D: payload.values1D,
-              rawWorkbookData: payload.rawWorkbookData,
-              validationIssues: payload.validationIssues,
-            });
-          }}
-          onRowLabelChange={handleReportBlockRowLabelChange}
+          onOpenBlock={handleOpenReportBlock}
         />
       );
     },
@@ -3707,13 +3637,10 @@ export default function WorkReportEditorPage(
       busy,
       canEditReportData,
       detail,
-      handleReportBlockRowLabelChange,
-      handleSaveDraft,
+      handleOpenReportBlock,
       handleValidateReportSection,
       reportBlocksBySectionId,
       rowLabelsByBlock,
-      topLevelBlockId,
-      workbookPreviewVersion,
     ],
   );
 
@@ -3727,7 +3654,6 @@ export default function WorkReportEditorPage(
     latestWorkbookPayloadRef.current = {};
     latestWorkbookIssuesRef.current = {};
     latestWorkbookRawRef.current = {};
-    setWorkbookPreviewVersion((value) => value + 1);
   }, [detail?.id, detail?.tableValuesJson, detail?.updatedAtUtc]);
 
   React.useEffect(() => {
@@ -3798,8 +3724,11 @@ export default function WorkReportEditorPage(
   async function handleSaveDraft(payload?: WorkbookSavePayload) {
     if (!detail) return;
 
-    if (payload?.values1D) {
-      const payloadBlockId = normalizeBlockId(payload.blockId ?? topLevelBlockId);
+    const payloadBlockId = payload?.values1D
+      ? normalizeBlockId(payload.blockId ?? topLevelBlockId)
+      : null;
+
+    if (payload?.values1D && payloadBlockId) {
       latestWorkbookPayloadRef.current = {
         ...latestWorkbookPayloadRef.current,
         [payloadBlockId]: payload.values1D,
@@ -3817,8 +3746,12 @@ export default function WorkReportEditorPage(
     }
 
     if (!reportDataLocked) {
-      const tableIssues = validateReportBlocks(reportBlocks);
-      markReportSectionsValidated(reportBlocks, tableIssues);
+      const blocksToValidate = payloadBlockId
+        ? reportBlocks.filter((block) => normalizeBlockId(block.blockId) === payloadBlockId)
+        : reportBlocks;
+      const effectiveBlocksToValidate = blocksToValidate.length > 0 ? blocksToValidate : reportBlocks;
+      const tableIssues = validateReportBlocks(effectiveBlocksToValidate);
+      markReportSectionsValidated(effectiveBlocksToValidate, tableIssues);
       if (tableIssues.length > 0) {
         showFirstReportTableIssue(tableIssues, "save");
         return;
@@ -3849,13 +3782,6 @@ export default function WorkReportEditorPage(
       dynamicFormRuntime,
       fieldValues,
     );
-    const tableValuesJson = buildTableValuesJson(
-      detail,
-      dynamicFormRuntime,
-      reportBlocks,
-      valuesByBlock,
-      rowLabelsByBlock,
-    );
     const completedDatePayload = canEditCompletedDate ? dayKeyToApiDate(completedDate) : null;
     const advancedSettings = buildReportAdvancedSettingsPayload(
       detail,
@@ -3864,6 +3790,48 @@ export default function WorkReportEditorPage(
     );
 
     try {
+      if (payloadBlockId && !props.previewData) {
+        const changedBlock = reportBlocks.find(
+          (block) => normalizeBlockId(block.blockId) === payloadBlockId,
+        );
+        const blockJson = changedBlock
+          ? buildTableValuesBlockJson(changedBlock, valuesByBlock, rowLabelsByBlock)
+          : null;
+        const topLevelPatch =
+          payloadBlockId === normalizeBlockId(topLevelBlockId)
+            ? buildRuntimeValuesPatch(
+                normalizeWorkbookValues(detail.values1D ?? [], topLevelValues.length),
+                topLevelValues,
+              )
+            : [];
+
+        await saveDraftPatch({
+          id: detail.id,
+          data: {
+            values1DLength: topLevelValues.length,
+            values1DPatch: topLevelPatch.length > 0 ? topLevelPatch : null,
+            fieldValuesJson,
+            tableBlockPatches: blockJson ? [{ blockId: payloadBlockId, blockJson }] : null,
+            ...advancedSettings,
+            completedDate: completedDatePayload,
+            lateReason: lateReason.trim() || null,
+            note: null,
+          },
+        }).unwrap();
+
+        onSaved?.();
+        showMessage("ÄÃ£ lÆ°u nhÃ¡p.");
+        return;
+      }
+
+      const tableValuesJson = buildTableValuesJson(
+        detail,
+        dynamicFormRuntime,
+        reportBlocks,
+        valuesByBlock,
+        rowLabelsByBlock,
+      );
+
       await saveDraft({
         id: detail.id,
         data: {
@@ -3877,7 +3845,6 @@ export default function WorkReportEditorPage(
         },
       }).unwrap();
 
-      await refetch();
       onSaved?.();
       showMessage("Đã lưu nháp.");
     } catch (error) {
@@ -4103,60 +4070,32 @@ export default function WorkReportEditorPage(
           overflow: "hidden",
         }}
       >
-        <Box
-          sx={{
-            flexShrink: 0,
-            bgcolor: "background.paper",
-            border: "1px solid",
-            borderColor: "divider",
-            borderRadius: 1,
-            px: { xs: 1.5, md: 2 },
-            py: 1.25,
-            mb: 1.5,
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-          }}
-        >
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            justifyContent="space-between"
-            alignItems={{ xs: "flex-start", md: "center" }}
-            spacing={1.25}
-          >
-            <Box>
-              <Typography variant="subtitle1" fontWeight={800}>
-                Dữ liệu báo cáo
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {detail.dynamicFormTemplateName || detail.dynamicExcelTemplateName || "Biểu mẫu báo cáo"} • Kỳ {detail.periodKey}
-              </Typography>
-            </Box>
-
-            <ReportActionBar
-              canEdit={canEdit}
-              canWithdraw={canWithdraw}
-              busy={busy}
-              onSaveDraft={() => void handleSaveDraft()}
-              onSubmit={() => void handleSubmit()}
-              onOpenWithdraw={() => {
-                setWithdrawReason("");
-                setWithdrawOpen(true);
-              }}
-              onOpenLogs={() => setLogsOpen(true)}
-            />
-          </Stack>
-        </Box>
-
         <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", pr: { md: 0.5 }, pb: 2 }}>
           <Stack spacing={2} sx={{ minHeight: 0 }}>
+            {(canEdit || canWithdraw) && (
+              <Stack direction="row" justifyContent="flex-end" alignItems="center">
+                <ReportActionBar
+                  canEdit={canEdit}
+                  canWithdraw={canWithdraw}
+                  busy={busy}
+                  onSaveDraft={() => void handleSaveDraft()}
+                  onSubmit={() => void handleSubmit()}
+                  onOpenWithdraw={() => {
+                    setWithdrawReason("");
+                    setWithdrawOpen(true);
+                  }}
+                />
+              </Stack>
+            )}
+
             <ReportHeaderSection
               detail={detail}
               overdue={requiresLateReason}
               canEdit={canEdit}
+              busy={busy}
               dataOrigin={dataOrigin}
               cumulativeContributionMode={cumulativeContributionMode}
-              onBack={onBack}
+              onOpenLogs={() => setLogsOpen(true)}
             />
 
             {reportDataLocked && (
@@ -4330,6 +4269,7 @@ export default function WorkReportEditorPage(
       </Box>
 
       <Dialog
+        data-testid="report-table-dialog"
         open={tableDialogOpen}
         onClose={() => !busy && setTableDialogOpen(false)}
         fullScreen
@@ -4376,19 +4316,19 @@ export default function WorkReportEditorPage(
             </Stack>
           </Stack>
         </DialogTitle>
-        <DialogContent dividers sx={{ p: 0, bgcolor: "background.default", display: "flex", minHeight: 0 }}>
+        <DialogContent dividers sx={{ p: 0, bgcolor: "background.paper", display: "flex", minHeight: 0, overflow: "hidden" }}>
           {selectedReportBlock ? (
             <Box
               sx={{
+                flex: "1 1 auto",
+                width: "100%",
                 height: "100%",
                 minHeight: 0,
                 display: "flex",
                 flexDirection: "column",
-                gap: 1.5,
-                p: { xs: 1, md: 2 },
               }}
             >
-              <Box sx={{ flex: "1 1 auto", minHeight: 0 }}>
+              <Box sx={{ flex: "1 1 auto", minHeight: 0, width: "100%", height: "100%" }}>
                 <React.Suspense
                   fallback={(
                     <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
@@ -4408,7 +4348,7 @@ export default function WorkReportEditorPage(
                     excludedDataColumns={excludedDataColumns}
                     mode={canEditReportData ? "edit" : "view"}
                     readOnly={!canEditReportData}
-                    saving={busy}
+                    saving={busy || isFetchingSelectedDynamicExcel}
                     showActions={false}
                     embeddedFullscreen
                     changeCommitMode="manual"

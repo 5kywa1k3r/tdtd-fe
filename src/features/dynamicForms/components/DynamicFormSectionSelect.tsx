@@ -1,7 +1,8 @@
+import * as React from "react";
 import {
+  Autocomplete,
   Box,
   Chip,
-  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -40,89 +41,136 @@ export default function DynamicFormSectionSelect({
   disabled = false,
   sx,
 }: DynamicFormSectionSelectProps) {
+  const [open, setOpen] = React.useState(false);
   const selectedItem =
     items.find((item) => item.section.id === value) ??
     items[0] ??
     null;
 
+  React.useEffect(() => {
+    if (disabled || items.length === 0) setOpen(false);
+  }, [disabled, items.length]);
+
   return (
-    <Stack
-      direction={{ xs: "column", sm: "row" }}
-      spacing={1}
-      alignItems={{ xs: "stretch", sm: "center" }}
-      sx={sx}
-    >
-      <TextField
-        select
+    <Box sx={sx}>
+      <Autocomplete<DynamicFormSectionSelectItem, false, false, false>
         fullWidth
         size="small"
-        label={label}
-        value={selectedItem?.section.id ?? ""}
+        open={open}
+        openOnFocus
+        blurOnSelect
+        onOpen={() => setOpen(true)}
+        onClose={() => setOpen(false)}
+        value={selectedItem}
+        options={items}
         disabled={disabled || items.length === 0}
-        onChange={(event) => {
-          const next = items.find((item) => item.section.id === event.target.value);
+        isOptionEqualToValue={(option, current) => option.section.id === current.section.id}
+        getOptionLabel={(item) => getSectionTitle(item)}
+        filterOptions={(options, state) => {
+          const query = normalizeSearchText(state.inputValue);
+          if (!query) return options;
+          return options.filter((item) => normalizeSearchText(getSectionSearchText(item)).includes(query));
+        }}
+        onChange={(_, next) => {
+          setOpen(false);
           if (next) onChange(next.section);
         }}
-        SelectProps={{
-          MenuProps: {
-            PaperProps: {
-              sx: {
-                maxHeight: 264,
-              },
-            },
-          },
-          renderValue: (selected) => {
-            const item = items.find((entry) => entry.section.id === selected);
-            return item ? (
-              <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography component="span" variant="body2" fontWeight={700} noWrap>
-                    {item.section.title || "Chưa đặt tiêu đề"}
-                  </Typography>
-                  <Typography
-                    component="span"
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: "block" }}
-                    noWrap
-                  >
-                    {formatSectionSummary(item)}
-                  </Typography>
-                </Box>
-                {renderValidationChip(item)}
-              </Stack>
-            ) : "";
+        ListboxProps={{
+          style: {
+            maxHeight: dense ? 260 : 320,
+            padding: 0,
           },
         }}
-      >
-        {items.map((item, index) => (
-          <MenuItem key={item.section.id} value={item.section.id}>
-            <Stack spacing={0.25} sx={{ minWidth: 0, width: "100%" }}>
-              <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={700} noWrap>
-                  {index + 1}. {item.section.title || "Chưa đặt tiêu đề"}
+        groupBy={() => "sections"}
+        renderGroup={(params) => {
+          const visibleCount = React.Children.count(params.children);
+          return (
+            <li key={params.key}>
+              <Stack
+                direction="row"
+                spacing={0.75}
+                useFlexGap
+                flexWrap="wrap"
+                sx={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                  px: 1.25,
+                  py: 1,
+                  bgcolor: "background.paper",
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Chip size="small" color="primary" variant="outlined" label={`${items.length} phần`} />
+                <Chip size="small" variant="outlined" label={`Hiển thị: ${visibleCount}`} />
+              </Stack>
+              <ul style={{ padding: 0, margin: 0 }}>{params.children}</ul>
+            </li>
+          );
+        }}
+        renderOption={(props, item, state) => (
+          <Box component="li" {...props} key={item.section.id}>
+            <Stack spacing={0.5} sx={{ minWidth: 0, width: "100%", py: 0.25 }}>
+              <Typography variant="body2" fontWeight={700} noWrap>
+                {state.index + 1}. {getSectionTitle(item)}
+              </Typography>
+              {item.section.description ? (
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {item.section.description}
                 </Typography>
-                {item.section.tagCodes?.length ? (
-                  <Chip size="small" variant="outlined" label={`${item.section.tagCodes.length} nhãn`} />
-                ) : null}
+              ) : null}
+              <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+                {renderCountChips(item)}
                 {renderValidationChip(item)}
               </Stack>
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {formatSectionSummary(item)}
-              </Typography>
             </Stack>
-          </MenuItem>
-        ))}
-      </TextField>
-
-      <Chip
-        size={dense ? "small" : "medium"}
-        variant="outlined"
-        label={`${items.length} phần`}
-        sx={{ alignSelf: { xs: "flex-start", sm: "center" }, flexShrink: 0 }}
+          </Box>
+        )}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            placeholder="Lọc section"
+          />
+        )}
+        noOptionsText="Không có section phù hợp"
       />
-    </Stack>
+    </Box>
   );
+}
+
+function getSectionTitle(item: DynamicFormSectionSelectItem) {
+  return item.section.title?.trim() || "Chưa đặt tiêu đề";
+}
+
+function getSectionSearchText(item: DynamicFormSectionSelectItem) {
+  return [
+    item.section.title,
+    item.section.description,
+    ...(item.section.tagCodes ?? []),
+    item.section.id,
+  ].filter(Boolean).join(" ");
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function renderCountChips(item: DynamicFormSectionSelectItem) {
+  const chips = [
+    item.fieldCount ? <Chip key="fields" size="small" variant="outlined" label={`${item.fieldCount} trường`} /> : null,
+    item.blockCount ? <Chip key="blocks" size="small" variant="outlined" label={`${item.blockCount} bảng`} /> : null,
+    item.section.tagCodes?.length ? (
+      <Chip key="tags" size="small" variant="outlined" label={`${item.section.tagCodes.length} nhãn`} />
+    ) : null,
+  ].filter(Boolean);
+
+  return chips.length > 0 ? chips : <Chip size="small" variant="outlined" label="Chưa có nội dung" />;
 }
 
 function renderValidationChip(item: DynamicFormSectionSelectItem) {
@@ -152,11 +200,4 @@ function renderValidationChip(item: DynamicFormSectionSelectItem) {
   }
 
   return null;
-}
-
-function formatSectionSummary(item: DynamicFormSectionSelectItem) {
-  return [
-    item.fieldCount ? `${item.fieldCount} trường` : null,
-    item.blockCount ? `${item.blockCount} bảng` : null,
-  ].filter(Boolean).join(" · ") || "Chưa có nội dung";
 }

@@ -73,7 +73,6 @@ export interface WorkReportPeriodRow {
   periodKind?: string | null;
   reportTitle?: string | null;
   reportDate?: string | null;
-  linkedScheduledPeriodId?: string | null;
   startedDate?: string | null;
   completedDate?: string | null;
   canEditCompletedDate?: boolean | null;
@@ -114,7 +113,6 @@ export interface MyReportTemplateAssignmentOption {
   completedDate?: string | null;
   dueAtUtc?: string | null;
   isActive?: boolean | null;
-  allowUserCreatedReports?: boolean | null;
 }
 
 export interface MyReportTemplateDetailResponse {
@@ -162,7 +160,6 @@ export interface WorkAssignmentReportResponse {
   periodKind?: string | null;
   reportTitle?: string | null;
   reportDate?: string | null;
-  linkedScheduledPeriodId?: string | null;
   startedDate?: string | null;
   completedDate?: string | null;
   canEditCompletedDate?: boolean | null;
@@ -267,7 +264,6 @@ export interface WorkAssignmentReportListRow {
   periodKind?: string | null;
   reportTitle?: string | null;
   reportDate?: string | null;
-  linkedScheduledPeriodId?: string | null;
   startedDate?: string | null;
   completedDate?: string | null;
   isHistoricalData?: boolean | null;
@@ -363,6 +359,32 @@ export interface SaveWorkAssignmentReportDraftRequest {
   note?: string | null;
 }
 
+export interface WorkReportValuePatchItem {
+  index: number;
+  value: string | string[] | number | boolean | null;
+}
+
+export interface WorkReportTableBlockPatch {
+  blockId: string;
+  blockJson: string;
+}
+
+export interface SaveWorkAssignmentReportDraftPatchRequest {
+  values1DLength?: number | null;
+  values1DPatch?: WorkReportValuePatchItem[] | null;
+  fieldValuesJson?: string | null;
+  tableBlockPatches?: WorkReportTableBlockPatch[] | null;
+  dataOrigin?: WorkReportDataOrigin | string | null;
+  cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
+  cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
+
+  completedDate?: string | null;
+  lateReason?: string | null;
+
+  note?: string | null;
+}
+
 export interface ApplyDynamicFormAggregateDraftRequest {
   aggregateRequest: DynamicFormAggregateRequest;
   dataOrigin?: WorkReportDataOrigin | string | null;
@@ -419,8 +441,3 @@ export interface WorkAssignmentReportLogRow {
   snapshotJson?: string | null;
 }
 
-export interface CreateUserCreatedReportRequest {
-  reportTitle?: string | null;
-  reportDate?: string | null;
-  linkedScheduledPeriodId?: string | null;
-}

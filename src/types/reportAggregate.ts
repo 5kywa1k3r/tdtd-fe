@@ -251,6 +251,10 @@ export interface WorkAssignmentBasicSummaryRequest {
   scopeAssignmentId: string;
   dynamicFormTemplateId?: string | null;
   selectedUnitIds?: string[] | null;
+  periodScopeMode?: string | null;
+  periodKey?: string | null;
+  periodKeyFrom?: string | null;
+  periodKeyTo?: string | null;
   defaultMethods?: WorkAssignmentBasicSummaryDefaultMethodsDto | null;
   rules?: WorkAssignmentBasicSummaryRuleDto[] | null;
   sourceView?: WorkAssignmentBasicSummarySourceViewRequestDto | null;
@@ -284,6 +288,10 @@ export interface WorkAssignmentBasicSummaryMetaDto {
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
   selectedUnitIds: string[];
+  periodScopeMode?: string | null;
+  periodKey?: string | null;
+  periodKeyFrom?: string | null;
+  periodKeyTo?: string | null;
   sourceAssignmentCount: number;
   sourceReportCount: number;
   fromSnapshot: boolean;

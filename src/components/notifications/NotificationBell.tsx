@@ -40,10 +40,15 @@ function formatTime(value?: string | null) {
 }
 
 function getWorkPath(row: NotificationRow) {
+  const type = String(row.type || "").toUpperCase();
+  if (type === "ASSIGNMENT_ASSIGNED" && row.workId) {
+    const basePath = row.workType === 2 ? `/indicators/${row.workId}` : `/tasks/${row.workId}`;
+    return basePath;
+  }
   if (row.actionUrl) return row.actionUrl;
   if (!row.workId) return null;
+
   const basePath = row.workType === 2 ? `/indicators/${row.workId}` : `/tasks/${row.workId}`;
-  const type = String(row.type || "").toUpperCase();
   if (
     row.requiresAction ||
     type.includes("HANDOVER") ||
@@ -52,9 +57,6 @@ function getWorkPath(row: NotificationRow) {
     type.includes("EVALUATION")
   ) {
     return `${basePath}?tab=ASSIGN&section=ACTIONS`;
-  }
-  if (type === "ASSIGNMENT_ASSIGNED") {
-    return `${basePath}?tab=ASSIGN&section=NOTIFICATIONS${row.workAssignmentId ? `&assignmentId=${row.workAssignmentId}` : ""}`;
   }
   if (type.includes("ASSIGNMENT") || type.includes("REPORT") || type.includes("DUE")) {
     return `${basePath}?tab=ASSIGN&section=NOTIFICATIONS${row.workAssignmentId ? `&assignmentId=${row.workAssignmentId}` : ""}`;

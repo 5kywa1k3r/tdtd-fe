@@ -28,12 +28,13 @@ import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import { AppTable, type AppTableColumn } from "../../common/AppTable";
 import WorkbookDataGrid from "../../excel/fortune/WorkbookDataGrid";
 import {
-  applyValues1DToSheet,
-  type WorkbookCellValue,
-} from "../../excel/fortune/fortuneAdapter";
-import { buildCellRefsForValues } from "../../excel/fortune/specialRanges";
+  recalculateSimpleNumericFormulas,
+  type RuntimeWorkbookCellValue,
+} from "../../excel/fortune/workbookRuntime";
+import { getCellDataType, normalizeSpecDataTypeMetadata } from "../../excel/fortune/dataTypes";
 import { getTableRect } from "../../excel/fortune/regions";
 import type { ReportRect } from "../../excel/fortune/reportWorkbook";
+import { buildCellRefsForValues } from "../../excel/fortune/specialRanges";
 import {
   buildEditorValue,
   getDynamicFormBlockJsonList,
@@ -49,7 +50,6 @@ import type {
   WorkAssignmentBasicSummaryItemDto,
   WorkAssignmentBasicSummaryResponse,
   WorkAssignmentBasicSummarySourceDto,
-  WorkAssignmentBasicSummaryTableCellValueDto,
   WorkAssignmentBasicSummaryTableValuesDto,
   WorkAssignmentBasicSummaryValuesDto,
 } from "../../../types/reportAggregate";
@@ -59,13 +59,7 @@ export type BasicSummaryMethod =
   | "COUNT"
   | "MEAN"
   | "MIN"
-  | "MAX"
-  | "MIN_DATE"
-  | "MAX_DATE"
-  | "TRUE_COUNT"
-  | "FALSE_COUNT"
-  | "BUCKET_COUNT"
-  | "JOIN";
+  | "MAX";
 
 export type BasicSummaryMethodOption = {
   value: BasicSummaryMethod;
@@ -113,6 +107,7 @@ type Props = {
   fieldMethodRows: BasicSummaryFieldMethodRow[];
   rangeMethodRows: BasicSummaryRangeMethodRow[];
   sourceView: BasicSummarySourceViewState;
+  periodScopeLabel?: string | null;
   onDefaultMethodsChange: (methods: WorkAssignmentBasicSummaryDefaultMethodsDto) => void;
   onFieldMethodChange: (fieldId: string, method: BasicSummaryMethod) => void;
   onRangeMethodChange: (rowId: string, method: BasicSummaryMethod) => void;
@@ -134,12 +129,6 @@ export const BASIC_SUMMARY_METHOD_LABELS: Record<BasicSummaryMethod, string> = {
   MEAN: "Trung bình",
   MIN: "Nhỏ nhất",
   MAX: "Lớn nhất",
-  MIN_DATE: "Ngày sớm nhất",
-  MAX_DATE: "Ngày mới nhất",
-  TRUE_COUNT: "Đếm đúng",
-  FALSE_COUNT: "Đếm sai",
-  BUCKET_COUNT: "Nhóm giá trị",
-  JOIN: "Ghép nội dung",
 };
 
 const METHOD_OPTIONS: BasicSummaryMethodOption[] = (
@@ -149,21 +138,15 @@ const METHOD_OPTIONS: BasicSummaryMethodOption[] = (
     "MEAN",
     "MIN",
     "MAX",
-    "MIN_DATE",
-    "MAX_DATE",
-    "TRUE_COUNT",
-    "FALSE_COUNT",
-    "BUCKET_COUNT",
-    "JOIN",
   ] as BasicSummaryMethod[]
 ).map((value) => ({ value, label: BASIC_SUMMARY_METHOD_LABELS[value] }));
 
 const DEFAULT_METHODS: Required<WorkAssignmentBasicSummaryDefaultMethodsDto> = {
   number: "SUM",
-  date: "MAX_DATE",
-  boolean: "TRUE_COUNT",
-  text: "JOIN",
-  selection: "BUCKET_COUNT",
+  date: "SUM",
+  boolean: "SUM",
+  text: "SUM",
+  selection: "SUM",
 };
 
 const SOURCE_VIEW_EMPTY: BasicSummarySourceViewState = {
@@ -188,6 +171,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
   fieldMethodRows,
   rangeMethodRows,
   sourceView,
+  periodScopeLabel,
   onDefaultMethodsChange,
   onFieldMethodChange,
   onRangeMethodChange,
@@ -199,7 +183,9 @@ const BasicSummaryPanel: React.FC<Props> = ({
   onPreviewReport,
 }) => {
   const isOnce = assignmentType === "ONCE";
-  const canLoad = Boolean(scopeAssignmentId && dynamicFormTemplateId && isOnce);
+  const isPeriodic = assignmentType === "PERIODIC_REPORT";
+  const isSupportedAssignmentType = isOnce || isPeriodic;
+  const canLoad = Boolean(scopeAssignmentId && dynamicFormTemplateId && isSupportedAssignmentType);
   const [configVisible, setConfigVisible] = React.useState(true);
 
   return (
@@ -235,11 +221,12 @@ const BasicSummaryPanel: React.FC<Props> = ({
               size="small"
               fullWidth
               label="Phạm vi thống kê"
-              value="Tất cả báo cáo đã duyệt cùng loại biểu mẫu động"
+              value={periodScopeLabel || "Tất cả báo cáo đã duyệt cùng loại biểu mẫu động"}
               InputProps={{ readOnly: true }}
             />
           </Box>
           <Button
+            data-testid="basic-summary-load-button"
             variant="contained"
             startIcon={
               loading ? (
@@ -254,6 +241,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
             Tải thống kê
           </Button>
           <Button
+            data-testid="basic-summary-refresh-button"
             variant="outlined"
             startIcon={<RefreshOutlinedIcon fontSize="small" />}
             onClick={() => onLoad(true)}
@@ -272,9 +260,9 @@ const BasicSummaryPanel: React.FC<Props> = ({
         </Stack>
       </Paper>
 
-      {!isOnce && scopeAssignmentId && (
+      {!isSupportedAssignmentType && scopeAssignmentId && (
         <Alert severity="info">
-          Thống kê cơ bản hiện chỉ áp dụng cho công việc giao một lần.
+          Thống kê cơ bản hỗ trợ công việc giao một lần và báo cáo định kỳ.
         </Alert>
       )}
 
@@ -580,7 +568,7 @@ function RangeMethodTable({
   if (!rows.length) {
     return (
       <Alert severity="info">
-        Template hiện chưa có range ma trận đọc được để cấu hình riêng theo vùng.
+        Biểu mẫu hiện chưa có vùng ma trận đọc được để cấu hình riêng theo vùng.
       </Alert>
     );
   }
@@ -613,9 +601,24 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
       <Chip variant="outlined" label={`Công việc nguồn: ${result.meta.sourceAssignmentCount}`} />
       <Chip variant="outlined" label={`Báo cáo: ${result.meta.sourceReportCount}`} />
       <Chip variant="outlined" label={`Template: ${result.meta.dynamicFormTemplateCode || result.meta.dynamicFormTemplateId}`} />
+      {result.meta.periodScopeMode && (
+        <Chip variant="outlined" label={`Kỳ: ${formatSummaryPeriodScope(result)}`} />
+      )}
       <Chip variant="outlined" label={`Cập nhật: ${formatDateTime(result.meta.snapshotRefreshedAtUtc)}`} />
     </Stack>
   );
+}
+
+function formatSummaryPeriodScope(result: WorkAssignmentBasicSummaryResponse) {
+  const { periodScopeMode, periodKey, periodKeyFrom, periodKeyTo } = result.meta;
+  if (periodScopeMode === "SINGLE_PERIOD") return formatPeriod(periodKey || "", periodKey || "");
+  if (periodScopeMode === "PERIOD_RANGE") {
+    const from = periodKeyFrom ? formatPeriod(periodKeyFrom, periodKeyFrom) : "-";
+    const to = periodKeyTo ? formatPeriod(periodKeyTo, periodKeyTo) : "-";
+    return `${from} - ${to}`;
+  }
+  if (periodScopeMode === "ALL_PERIODS") return "Tất cả kỳ";
+  return periodScopeMode || "-";
 }
 
 function DynamicFormSummaryPreview({
@@ -683,8 +686,7 @@ function DynamicFormSummaryPreview({
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
-      <Stack spacing={1.5}>
+    <Stack spacing={1.25}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Typography variant="subtitle1" sx={{ fontWeight: 850 }}>
             {editorValue.name || "Biểu mẫu động"}
@@ -700,6 +702,7 @@ function DynamicFormSummaryPreview({
           readOnly
           disabled={false}
           onChange={() => undefined}
+          layout="workspace"
           title="Dữ liệu biểu mẫu"
           getSectionExtraCount={(section) => blocksBySection[section.id]?.length ?? 0}
           renderSectionExtra={(section) => (
@@ -709,8 +712,7 @@ function DynamicFormSummaryPreview({
             />
           )}
         />
-      </Stack>
-    </Paper>
+    </Stack>
   );
 }
 
@@ -793,13 +795,19 @@ function SummaryExcelBlock({
   values?: WorkAssignmentBasicSummaryValuesDto | null;
 }) {
   const dynamicExcelId = block.dynamicExcelTemplateId ?? "";
+  const [previewRequested, setPreviewRequested] = React.useState(false);
   const tableValues = React.useMemo(
     () => findTableValues(values, block.blockId),
     [block.blockId, values],
   );
+
+  React.useEffect(() => {
+    setPreviewRequested(false);
+  }, [block.blockId, dynamicExcelId]);
+
   const { data, isLoading, isError } = useGetDynamicExcelQuery(
     { id: dynamicExcelId },
-    { skip: !dynamicExcelId },
+    { skip: !dynamicExcelId || !previewRequested },
   );
 
   const parsed = React.useMemo(() => {
@@ -809,36 +817,85 @@ function SummaryExcelBlock({
     const workbook = safeParseJson<any[]>(data.rawWorkbookDataJson, []) ?? [];
     if (!dataRect || workbook.length === 0) return null;
 
-    const hydratedWorkbook = cloneDeepJson(workbook);
-    const sheet = hydratedWorkbook[0];
-    const values1D = normalizeWorkbookValues(tableValues?.values1D ?? []);
-    if (sheet && tableValues?.cells?.length) {
-      applySummaryTableCellsToSheet(sheet, dataRect, tableValues.cells, spec);
-    } else if (sheet && values1D.length > 0) {
-      applyValues1DToSheet(sheet, dataRect, values1D, spec);
-    }
+    const values1D = buildTablePreviewValues(tableValues);
+    const hydratedWorkbook = values1D.length > 0
+      ? applySummaryPreviewValuesToWorkbook(cloneDeepJson(workbook), dataRect, values1D, spec)
+      : cloneDeepJson(workbook);
 
     return { spec, dataRect, workbook: hydratedWorkbook };
   }, [block.dataRectValue, data, tableValues]);
 
   return (
-    <Paper variant="outlined" sx={{ p: 1, borderRadius: 1, bgcolor: "background.default" }}>
-      <Stack spacing={1}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+    <Box
+      data-testid="basic-summary-excel-block"
+      data-dynamic-excel-id={dynamicExcelId || undefined}
+      sx={{
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 1,
+        overflow: "hidden",
+        bgcolor: "background.paper",
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        flexWrap="wrap"
+        useFlexGap
+        sx={{
+          px: 1.25,
+          py: 1,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.default",
+        }}
+      >
           <Typography variant="body2" sx={{ fontWeight: 800 }}>
             {block.title}
           </Typography>
           {block.tableMode && <Chip size="small" label={tableModeLabels[block.tableMode]} variant="outlined" />}
           {tableValues && <Chip size="small" label={`${tableValues.cells.length} giá trị`} color="primary" variant="outlined" />}
-        </Stack>
+      </Stack>
 
+      <Stack spacing={1} sx={{ p: 1.25 }}>
         {!dynamicExcelId && <Alert severity="warning">Bảng chưa có mã Excel động để xem trước.</Alert>}
+        {dynamicExcelId && !previewRequested && (
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1}
+            alignItems={{ xs: "stretch", sm: "center" }}
+            justifyContent="space-between"
+            sx={{
+              minHeight: 88,
+              border: "1px dashed",
+              borderColor: "divider",
+              borderRadius: 1,
+              px: 1.25,
+              py: 1.25,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Bảng tổng hợp chỉ tải workbook khi cần xem chi tiết.
+            </Typography>
+            <Button
+              data-testid="basic-summary-table-load-button"
+              size="small"
+              variant="outlined"
+              startIcon={<VisibilityOutlinedIcon fontSize="small" />}
+              onClick={() => setPreviewRequested(true)}
+              sx={{ alignSelf: { xs: "stretch", sm: "center" }, textTransform: "none" }}
+            >
+              Tải bảng
+            </Button>
+          </Stack>
+        )}
         {isLoading && (
           <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 180 }}>
             <CircularProgress size={24} />
           </Stack>
         )}
-        {(isError || (dynamicExcelId && !isLoading && !parsed)) && (
+        {previewRequested && (isError || (dynamicExcelId && !isLoading && !parsed)) && (
           <Alert severity="error">Không tải được bảng Excel động để xem trước.</Alert>
         )}
         {parsed && (
@@ -849,10 +906,11 @@ function SummaryExcelBlock({
             mode="view"
             readOnly
             showActions={false}
+            surfaceVariant="flat"
           />
         )}
       </Stack>
-    </Paper>
+    </Box>
   );
 }
 
@@ -1013,10 +1071,6 @@ const DEFAULT_METHOD_GROUPS: Array<{
   options: BasicSummaryMethodOption[];
 }> = [
   { key: "number", label: "Số", options: pickOptions(["SUM", "COUNT", "MEAN", "MIN", "MAX"]) },
-  { key: "date", label: "Ngày", options: pickOptions(["MAX_DATE", "MIN_DATE", "COUNT"]) },
-  { key: "boolean", label: "Có/không", options: pickOptions(["TRUE_COUNT", "FALSE_COUNT", "COUNT"]) },
-  { key: "text", label: "Text", options: pickOptions(["JOIN", "COUNT", "BUCKET_COUNT"]) },
-  { key: "selection", label: "Lựa chọn", options: pickOptions(["BUCKET_COUNT", "COUNT", "JOIN"]) },
 ];
 
 type BlockPreview = {
@@ -1122,7 +1176,85 @@ function cloneDeepJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function normalizeWorkbookValues(values: unknown[]): WorkbookCellValue[] {
+function buildTablePreviewValues(
+  tableValues: WorkAssignmentBasicSummaryTableValuesDto | null | undefined,
+): RuntimeWorkbookCellValue[] {
+  const values = normalizeWorkbookValues(tableValues?.values1D ?? []);
+  if (values.length > 0 || !tableValues?.cells?.length) return values;
+
+  const maxIndex = tableValues.cells.reduce((max, cell) => {
+    const index = typeof cell.index === "number" ? cell.index : -1;
+    return index >= 0 ? Math.max(max, index) : max;
+  }, -1);
+  if (maxIndex < 0) return [];
+
+  const fallback: RuntimeWorkbookCellValue[] = Array.from({ length: maxIndex + 1 }, () => null);
+  for (const cell of tableValues.cells) {
+    const index = typeof cell.index === "number" ? cell.index : -1;
+    if (index < 0 || index >= fallback.length) continue;
+    fallback[index] = normalizeWorkbookValues([cell.value ?? cell.displayValue ?? null])[0] ?? null;
+  }
+  return fallback;
+}
+
+function applySummaryPreviewValuesToWorkbook(
+  workbook: any[],
+  dataRect: ReportRect,
+  values1D: RuntimeWorkbookCellValue[],
+  spec: unknown,
+): any[] {
+  if (!Array.isArray(workbook) || workbook.length === 0 || !Array.isArray(values1D)) return workbook;
+  if (dataRect.c1 < dataRect.c0 || dataRect.r1 < dataRect.r0) return workbook;
+
+  const sheet = workbook[0];
+  if (!sheet || typeof sheet !== "object") return workbook;
+
+  const normalizedSpec = spec && typeof spec === "object"
+    ? normalizeSpecDataTypeMetadata(spec as any)
+    : null;
+  const cellRefs = buildCellRefsForValues(dataRect, normalizedSpec, values1D.length);
+  if (cellRefs.length !== values1D.length) return workbook;
+
+  const rowCount = Math.max(Number(sheet.row) || 0, dataRect.r1 + 1, 1);
+  const colCount = Math.max(Number(sheet.column) || 0, dataRect.c1 + 1, 1);
+  const data = Array.isArray(sheet.data) ? sheet.data : [];
+  while (data.length < rowCount) data.push([]);
+
+  const celldata = Array.isArray(sheet.celldata) ? sheet.celldata.slice() : [];
+  const celldataIndex = buildCelldataIndex(celldata);
+
+  for (let index = 0; index < cellRefs.length; index += 1) {
+    const raw = values1D[index];
+    if (isBlankSummaryPreviewValue(raw)) continue;
+
+    const { r, c } = cellRefs[index];
+    if (r < 0 || c < 0) continue;
+    data[r] = Array.isArray(data[r]) ? data[r] : [];
+
+    const key = `${r}:${c}`;
+    const existingCelldataIndex = celldataIndex.get(key);
+    const existingCelldata = existingCelldataIndex == null ? null : celldata[existingCelldataIndex]?.v;
+    const existing = data[r][c] ?? existingCelldata ?? null;
+    const dataType = normalizedSpec ? getCellDataType(normalizedSpec, dataRect, r, c) : undefined;
+    const nextCell = buildSummaryPreviewCell(existing, raw, dataType);
+
+    data[r][c] = nextCell;
+    upsertSummaryPreviewCelldata(celldata, celldataIndex, r, c, nextCell);
+  }
+
+  sheet.id = String(sheet.id ?? sheet.index ?? "sheet-1");
+  sheet.index = sheet.index ?? sheet.id;
+  sheet.name = sheet.name ?? "Sheet1";
+  sheet.row = rowCount;
+  sheet.column = colCount;
+  sheet.data = data;
+  sheet.celldata = celldata;
+
+  recalculateSimpleNumericFormulas(workbook);
+  return workbook;
+}
+
+function normalizeWorkbookValues(values: unknown[]): RuntimeWorkbookCellValue[] {
   return values.map((value) => {
     if (value == null) return null;
     if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") return value;
@@ -1131,47 +1263,88 @@ function normalizeWorkbookValues(values: unknown[]): WorkbookCellValue[] {
   });
 }
 
-function applySummaryTableCellsToSheet(
-  sheet: any,
-  dataRect: ReportRect,
-  cells: WorkAssignmentBasicSummaryTableCellValueDto[],
-  spec?: any,
-) {
-  const cellRefs = buildCellRefsForValues(dataRect, spec, null);
-  if (!Array.isArray(cells) || cells.length === 0 || cellRefs.length === 0) return;
+function buildSummaryPreviewCell(existing: any, raw: RuntimeWorkbookCellValue, dataType?: string) {
+  const displayValue = Array.isArray(raw) ? raw.join("; ") : String(raw);
+  const base = existing && typeof existing === "object" && !Array.isArray(existing)
+    ? { ...existing }
+    : {};
+  const numeric = dataType === "NUMBER" ? parseSummaryPreviewNumber(raw) : null;
 
-  const grid: any[][] = Array.isArray(sheet?.data) ? sheet.data : (sheet.data = []);
-
-  for (const cellValue of cells) {
-    const index = typeof cellValue.index === "number" ? cellValue.index : -1;
-    const ref = index >= 0 ? cellRefs[index] : null;
-    const value = coerceSummaryWorkbookValue(cellValue);
-    if (!ref || value == null) continue;
-
-    grid[ref.r] = Array.isArray(grid[ref.r]) ? grid[ref.r] : (grid[ref.r] = []);
-    const cell = grid[ref.r][ref.c];
-    const displayValue = cellValue.displayValue ?? formatWorkbookDisplayValue(value);
-
-    if (cell && typeof cell === "object") {
-      grid[ref.r][ref.c] = { ...cell, v: displayValue, m: displayValue };
-    } else {
-      grid[ref.r][ref.c] = { v: displayValue, m: displayValue };
-    }
+  if (numeric != null) {
+    return {
+      ...base,
+      v: numeric,
+      m: String(numeric),
+      ct: withSummaryPreviewNumberFormat(base.ct),
+    };
   }
+
+  return {
+    ...base,
+    v: displayValue,
+    m: displayValue,
+  };
 }
 
-function coerceSummaryWorkbookValue(
-  cell: WorkAssignmentBasicSummaryTableCellValueDto,
-): WorkbookCellValue {
-  const value = cell.value ?? cell.displayValue ?? null;
-  if (value == null) return null;
-  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") return value;
-  if (Array.isArray(value)) return value.map((item) => String(item));
-  return String(value);
+function buildCelldataIndex(celldata: any[]) {
+  const index = new Map<string, number>();
+  for (let itemIndex = 0; itemIndex < celldata.length; itemIndex += 1) {
+    const item = celldata[itemIndex];
+    const r = Math.floor(Number(item?.r));
+    const c = Math.floor(Number(item?.c));
+    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) continue;
+    index.set(`${r}:${c}`, itemIndex);
+  }
+  return index;
 }
 
-function formatWorkbookDisplayValue(value: WorkbookCellValue) {
-  return Array.isArray(value) ? value.join("; ") : String(value);
+function upsertSummaryPreviewCelldata(
+  celldata: any[],
+  celldataIndex: Map<string, number>,
+  r: number,
+  c: number,
+  cell: any,
+) {
+  const key = `${r}:${c}`;
+  const existingIndex = celldataIndex.get(key);
+  const nextItem = { r, c, v: cell };
+
+  if (existingIndex == null) {
+    celldataIndex.set(key, celldata.length);
+    celldata.push(nextItem);
+    return;
+  }
+
+  celldata[existingIndex] = nextItem;
+}
+
+function isBlankSummaryPreviewValue(value: RuntimeWorkbookCellValue | undefined) {
+  return value == null ||
+    value === "" ||
+    (typeof value === "string" && value.trim() === "") ||
+    (Array.isArray(value) && value.length === 0);
+}
+
+function parseSummaryPreviewNumber(value: RuntimeWorkbookCellValue) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+
+  const text = value.trim();
+  if (!text) return null;
+
+  const normalized = text.replace(/\s/g, "").replace(/,/g, "");
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function withSummaryPreviewNumberFormat(value: any) {
+  const ct = value && typeof value === "object" && !Array.isArray(value)
+    ? { ...value }
+    : {};
+  delete ct.s;
+  if (String(ct.fa ?? "").trim() === "@") delete ct.fa;
+  ct.t = "n";
+  return ct;
 }
 
 function formatPeriod(periodKey?: string | null, periodInstanceKey?: string | null) {

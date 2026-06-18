@@ -381,7 +381,6 @@ function toDetailDialogValue(x: WorkAssignmentResponse): AssignmentCreateValue {
 
     description: draft.description ?? "",
     isActive: draft.isActive,
-    allowUserCreatedReports: draft.allowUserCreatedReports ?? true,
   };
 }
 
@@ -717,37 +716,38 @@ const WorkAssignTab: React.FC<Props> = ({
     setCreateOpen(true);
   }, [blockDrillMutation, isWorkOwner]);
 
-  const handleSubmitCreate = async () => {
+  const handleSubmitCreate = async (nextValue?: AssignmentCreateValue) => {
     if (blockDrillMutation()) return;
 
-    const mustChooseParent = !isWorkOwner || createValue.createMode === "child";
-    const assignmentName = createValue.name?.trim() ?? "";
+    const submitValue = nextValue ?? createValue;
+    const mustChooseParent = !isWorkOwner || submitValue.createMode === "child";
+    const assignmentName = submitValue.name?.trim() ?? "";
 
     if (!assignmentName) {
       showMessage("Bắt buộc nhập tên công việc được giao.");
       return;
     }
 
-    if (!createValue.dynamicFormTemplateId) {
+    if (!submitValue.dynamicFormTemplateId) {
       showMessage("Bắt buộc chọn biểu mẫu động.");
       return;
     }
 
-    if ((createValue.assigneeUnitIds ?? []).length === 0 && (createValue.assigneeUserIds ?? []).length === 0) {
+    if ((submitValue.assigneeUnitIds ?? []).length === 0 && (submitValue.assigneeUserIds ?? []).length === 0) {
       showMessage("Bắt buộc chọn ít nhất 1 đơn vị hoặc tài khoản giao việc/phối hợp.");
       return;
     }
 
     const workStartDay = toDayKey(workStartDate);
     const workEndDay = toDayKey(workEndDate);
-    const startDay = toDayKey(createValue.startDate);
-    const completedDay = toDayKey(createValue.completedDate);
-    const dueDay = toDayKey(createValue.dueAtUtc);
-    const isOnceAssignment = createValue.assignmentType === "ONCE";
-    const selectedParentCandidate = parentCandidates.find((x) => x.id === createValue.parentAssignmentId) ?? null;
+    const startDay = toDayKey(submitValue.startDate);
+    const completedDay = toDayKey(submitValue.completedDate);
+    const dueDay = toDayKey(submitValue.dueAtUtc);
+    const isOnceAssignment = submitValue.assignmentType === "ONCE";
+    const selectedParentCandidate = parentCandidates.find((x) => x.id === submitValue.parentAssignmentId) ?? null;
     const inheritedAssignmentDueDay = resolveInheritedAssignmentDueDayKey(selectedParentCandidate, workEndDay);
     const assignmentDueDay = isOnceAssignment ? inheritedAssignmentDueDay : completedDay;
-    const scheduleStartDay = toDayKey(createValue.schedule?.startDate);
+    const scheduleStartDay = toDayKey(submitValue.schedule?.startDate);
 
     if (workStartDay && startDay && startDay < workStartDay) {
       showMessage("Ngày bắt đầu nhiệm vụ không được trước ngày bắt đầu công việc.");
@@ -774,12 +774,12 @@ const WorkAssignTab: React.FC<Props> = ({
       return;
     }
 
-    if (mustChooseParent && !createValue.parentAssignmentId) {
+    if (mustChooseParent && !submitValue.parentAssignmentId) {
       showMessage("Bắt buộc chọn công việc hợp lệ.");
       return;
     }
 
-    if (isOnceAssignment && !createValue.dueAtUtc) {
+    if (isOnceAssignment && !submitValue.dueAtUtc) {
       showMessage("Nhiệm vụ giao một lần bắt buộc phải có hạn nộp báo cáo.");
       return;
     }
@@ -806,12 +806,12 @@ const WorkAssignTab: React.FC<Props> = ({
       }
     }
 
-    if (createValue.assignmentType === "PERIODIC_REPORT" && !createValue.schedule) {
+    if (submitValue.assignmentType === "PERIODIC_REPORT" && !submitValue.schedule) {
       showMessage("Công việc giao định kỳ bắt buộc phải có cấu hình lịch.");
       return;
     }
 
-    if (createValue.assignmentType === "PERIODIC_REPORT" && scheduleStartDay) {
+    if (submitValue.assignmentType === "PERIODIC_REPORT" && scheduleStartDay) {
       const minScheduleStartDay = startDay || workStartDay;
       const maxScheduleStartDay = assignmentDueDay || workEndDay;
       if (minScheduleStartDay && scheduleStartDay < minScheduleStartDay) {
@@ -831,26 +831,25 @@ const WorkAssignTab: React.FC<Props> = ({
         body: {
           name: assignmentName,
           parentAssignmentId:
-            createValue.createMode === "root" && isWorkOwner
+            submitValue.createMode === "root" && isWorkOwner
               ? null
-              : createValue.parentAssignmentId,
-          dynamicFormTemplateId: createValue.dynamicFormTemplateId,
-          dynamicFormDataSourceRulesJson: createValue.dynamicFormDataSourceRulesJson ?? null,
-          autoApproveConditionJson: createValue.autoApproveConditionJson ?? null,
-          assignmentType: createValue.assignmentType,
-          aggregationType: createValue.aggregationType,
-          startDate: createValue.startDate ?? null,
-          dueDate: createValue.assignmentType === "ONCE" ? null : createValue.completedDate ?? null,
+              : submitValue.parentAssignmentId,
+          dynamicFormTemplateId: submitValue.dynamicFormTemplateId,
+          dynamicFormDataSourceRulesJson: submitValue.dynamicFormDataSourceRulesJson ?? null,
+          autoApproveConditionJson: submitValue.autoApproveConditionJson ?? null,
+          assignmentType: submitValue.assignmentType,
+          aggregationType: submitValue.aggregationType,
+          startDate: submitValue.startDate ?? null,
+          dueDate: submitValue.assignmentType === "ONCE" ? null : submitValue.completedDate ?? null,
           completedDate: null,
-          assigneeUserIds: createValue.assigneeUserIds ?? [],
-          assigneeUnitIds: createValue.assigneeUnitIds,
-          leaderWatcherUserIds: createValue.leaderWatcherUserIds,
-          description: createValue.description?.trim() || null,
-          isActive: createValue.isActive,
-          allowUserCreatedReports: true,
-          dueAtUtc: createValue.assignmentType === "ONCE" ? createValue.dueAtUtc ?? null : null,
+          assigneeUserIds: submitValue.assigneeUserIds ?? [],
+          assigneeUnitIds: submitValue.assigneeUnitIds,
+          leaderWatcherUserIds: submitValue.leaderWatcherUserIds,
+          description: submitValue.description?.trim() || null,
+          isActive: submitValue.isActive,
+          dueAtUtc: submitValue.assignmentType === "ONCE" ? submitValue.dueAtUtc ?? null : null,
           schedule:
-            createValue.assignmentType === "PERIODIC_REPORT" ? createValue.schedule : null,
+            submitValue.assignmentType === "PERIODIC_REPORT" ? submitValue.schedule : null,
         },
       }).unwrap();
 
@@ -1380,6 +1379,7 @@ const WorkAssignTab: React.FC<Props> = ({
         ) : section === "NOTIFICATIONS" ? (
           <WorkAssignmentNotificationTab
             workId={workId}
+            workType={workType}
             focusedAssignmentId={queryDetailAssignmentId || null}
             onClearAssignmentFocus={clearAssignmentFocus}
             onOpenAssignment={openAssignmentDetail}

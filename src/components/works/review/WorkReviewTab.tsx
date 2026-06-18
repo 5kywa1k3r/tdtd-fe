@@ -786,7 +786,12 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
         sortable: false,
         render: (row) => (
           <Tooltip title={uiText(UITextKey.TextXemDanhSachReview)}>
-            <IconButton size="small" onClick={() => void openPeriods(row)}>
+            <IconButton
+              data-testid="review-summary-open-periods-button"
+              data-assignment-id={row.assignmentId || undefined}
+              size="small"
+              onClick={() => void openPeriods(row)}
+            >
               <VisibilityOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -877,6 +882,8 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
             <Tooltip title={row.reportId ? "Xem báo cáo" : "Kỳ chưa có báo cáo"}>
               <span>
                 <IconButton
+                  data-testid="review-report-preview-button"
+                  data-report-id={row.reportId || undefined}
                   size="small"
                   onClick={() => row.reportId && setPreviewReportId(row.reportId)}
                   disabled={!row.reportId}

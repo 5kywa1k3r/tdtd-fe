@@ -92,6 +92,7 @@ export const dynamicExcelApi = baseApi.injectEndpoints({
         method: "GET",
         params: year ? { year } : undefined,
       }),
+      providesTags: [{ type: "DynamicExcel", id: "NEXT_CODE" }],
     }),
 
     createDynamicExcel: b.mutation<DynamicExcelDetail, CreateDynamicExcelReq>({
@@ -100,7 +101,10 @@ export const dynamicExcelApi = baseApi.injectEndpoints({
         method: "POST",
         data,
       }),
-      invalidatesTags: [{ type: "DynamicExcel", id: "SEARCH" }],
+      invalidatesTags: [
+        { type: "DynamicExcel", id: "SEARCH" },
+        { type: "DynamicExcel", id: "NEXT_CODE" },
+      ],
     }),
 
     updateDynamicExcel: b.mutation<DynamicExcelDetail, { id: string; body: UpdateDynamicExcelReq }>({

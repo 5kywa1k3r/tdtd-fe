@@ -315,6 +315,7 @@ function ActionStrip(props: {
           <Tooltip key={action.key} title={action.tooltip} arrow>
             <span>
               <IconButton
+                data-testid={`aggregate-action-${action.key}`}
                 size="small"
                 color={action.color ?? "default"}
                 onClick={action.onClick}
@@ -329,6 +330,7 @@ function ActionStrip(props: {
       })}
       {primaryLabel && onPrimary && (
         <Button
+          data-testid="aggregate-primary-action-button"
           size="small"
           variant="contained"
           startIcon={<SearchOutlinedIcon fontSize="small" />}

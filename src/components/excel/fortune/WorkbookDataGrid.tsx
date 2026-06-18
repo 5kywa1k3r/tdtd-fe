@@ -46,7 +46,7 @@ import type {
   HeaderSpec,
 } from "./types";
 import {
-  isInputDataCell,
+  createInputDataCellChecker,
   getSpecialRanges,
   SPECIAL_RANGE_COLORS,
   type DynamicExcelInputCellRef,
@@ -56,6 +56,11 @@ import LazyFortuneWorkbook from "./LazyFortuneWorkbook";
 import { useFortuneWheelScrollFix } from "./wheelScroll";
 import { GuideLegend, GuideLegendChip, GuideToggleButton } from "./PreviewGuideControls";
 import { DESIGNER_LIMITS } from "./validate";
+import {
+  normalizeWorkbookNumberInputCells,
+  recalculateSimpleNumericFormulas,
+  stripEmptyNumberInputCellMetadata,
+} from "./workbookRuntime";
 import {
   useLazySearchPickerPositionsQuery,
   useLazySearchPickerLabelEnumOptionsQuery,
@@ -100,6 +105,7 @@ export interface WorkbookDataGridProps {
   changeCommitMode?: WorkbookDataGridChangeCommitMode;
   saveLabel?: string;
   backLabel?: string;
+  surfaceVariant?: "card" | "flat";
   excludedDataColumns?: number[];
 
   onBack?: () => void;
@@ -109,6 +115,9 @@ export interface WorkbookDataGridProps {
 
 const EMPTY_PREVIEW_HIGHLIGHTS: WorkbookPreviewHighlight[] = [];
 const LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT = DESIGNER_LIMITS.MAX_TABLE_STATISTIC_INPUT_CELLS;
+const PREVIEW_SUMMARY_CELL_SCAN_LIMIT = DESIGNER_LIMITS.MAX_SHEET_CELLS;
+const INLINE_WORKBOOK_ZOOM_RATIO = 0.5;
+const FULLSCREEN_WORKBOOK_ZOOM_RATIO = 0.8;
 
 type WorkbookPreviewSummary = {
   hasPreview: boolean;
@@ -143,6 +152,7 @@ function WorkbookDataGrid(
     changeCommitMode = "immediate",
     saveLabel = "Lưu draft",
     backLabel = "Quay lại",
+    surfaceVariant = "card",
 
     excludedDataColumns = [],
 
@@ -152,24 +162,33 @@ function WorkbookDataGrid(
   } = props;
 
   const isView = mode === "view" || readOnly;
+  const shouldUseRuntimeWorkbook = !isView;
   const previewSummary = React.useMemo(
     () => buildWorkbookPreviewSummary(initialSpec, dataRect, previewHighlights),
     [initialSpec, dataRect, previewHighlights],
   );
-  const [previewOverlayEnabled, setPreviewOverlayEnabled] = React.useState(true);
+  const [previewOverlayEnabled, setPreviewOverlayEnabled] = React.useState(false);
   const effectivePreviewOverlayEnabled = previewOverlayEnabled && previewSummary.hasPreview;
   const togglePreviewOverlay = React.useCallback(() => {
     setPreviewOverlayEnabled((value) => !value);
   }, []);
 
   const workbookRef = React.useRef<Sheet[]>([]);
+  const fortuneWorkbookRef = React.useRef<any>(null);
   const baselineWorkbookRef = React.useRef<Sheet[]>([]);
   const previewBackupRef = React.useRef<Map<string, Backup>>(EMPTY_PREVIEW_BACKUP);
   const [workbookData, setWorkbookData] = React.useState<Sheet[]>(() => {
-    const raw = normalizeWorkbookForGrid(initialWorkbookData, dataRect);
+    const raw = normalizeWorkbookForGridMode(initialWorkbookData, dataRect, initialSpec, shouldUseRuntimeWorkbook);
     workbookRef.current = raw;
-    baselineWorkbookRef.current = cloneDeepJson(raw);
-    const rendered = buildGridWorkbook(raw, dataRect, initialSpec, effectivePreviewOverlayEnabled, previewHighlights);
+    baselineWorkbookRef.current = shouldUseRuntimeWorkbook ? cloneDeepJson(raw) : [];
+    const rendered = buildGridWorkbook(
+      raw,
+      dataRect,
+      initialSpec,
+      effectivePreviewOverlayEnabled,
+      previewHighlights,
+      { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook },
+    );
     previewBackupRef.current = rendered.previewBackup;
     return rendered.workbookData;
   });
@@ -177,6 +196,9 @@ function WorkbookDataGrid(
   const [shouldRenderWorkbook, setShouldRenderWorkbook] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [fullscreenOpen, setFullscreenOpen] = React.useState(false);
+  const workbookZoomRatio = fullscreenOpen || embeddedFullscreen
+    ? FULLSCREEN_WORKBOOK_ZOOM_RATIO
+    : INLINE_WORKBOOK_ZOOM_RATIO;
   const sheetWheelRef = useFortuneWheelScrollFix<HTMLDivElement>();
 
   const renderWorkbookForState = React.useCallback(
@@ -187,18 +209,31 @@ function WorkbookDataGrid(
         initialSpec,
         effectivePreviewOverlayEnabled,
         previewHighlights,
+        { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook },
       );
       previewBackupRef.current = rendered.previewBackup;
       return rendered.workbookData;
     },
-    [dataRect, effectivePreviewOverlayEnabled, initialSpec, previewHighlights],
+    [dataRect, effectivePreviewOverlayEnabled, initialSpec, previewHighlights, shouldUseRuntimeWorkbook],
   );
 
+  const getLiveWorkbookData = React.useCallback(() => {
+    try {
+      const live = fortuneWorkbookRef.current?.getAllSheets?.();
+      if (Array.isArray(live) && live.length > 0) return cloneDeepJson(stripWorkbookZoom(live as Sheet[]));
+    } catch {
+      // Fortune may be between mounts while switching inline/fullscreen surfaces.
+    }
+
+    return Array.isArray(workbookRef.current) && workbookRef.current.length > 0
+      ? workbookRef.current
+      : workbookData;
+  }, [workbookData]);
+
   const buildCurrentSavePayload = React.useCallback(() => {
-    const latestRaw =
-      Array.isArray(workbookRef.current) && workbookRef.current.length > 0
-        ? workbookRef.current
-        : workbookData;
+    if (isView) return null;
+
+    const latestRaw = getLiveWorkbookData();
     const sanitized = sanitizeRuntimeWorkbookData(
       latestRaw,
       baselineWorkbookRef.current,
@@ -210,7 +245,7 @@ function WorkbookDataGrid(
     );
     workbookRef.current = sanitized;
     return buildWorkbookSavePayload(sanitized, dataRect, excludedDataColumns, initialSpec);
-  }, [dataRect, excludedDataColumns, initialSpec, previewHighlights, workbookData]);
+  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, previewHighlights]);
 
   const commitChanges = React.useCallback(() => {
     const payload = buildCurrentSavePayload();
@@ -221,26 +256,39 @@ function WorkbookDataGrid(
   React.useImperativeHandle(ref, () => ({ commitChanges }), [commitChanges]);
 
   React.useEffect(() => {
-    const raw = normalizeWorkbookForGrid(initialWorkbookData, dataRect);
+    const raw = normalizeWorkbookForGridMode(initialWorkbookData, dataRect, initialSpec, shouldUseRuntimeWorkbook);
     workbookRef.current = raw;
-    baselineWorkbookRef.current = cloneDeepJson(raw);
+    baselineWorkbookRef.current = shouldUseRuntimeWorkbook ? cloneDeepJson(raw) : [];
     const rendered = buildGridWorkbook(
       raw,
       dataRect,
       initialSpec,
       effectivePreviewOverlayEnabled,
       previewHighlights,
+      { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook },
     );
     previewBackupRef.current = rendered.previewBackup;
     setWorkbookData(rendered.workbookData);
     setWorkbookKey((x) => x + 1);
     setError(null);
-  }, [dataRect, initialSpec, initialWorkbookData]);
+  }, [dataRect, initialSpec, initialWorkbookData, shouldUseRuntimeWorkbook]);
 
   React.useEffect(() => {
     setWorkbookData(renderWorkbookForState(workbookRef.current));
     setWorkbookKey((x) => x + 1);
   }, [effectivePreviewOverlayEnabled, previewHighlights]);
+
+  React.useEffect(() => {
+    if (!fullscreenOpen && !embeddedFullscreen) return undefined;
+
+    const notifyResize = () => window.dispatchEvent(new Event("resize"));
+    const frame = window.requestAnimationFrame(notifyResize);
+    const timeout = window.setTimeout(notifyResize, 80);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [embeddedFullscreen, fullscreenOpen]);
 
   React.useEffect(() => {
     setShouldRenderWorkbook(false);
@@ -252,8 +300,14 @@ function WorkbookDataGrid(
   }, [workbookKey]);
 
   const settings = React.useMemo(() => {
+    const normalizedSpec = isHeaderSpec(initialSpec) ? normalizeSpecDataTypeMetadata(initialSpec) : null;
+    const excludedColumnSet = buildExcludedColumnSet(excludedDataColumns);
+    const inputCellChecker = normalizedSpec
+      ? createInputDataCellChecker(dataRect, normalizedSpec)
+      : null;
+
     return {
-      data: workbookData as Sheet[],
+      data: withWorkbookZoom(workbookData, workbookZoomRatio) as Sheet[],
       row: workbookData?.[0]?.row,
       column: workbookData?.[0]?.column,
       allowEdit: !isView && (!inlineReadOnly || fullscreenOpen || embeddedFullscreen),
@@ -265,19 +319,21 @@ function WorkbookDataGrid(
             cellInfo,
             renderCtx,
             dataRect,
-            excludedDataColumns,
-            initialSpec,
+            excludedColumnSet,
+            normalizedSpec,
+            inputCellChecker,
           ),
       },
       onChange: (data: any) => {
         if (isView) return;
         if (Array.isArray(data)) {
           if (changeCommitMode === "manual") {
-            workbookRef.current = data as Sheet[];
+            workbookRef.current = stripWorkbookZoom(data as Sheet[]);
             return;
           }
+          const baseWorkbookData = cloneDeepJson(stripWorkbookZoom(data as Sheet[]));
           const nextWorkbookData = sanitizeRuntimeWorkbookData(
-            data as Sheet[],
+            baseWorkbookData,
             baselineWorkbookRef.current,
             dataRect,
             excludedDataColumns,
@@ -307,11 +363,12 @@ function WorkbookDataGrid(
     onChangeRaw,
     previewHighlights,
     renderWorkbookForState,
+    workbookZoomRatio,
   ]);
 
   const enumCells = React.useMemo(
-    () => buildEnumCellOptions(workbookData, dataRect, excludedDataColumns, initialSpec),
-    [workbookData, dataRect, excludedDataColumns, initialSpec],
+    () => (isView ? [] : buildEnumCellOptions(workbookData, dataRect, excludedDataColumns, initialSpec)),
+    [workbookData, dataRect, excludedDataColumns, initialSpec, isView],
   );
   const valueSourceOptions = useWorkbookValueSourceOptions(enumCells);
   const enumEditorDisabled = isView || (inlineReadOnly && !fullscreenOpen && !embeddedFullscreen);
@@ -387,75 +444,153 @@ function WorkbookDataGrid(
   }, [buildCurrentSavePayload, onSave, renderWorkbookForState]);
 
   const handleOpenFullscreen = React.useCallback(() => {
+    if (isView) {
+      setFullscreenOpen(true);
+      return;
+    }
+
+    const latest = sanitizeRuntimeWorkbookData(
+      getLiveWorkbookData(),
+      baselineWorkbookRef.current,
+      dataRect,
+      excludedDataColumns,
+      initialSpec,
+      previewBackupRef.current,
+      previewHighlights,
+    );
+    workbookRef.current = latest;
+    setWorkbookData(renderWorkbookForState(latest));
     setFullscreenOpen(true);
     setWorkbookKey((x) => x + 1);
-  }, []);
+  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, previewHighlights, renderWorkbookForState]);
 
   const handleCloseFullscreen = React.useCallback(() => {
+    if (isView) {
+      setFullscreenOpen(false);
+      return;
+    }
+
+    const latest = sanitizeRuntimeWorkbookData(
+      getLiveWorkbookData(),
+      baselineWorkbookRef.current,
+      dataRect,
+      excludedDataColumns,
+      initialSpec,
+      previewBackupRef.current,
+      previewHighlights,
+    );
+    workbookRef.current = latest;
+    setWorkbookData(renderWorkbookForState(latest));
     setFullscreenOpen(false);
     setWorkbookKey((x) => x + 1);
-  }, []);
+  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, previewHighlights, renderWorkbookForState]);
 
-  const renderWorkbookSurface = React.useCallback((fullscreen = false) => (
-    <Box
-      ref={sheetWheelRef}
-      className="tdtdSheet"
-      sx={{
-        width: "100%",
-        ...(embeddedFullscreen
-          ? { flex: "1 1 auto", minHeight: 0 }
-          : {
-              height: fullscreen ? "calc(100dvh - 90px)" : 350,
-              minHeight: fullscreen ? "calc(100dvh - 90px)" : 350,
-            }),
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: fullscreen || embeddedFullscreen ? 0 : 2,
-        "& .fortune-sheettab-button": {
-          display: "none !important",
-        },
-        "& .fortune-zoom-container": {
-          display: "none !important",
-        },
-        "& #luckysheet-bottom-add-row, & #luckysheet-bottom-add-row-input, & #luckysheet-bottom-return-top": {
-          display: "none !important",
-        },
-      }}
-    >
-      {shouldRenderWorkbook ? (
-        <LazyFortuneWorkbook
-          key={workbookKey}
-          {...settings}
-          fallback={(
-            <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
-              <CircularProgress size={24} />
-            </Stack>
-          )}
-        />
-      ) : (
-        <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
-          <CircularProgress size={24} />
-        </Stack>
-      )}
-    </Box>
-  ), [embeddedFullscreen, settings, shouldRenderWorkbook, workbookKey]);
+  const renderWorkbookSurface = React.useCallback((fullscreen = false) => {
+    return (
+      <Box
+        data-testid={fullscreen || embeddedFullscreen ? "workbook-grid-surface-fullscreen" : "workbook-grid-surface-inline"}
+        ref={sheetWheelRef}
+        className="tdtdSheet"
+        sx={{
+          width: "100%",
+          position: "relative",
+          ...(embeddedFullscreen || fullscreen
+            ? { flex: "1 1 auto", height: "100%", minHeight: 0 }
+            : {
+                height: 350,
+                minHeight: 350,
+              }),
+          overflow: "hidden",
+          border: fullscreen ? 0 : "1px solid rgba(255,255,255,0.12)",
+          borderRadius: fullscreen || embeddedFullscreen ? 0 : 2,
+          "& .fortune-sheettab-button": {
+            display: "none !important",
+          },
+          "& .fortune-sheettab-container-c": {
+            display: "none !important",
+          },
+          "& .fortune-zoom-container": {
+            display: "none !important",
+          },
+          "& #luckysheet-bottom-add-row, & #luckysheet-bottom-add-row-input, & #luckysheet-bottom-return-top": {
+            display: "none !important",
+          },
+        }}
+      >
+        {shouldRenderWorkbook ? (
+          <LazyFortuneWorkbook
+            ref={fortuneWorkbookRef}
+            key={workbookKey}
+            {...settings}
+            fallback={(
+              <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
+                <CircularProgress size={24} />
+              </Stack>
+            )}
+          />
+        ) : (
+          <Stack sx={{ height: "100%" }} alignItems="center" justifyContent="center">
+            <CircularProgress size={24} />
+          </Stack>
+        )}
+      </Box>
+    );
+  }, [embeddedFullscreen, settings, shouldRenderWorkbook, workbookKey]);
 
   return (
-    <Stack spacing={embeddedFullscreen ? 1 : 2} sx={{ flex: 1, minHeight: 0, height: embeddedFullscreen ? "100%" : undefined }}>
+    <Stack
+      data-testid="workbook-data-grid"
+      data-mode={isView ? "view" : "edit"}
+      spacing={embeddedFullscreen ? 1 : 2}
+      sx={{ flex: 1, minHeight: 0, width: "100%", height: embeddedFullscreen ? "100%" : undefined }}
+    >
       {error && <Alert severity="error">{error}</Alert>}
 
-      <Card
-        variant="outlined"
+      <Box
+        component={embeddedFullscreen ? "div" : Card}
+        {...(!embeddedFullscreen
+          ? {
+              variant: surfaceVariant === "flat" ? "elevation" : "outlined",
+              elevation: surfaceVariant === "flat" ? 0 : undefined,
+            }
+          : {})}
         sx={{
           flex: 1,
           minHeight: embeddedFullscreen ? 0 : 350,
           height: embeddedFullscreen ? "100%" : undefined,
           display: "flex",
           flexDirection: "column",
+          ...(embeddedFullscreen
+            ? {
+                bgcolor: "transparent",
+                border: 0,
+                borderRadius: 0,
+                boxShadow: "none",
+              }
+            : surfaceVariant === "flat"
+              ? {
+                  bgcolor: "transparent",
+                  boxShadow: "none",
+                }
+              : null),
         }}
       >
-        <CardContent
-          sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1, minHeight: 0, height: "100%" }}
+        <Box
+          component={embeddedFullscreen ? "div" : CardContent}
+          sx={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            gap: embeddedFullscreen ? 0.75 : 1,
+            minHeight: 0,
+            height: "100%",
+            ...(embeddedFullscreen || surfaceVariant === "flat"
+              ? {
+                  p: 0,
+                  "&:last-child": { pb: 0 },
+                }
+              : null),
+          }}
         >
           <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
             <WorkbookPreviewLegend summary={previewSummary} visible={effectivePreviewOverlayEnabled} />
@@ -467,7 +602,12 @@ function WorkbookDataGrid(
               />
               {!embeddedFullscreen && (
                 <Tooltip title="Mở toàn màn hình">
-                  <IconButton size="small" onClick={handleOpenFullscreen} aria-label="Mở toàn màn hình">
+                  <IconButton
+                    data-testid="workbook-open-fullscreen"
+                    size="small"
+                    onClick={handleOpenFullscreen}
+                    aria-label="Mở toàn màn hình"
+                  >
                     <FullscreenOutlinedIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
@@ -510,12 +650,28 @@ function WorkbookDataGrid(
               </Button>
             </Box>
           )}
-        </CardContent>
-      </Card>
+        </Box>
+      </Box>
 
       {!embeddedFullscreen && (
-      <Dialog fullScreen open={fullscreenOpen} onClose={handleCloseFullscreen}>
-        <DialogTitle component="div" sx={{ py: 1, pr: 1.25 }}>
+      <Dialog
+        fullScreen
+        open={fullscreenOpen}
+        onClose={handleCloseFullscreen}
+        PaperProps={{
+          sx: {
+            m: 0,
+            width: "100vw",
+            maxWidth: "100vw",
+            height: "100dvh",
+            maxHeight: "100dvh",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 0,
+          },
+        }}
+      >
+        <DialogTitle component="div" sx={{ py: 1, pr: 1.25, flex: "0 0 auto" }}>
           <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
             <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 800 }} noWrap>
@@ -540,14 +696,29 @@ function WorkbookDataGrid(
                 </Button>
               )}
               <Tooltip title="Đóng toàn màn hình">
-                <IconButton size="small" onClick={handleCloseFullscreen} aria-label="Đóng toàn màn hình">
+                <IconButton
+                  data-testid="workbook-close-fullscreen"
+                  size="small"
+                  onClick={handleCloseFullscreen}
+                  aria-label="Đóng toàn màn hình"
+                >
                   <CloseOutlinedIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
             </Stack>
           </Stack>
         </DialogTitle>
-        <DialogContent dividers sx={{ p: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <DialogContent
+          dividers
+          sx={{
+            p: 0,
+            display: "flex",
+            flexDirection: "column",
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
           {error && <Alert severity="error" sx={{ m: 1 }}>{error}</Alert>}
           {fullscreenOpen ? renderWorkbookSurface(true) : null}
         </DialogContent>
@@ -695,12 +866,26 @@ function buildWorkbookPreviewSummary(
 
   const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
   const specialRanges = getSpecialRanges(normalizedSpec);
+  const totalCells = getRectCellCount(dataRect);
+  if (totalCells > PREVIEW_SUMMARY_CELL_SCAN_LIMIT) {
+    return {
+      hasPreview: true,
+      hasSemanticWarning: specialRanges.length > 0,
+      specialRanges,
+      ignoreCells: 0,
+      inputCells: totalCells,
+      statisticsDisabled: totalCells > LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
+      statisticsInputCellLimit: LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
+    };
+  }
+
+  const isInputCell = createInputDataCellChecker(dataRect, normalizedSpec);
   let ignoreCells = 0;
   let inputCells = 0;
 
   for (let r = dataRect.r0; r <= dataRect.r1; r += 1) {
     for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
-      if (!isInputDataCell(normalizedSpec, dataRect, r, c)) continue;
+      if (!isInputCell(r, c)) continue;
       inputCells += 1;
       if (getCellDataType(normalizedSpec, dataRect, r, c) === "IGNORE") {
         ignoreCells += 1;
@@ -717,6 +902,13 @@ function buildWorkbookPreviewSummary(
     statisticsDisabled: inputCells > LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
     statisticsInputCellLimit: LARGE_TABLE_STATISTIC_INPUT_CELL_LIMIT,
   };
+}
+
+function getRectCellCount(rect: ReportRect) {
+  const rows = rect.r1 - rect.r0 + 1;
+  const cols = rect.c1 - rect.c0 + 1;
+  if (rows <= 0 || cols <= 0) return 0;
+  return rows * cols;
 }
 
 type EnumCellOption = {
@@ -893,6 +1085,7 @@ function buildEnumCellOptions(
   if (!isHeaderSpec(spec)) return [];
 
   const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
+  const isInputCell = createInputDataCellChecker(dataRect, normalizedSpec);
   const excluded = buildExcludedColumnSet(excludedDataColumns);
   const sheet = workbookData?.[0] as any;
   const grid: any[][] = Array.isArray(sheet?.data) ? sheet.data : [];
@@ -902,7 +1095,7 @@ function buildEnumCellOptions(
     const row = grid[r] ?? [];
     for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
       if (excluded.has(c)) continue;
-      if (!isInputDataCell(normalizedSpec, dataRect, r, c)) continue;
+      if (!isInputCell(r, c)) continue;
       const dataType = getCellDataType(normalizedSpec, dataRect, r, c);
       if (!isDynamicExcelEnumDataType(dataType)) continue;
 
@@ -972,22 +1165,22 @@ function renderMultiSelectChipsCell(
   cellInfo: FortuneCellRenderInfo,
   renderCtx: CanvasRenderingContext2D,
   dataRect: ReportRect,
-  excludedDataColumns: number[],
-  spec: HeaderSpec | null | undefined,
+  excludedColumns: ReadonlySet<number>,
+  spec: HeaderSpec | null,
+  isInputCell: ((r: number, c: number) => boolean) | null,
 ) {
-  if (!isHeaderSpec(spec)) return true;
+  if (!spec || !isInputCell) return true;
 
   const r = Number(cellInfo.row);
   const c = Number(cellInfo.column);
   if (!Number.isInteger(r) || !Number.isInteger(c)) return true;
   if (r < dataRect.r0 || r > dataRect.r1 || c < dataRect.c0 || c > dataRect.c1) return true;
-  if (buildExcludedColumnSet(excludedDataColumns).has(c)) return true;
+  if (excludedColumns.has(c)) return true;
 
-  const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
-  if (!isInputDataCell(normalizedSpec, dataRect, r, c)) return true;
-  if (getCellDataType(normalizedSpec, dataRect, r, c) !== "MULTI_SELECT") return true;
+  if (!isInputCell(r, c)) return true;
+  if (getCellDataType(spec, dataRect, r, c) !== "MULTI_SELECT") return true;
 
-  const options = getCellStringListOptions(normalizedSpec, dataRect, r, c);
+  const options = getCellStringListOptions(spec, dataRect, r, c);
   const selected = resolveStringListOptions(getWorkbookCellText(cell), options);
   if (selected.length === 0) return true;
 
@@ -1245,11 +1438,12 @@ function buildWorkbookSavePayload(
   excludedDataColumns: number[],
   spec: HeaderSpec | null | undefined,
 ): WorkbookDataGridSavePayload | null {
-  const normalized = normalizeWorkbookForGrid(workbookData, dataRect);
+  const normalized = normalizeRuntimeWorkbookForGrid(workbookData, dataRect, spec);
   const sheet = normalized?.[0];
   if (!sheet) return null;
   const extracted = extractTypedValues1D(sheet, dataRect, spec);
   const excluded = buildExcludedColumnSet(excludedDataColumns);
+  stripEmptyNumberInputCellMetadata(normalized, dataRect, spec);
 
   return {
     rawWorkbookData: normalized,
@@ -1273,7 +1467,7 @@ function sanitizeRuntimeWorkbookData(
   previewBackup: Map<string, Backup>,
   previewHighlights: WorkbookPreviewHighlight[],
 ) {
-  const normalized = normalizeWorkbookForGrid(editedWorkbookData, dataRect);
+  const normalized = normalizeRuntimeWorkbookForGrid(editedWorkbookData, dataRect, spec);
   const sheet = normalized[0] as any;
   if (!sheet) return normalized;
 
@@ -1288,8 +1482,8 @@ function restoreNonInputCells(
   excludedDataColumns: number[],
   spec: HeaderSpec | null | undefined,
 ) {
-  const edited = normalizeWorkbookForGrid(editedWorkbookData, dataRect);
-  const baseline = normalizeWorkbookForGrid(baselineWorkbookData, dataRect);
+  const edited = normalizeRuntimeWorkbookForGrid(editedWorkbookData, dataRect, spec);
+  const baseline = normalizeRuntimeWorkbookForGrid(baselineWorkbookData, dataRect, spec);
   const editedSheet = edited[0] as any;
   const baselineSheet = baseline[0] as any;
   if (!editedSheet || !baselineSheet) return edited;
@@ -1299,6 +1493,7 @@ function restoreNonInputCells(
   const cols = Math.max(getWorkbookColumnCount(edited), getWorkbookColumnCount(baseline));
   const excluded = buildExcludedColumnSet(excludedDataColumns);
   const normalizedSpec = isHeaderSpec(spec) ? normalizeSpecDataTypeMetadata(spec) : null;
+  const isInputCell = normalizedSpec ? createInputDataCellChecker(dataRect, normalizedSpec) : null;
 
   for (let r = 0; r < rows; r += 1) {
     for (let c = 0; c < cols; c += 1) {
@@ -1308,7 +1503,7 @@ function restoreNonInputCells(
         c >= dataRect.c0 &&
         c <= dataRect.c1 &&
         !excluded.has(c) &&
-        (!normalizedSpec || isInputDataCell(normalizedSpec, dataRect, r, c));
+        (!isInputCell || isInputCell(r, c));
 
       if (isEditableCell) continue;
       setWorkbookCell(
@@ -1432,7 +1627,45 @@ function normalizeWorkbookForGrid(workbookData: Sheet[] | undefined | null, data
     Number(dataRect?.c1 ?? -1) + 1,
   );
 
-  return cloneDeepJson(ensureWorkbookShape(workbookData ?? [], rows, cols)) as Sheet[];
+  return stripWorkbookZoom(cloneDeepJson(ensureWorkbookShape(workbookData ?? [], rows, cols)) as Sheet[]);
+}
+
+function normalizeRuntimeWorkbookForGrid(
+  workbookData: Sheet[] | undefined | null,
+  dataRect: ReportRect,
+  spec: HeaderSpec | null | undefined,
+) {
+  const normalized = normalizeWorkbookForGrid(workbookData, dataRect);
+  normalizeWorkbookNumberInputCells(normalized, dataRect, spec);
+  recalculateSimpleNumericFormulas(normalized);
+  return normalized as Sheet[];
+}
+
+function normalizeWorkbookForGridMode(
+  workbookData: Sheet[] | undefined | null,
+  dataRect: ReportRect,
+  spec: HeaderSpec | null | undefined,
+  useRuntimeWorkbook: boolean,
+) {
+  return useRuntimeWorkbook
+    ? normalizeRuntimeWorkbookForGrid(workbookData, dataRect, spec)
+    : normalizeWorkbookForGrid(workbookData, dataRect);
+}
+
+function withWorkbookZoom(workbookData: Sheet[], zoomRatio: number) {
+  return workbookData.map((sheet) =>
+    sheet && typeof sheet === "object"
+      ? { ...sheet, zoomRatio }
+      : sheet,
+  );
+}
+
+function stripWorkbookZoom(workbookData: Sheet[]) {
+  return workbookData.map((sheet) => {
+    if (!sheet || typeof sheet !== "object") return sheet;
+    const { zoomRatio: _zoomRatio, ...rest } = sheet as any;
+    return rest as Sheet;
+  });
 }
 
 function getWorkbookRowCount(workbookData: Sheet[] | undefined | null) {
@@ -1471,8 +1704,20 @@ function buildGridWorkbook(
   spec: unknown,
   markPreview: boolean,
   previewHighlights: WorkbookPreviewHighlight[],
+  options?: {
+    assumeNormalized?: boolean;
+    useRuntimeWorkbook?: boolean;
+  },
 ) {
-  const normalized = normalizeWorkbookForGrid(workbookData, dataRect);
+  const normalized =
+    options?.assumeNormalized && Array.isArray(workbookData)
+      ? workbookData
+      : normalizeWorkbookForGridMode(
+          workbookData,
+          dataRect,
+          isHeaderSpec(spec) ? spec : null,
+          options?.useRuntimeWorkbook ?? true,
+        );
   if (!markPreview) {
     return { workbookData: normalized, previewBackup: new Map<string, Backup>() };
   }
@@ -1515,9 +1760,10 @@ function markIgnoredCells(
   backup: Map<string, Backup>,
 ) {
   const normalizedSpec = normalizeSpecDataTypeMetadata(spec);
+  const isInputCell = createInputDataCellChecker(dataRect, normalizedSpec);
   for (let r = dataRect.r0; r <= dataRect.r1; r += 1) {
     for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
-      if (!isInputDataCell(normalizedSpec, dataRect, r, c)) continue;
+      if (!isInputCell(r, c)) continue;
       if (getCellDataType(normalizedSpec, dataRect, r, c) !== "IGNORE") continue;
       markRect(sheet, { r0: r, c0: c, r1: r, c1: c }, DATA_TYPE_COLORS.IGNORE, backup);
     }

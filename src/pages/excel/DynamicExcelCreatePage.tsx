@@ -8,7 +8,10 @@ export default function DynamicExcelCreatePage() {
   const [create] = useCreateDynamicExcelMutation();
 
   const year = new Date().getFullYear();
-  const nextCodeQ = useNextDynamicExcelCodeQuery({ year });
+  const nextCodeQ = useNextDynamicExcelCodeQuery(
+    { year },
+    { refetchOnMountOrArgChange: true },
+  );
   const code = nextCodeQ.data?.nextCode ?? "";
 
   return (
@@ -18,7 +21,7 @@ export default function DynamicExcelCreatePage() {
       onBack={() => navigate("/dynamic-excel")}
       onSaved={async (p) => {
         await create({
-          code: code || null,
+          code: null,
           name: p.name,
           tableMode: p.tableMode,
           contractVersion: p.contractVersion,

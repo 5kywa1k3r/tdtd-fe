@@ -122,7 +122,6 @@ export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
 
   description?: string | null;
   isActive: boolean;
-  allowUserCreatedReports?: boolean;
 
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -170,7 +169,6 @@ export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
 
   description?: string | null;
   isActive: boolean;
-  allowUserCreatedReports?: boolean;
 
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -210,7 +208,6 @@ export type SaveWorkAssignmentRequest = {
   leaderWatcherUserIds?: string[];
   description?: string | null;
   isActive?: boolean;
-  allowUserCreatedReports?: boolean;
 };
 
 export type UpdateWorkAssignmentDataSourceRulesRequest = {
@@ -272,7 +269,6 @@ export type AssignmentDraft = {
 
   description?: string | null;
   isActive: boolean;
-  allowUserCreatedReports?: boolean;
 
   progressStatus?: number;
   progressStatusUpdatedAtUtc?: string | null;
@@ -325,7 +321,6 @@ export function emptyAssignmentDraft(): AssignmentDraft {
     leaderWatcherRefs: [],
     description: "",
     isActive: true,
-    allowUserCreatedReports: true,
     progressStatus: 0,
     progressStatusUpdatedAtUtc: null,
     latestPeriodKey: null,
@@ -379,7 +374,6 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     leaderWatcherRefs: x.leaderWatchers ?? [],
     description: x.description ?? "",
     isActive: Boolean(x.isActive ?? true),
-    allowUserCreatedReports: Boolean(x.allowUserCreatedReports ?? true),
     progressStatus: x.progressStatus ?? 0,
     progressStatusUpdatedAtUtc: x.progressStatusUpdatedAtUtc ?? null,
     latestPeriodKey: x.latestPeriodKey ?? null,

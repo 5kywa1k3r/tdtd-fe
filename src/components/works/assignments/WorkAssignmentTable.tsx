@@ -220,7 +220,7 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
             <Tooltip
               title={
                 isRootAssignment(row)
-                  ? "Tổng hợp bảng từ các assignment đã giao"
+                  ? "Tổng hợp bảng từ các công việc đã giao hoặc phối hợp"
                   : uiText(UITextKey.TextTongHop)
               }
             >

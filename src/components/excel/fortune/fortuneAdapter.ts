@@ -132,22 +132,40 @@ export function applyValues1DToSheet(
     if (v == null) continue;
 
     const { r: rr, c: cc } = cellRefs[i];
+    const dataType = spec ? getCellDataType(spec, dataRect, rr, cc) : undefined;
 
     grid[rr] = Array.isArray(grid[rr]) ? grid[rr] : (grid[rr] = []);
     const cell = grid[rr][cc];
 
-    const displayValue = formatWorkbookCellDisplayValue(v);
-
+    const cellValue = buildWorkbookCellValue(v, dataType);
     if (cell && typeof cell === "object") {
-      grid[rr][cc] = { ...cell, v: displayValue, m: displayValue };
+      grid[rr][cc] = { ...cell, ...cellValue };
     } else {
-      grid[rr][cc] = { v: displayValue, m: displayValue };
+      grid[rr][cc] = cellValue;
     }
   }
 }
 
-function formatWorkbookCellDisplayValue(value: WorkbookCellValue) {
-  return Array.isArray(value) ? value.join("; ") : String(value);
+function buildWorkbookCellValue(value: WorkbookCellValue, dataType?: string) {
+  const displayValue = Array.isArray(value) ? value.join("; ") : String(value);
+  if (dataType !== "NUMBER") return { v: displayValue, m: displayValue };
+
+  const numeric = parseNumberLike(value) ?? parseNumberLike(displayValue);
+  const ct = { t: "n" };
+  return numeric == null
+    ? { v: displayValue, m: displayValue, ct }
+    : { v: numeric, m: String(numeric), ct };
+}
+
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+
+  const normalized = value.replaceAll(",", "").trim();
+  if (!normalized) return null;
+
+  const numberValue = Number(normalized);
+  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 function span(x?: any) {

@@ -23,8 +23,6 @@ function getReportKindLabel(
   row: WorkReportPeriodRow,
   getAssignmentType?: (row: WorkReportPeriodRow) => string | null | undefined
 ) {
-  if (row.periodKind === "USER_CREATED") return "Chủ động";
-
   const assignmentType = row.assignmentType || getAssignmentType?.(row);
   if (assignmentType === "ONCE") return "Một lần";
   if (assignmentType === "PERIODIC_REPORT") return "Định kỳ";
@@ -52,6 +50,9 @@ export default function WorkReportPeriodTable({
           render: (row) => (
             <Stack direction="row" spacing={1}>
               <Button
+                data-testid="report-period-open-button"
+                data-report-id={row.currentReportId || undefined}
+                data-period-id={row.id || undefined}
                 size="small"
                 variant="outlined"
                 onClick={(e) => {

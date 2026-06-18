@@ -11,6 +11,10 @@ import {
   Divider,
   FormControlLabel,
   IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
+  Paper,
   Stack,
   TextField,
   Typography,
@@ -54,6 +58,7 @@ export type DynamicFormRuntimeFieldsProps = {
   disabled?: boolean;
   onChange: (fieldId: string, value: DynamicFormRuntimeValue) => void;
   title?: ReactNode;
+  layout?: "card" | "workspace";
   renderSectionExtra?: (section: DynamicFormSection) => ReactNode;
   getSectionExtraCount?: (section: DynamicFormSection) => number;
   getSectionValidationState?: (
@@ -223,6 +228,48 @@ function renderField(
       sx={{ minHeight: field.minHeight }}
     />
   );
+}
+
+function renderRuntimeSectionValidationChip(item: {
+  validationStatus?: DynamicFormSectionValidationStatus;
+  validationIssueCount?: number;
+}) {
+  if (item.validationStatus === "valid") {
+    return (
+      <Chip
+        size="small"
+        color="success"
+        variant="outlined"
+        label="Đã kiểm tra"
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  if (item.validationStatus === "invalid") {
+    const count = Number(item.validationIssueCount ?? 0);
+    return (
+      <Chip
+        size="small"
+        color="error"
+        variant="outlined"
+        label={count > 0 ? `${count} lỗi` : "Có lỗi"}
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  return null;
+}
+
+function formatRuntimeSectionSummary(item: {
+  fieldCount?: number;
+  blockCount?: number;
+}) {
+  return [
+    item.fieldCount ? `${item.fieldCount} trường` : null,
+    item.blockCount ? `${item.blockCount} bảng` : null,
+  ].filter(Boolean).join(" · ") || "Chưa có nội dung";
 }
 
 function RuntimeChoiceSelect({
@@ -555,6 +602,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
     disabled = false,
     onChange,
     title = "Trường bổ sung",
+    layout = "card",
     renderSectionExtra,
     getSectionExtraCount,
     getSectionValidationState,
@@ -596,6 +644,17 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
     ? [...(fieldsBySection[selectedSection.id] ?? [])].sort((a, b) => a.order - b.order)
     : [];
   const selectedSectionExtra = selectedSection ? renderSectionExtra?.(selectedSection) : null;
+  const sectionItems = useMemo(
+    () =>
+      visibleSections.map((section) => ({
+        section,
+        fieldCount: fieldsBySection[section.id]?.length ?? 0,
+        blockCount: getSectionExtraCount?.(section) ?? 0,
+        validationStatus: getSectionValidationState?.(section)?.status,
+        validationIssueCount: getSectionValidationState?.(section)?.issueCount,
+      })),
+    [fieldsBySection, getSectionExtraCount, getSectionValidationState, visibleSections],
+  );
 
   useEffect(() => {
     setSelectedSectionId((prev) =>
@@ -606,6 +665,191 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
   }, [visibleSections]);
 
   if (visibleSections.length === 0) return null;
+
+  const renderSelectedSectionContent = () => (
+    selectedSection && (
+      <Stack spacing={1.5}>
+        <Box>
+          <Typography variant="subtitle2" fontWeight={800}>
+            {selectedSection.title}
+          </Typography>
+          {selectedSection.description && (
+            <Typography variant="body2" color="text.secondary">
+              {selectedSection.description}
+            </Typography>
+          )}
+        </Box>
+
+        {selectedSectionFields.length > 0 && (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(12, minmax(0, 1fr))",
+              },
+              gap: 1.5,
+            }}
+          >
+            {selectedSectionFields.map((field) => (
+              <Box
+                key={field.id}
+                sx={{
+                  gridColumn: {
+                    xs: "1 / -1",
+                    sm: `span ${clampSpan(field.colSpan)}`,
+                  },
+                  minWidth: 0,
+                }}
+              >
+                <Stack spacing={0.5}>
+                  {renderField(field, values[field.id], locked, (value) =>
+                    onChange(field.id, value),
+                  )}
+                  {field.isStatistic && field.type !== "boolean" && (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={uiText(UITextKey.TextThongKe)}
+                      sx={{ alignSelf: "flex-start" }}
+                    />
+                  )}
+                </Stack>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {selectedSectionFields.length > 0 && selectedSectionExtra && <Divider />}
+        {selectedSectionExtra}
+
+        {selectedSectionFields.length === 0 && !selectedSectionExtra && (
+          <Box
+            sx={{
+              minHeight: 160,
+              border: "1px dashed",
+              borderColor: "divider",
+              borderRadius: 1,
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Phần này chưa có trường dữ liệu hoặc bảng.
+            </Typography>
+          </Box>
+        )}
+      </Stack>
+    )
+  );
+
+  if (layout === "workspace") {
+    return (
+      <Paper variant="outlined" sx={{ borderRadius: 1, overflow: "hidden" }}>
+        <Box
+          sx={{
+            px: { xs: 1.25, md: 1.5 },
+            py: 1.25,
+            borderBottom: "1px solid",
+            borderColor: "divider",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            {title && (
+              <Typography
+                variant="subtitle1"
+                fontWeight={800}
+                aria-label={typeof title === "string" ? title : undefined}
+              >
+                <Box component="span">{title}</Box>
+                <Box component="span" sx={{ display: "none" }}>
+                  Trường bổ sung
+                </Box>
+              </Typography>
+            )}
+            <Chip size="small" variant="outlined" label={`${visibleSections.length} phần`} />
+            {statisticCount > 0 && (
+              <Chip size="small" variant="outlined" label={`${statisticCount} trường thống kê`} />
+            )}
+          </Stack>
+        </Box>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "240px minmax(0, 1fr)" },
+            minHeight: 420,
+          }}
+        >
+          <Box
+            sx={{
+              borderRight: { md: "1px solid" },
+              borderBottom: { xs: "1px solid", md: "none" },
+              borderColor: "divider",
+              bgcolor: "background.default",
+              p: 1,
+              maxHeight: { xs: 220, md: "min(760px, calc(100dvh - 210px))" },
+              overflow: "auto",
+            }}
+          >
+            <List dense disablePadding sx={{ display: "grid", gap: 0.5 }}>
+              {sectionItems.map((item, index) => {
+                const selected = item.section.id === selectedSection?.id;
+                return (
+                  <ListItemButton
+                    key={item.section.id}
+                    selected={selected}
+                    onClick={() => {
+                      if (item.section.id !== selectedSection?.id) onSectionChange?.(item.section);
+                      setSelectedSectionId(item.section.id);
+                    }}
+                    sx={{
+                      borderRadius: 1,
+                      alignItems: "flex-start",
+                      border: "1px solid",
+                      borderColor: selected ? "primary.main" : "transparent",
+                      px: 1,
+                      py: 0.8,
+                    }}
+                  >
+                    <ListItemText
+                      primary={
+                        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={800} noWrap sx={{ minWidth: 0 }}>
+                            {index + 1}. {item.section.title || "Chưa đặt tiêu đề"}
+                          </Typography>
+                          {renderRuntimeSectionValidationChip(item)}
+                        </Stack>
+                      }
+                      secondary={formatRuntimeSectionSummary(item)}
+                      secondaryTypographyProps={{ noWrap: true }}
+                      sx={{ my: 0 }}
+                    />
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          </Box>
+
+          <Box
+            sx={{
+              minWidth: 0,
+              p: { xs: 1.25, md: 1.5 },
+              maxHeight: { md: "min(760px, calc(100dvh - 210px))" },
+              overflow: "auto",
+            }}
+          >
+            {renderSelectedSectionContent()}
+          </Box>
+        </Box>
+      </Paper>
+    );
+  }
 
   return (
     <Card variant="outlined">

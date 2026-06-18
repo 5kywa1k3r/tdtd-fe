@@ -70,7 +70,7 @@ export const Sidebar = () => {
           <ListItemIcon>
             <AssignmentIcon />
           </ListItemIcon>
-          <ListItemText primary="Danh sách nhiệm vụ/chỉ tiêu" />
+          <ListItemText primary="Danh sách công việc" />
         </ListItemButton>
       </List>
 

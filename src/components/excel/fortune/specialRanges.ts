@@ -18,6 +18,12 @@ export type HeaderSpecialRangeIssue = {
   at?: { r: number; c: number };
 };
 
+type SpecialCellMask = {
+  dataRect: Rect;
+  width: number;
+  flags: Uint8Array;
+};
+
 const SPECIAL_ROLES = new Set<HeaderSpecialRole>(["HEADER", "FORMULA", "TITLE", "STYLE", "BLANK"]);
 
 export const SPECIAL_RANGE_COLORS: Record<HeaderSpecialRole, string> = {
@@ -70,6 +76,73 @@ export function normalizeSpecSpecialRanges<T extends HeaderSpec>(spec: T): T {
   };
 }
 
+export function compressCellsToSpecialRanges(
+  cells: Array<{ r: number; c: number }>,
+  role: HeaderSpecialRange["role"],
+  idPrefix = `special_${String(role).toLowerCase()}`,
+): HeaderSpecialRange[] {
+  const byRow = new Map<number, number[]>();
+  const seen = new Set<string>();
+
+  for (const cell of cells) {
+    const r = Math.floor(Number(cell?.r));
+    const c = Math.floor(Number(cell?.c));
+    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) continue;
+    const key = `${r}:${c}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const cols = byRow.get(r) ?? [];
+    cols.push(c);
+    byRow.set(r, cols);
+  }
+
+  const closed: HeaderSpecialRange[] = [];
+  let active = new Map<string, HeaderSpecialRange>();
+
+  const closeInactiveRanges = (nextActive: Map<string, HeaderSpecialRange>) => {
+    for (const [key, range] of active.entries()) {
+      if (nextActive.get(key) === range) continue;
+      closed.push(range);
+    }
+  };
+
+  for (const r of [...byRow.keys()].sort((a, b) => a - b)) {
+    const runs = buildContiguousColumnRuns(byRow.get(r) ?? []);
+    const nextActive = new Map<string, HeaderSpecialRange>();
+
+    for (const run of runs) {
+      const key = `${run.c0}:${run.c1}`;
+      const previous = active.get(key);
+      if (previous && previous.r1 === r - 1) {
+        previous.r1 = r;
+        nextActive.set(key, previous);
+        continue;
+      }
+
+      nextActive.set(key, {
+        role,
+        r0: r,
+        c0: run.c0,
+        r1: r,
+        c1: run.c1,
+      });
+    }
+
+    closeInactiveRanges(nextActive);
+    active = nextActive;
+  }
+
+  for (const range of active.values()) {
+    closed.push(range);
+  }
+
+  return normalizeSpecialRanges(
+    closed
+      .sort((a, b) => a.r0 - b.r0 || a.c0 - b.c0 || a.r1 - b.r1 || a.c1 - b.c1)
+      .map((range, index) => ({ ...range, id: `${idPrefix}_${index + 1}` })),
+  );
+}
+
 export function getSpecialRanges(spec: HeaderSpec | null | undefined): HeaderSpecialRange[] {
   return normalizeSpecialRanges(spec?.specialRanges);
 }
@@ -111,6 +184,49 @@ export function isInputDataCell(
   return isCellInRect(r, c, dataRect) && !isSpecialCell(spec, r, c);
 }
 
+export function createInputDataCellChecker(
+  dataRect: Rect,
+  spec: HeaderSpec | null | undefined,
+) {
+  const mask = buildSpecialCellMask(dataRect, spec);
+  return (r: number, c: number) => isCellInRect(r, c, dataRect) && !isMaskedSpecialCell(mask, r, c);
+}
+
+function buildSpecialCellMask(
+  dataRect: Rect,
+  spec: HeaderSpec | null | undefined,
+): SpecialCellMask | null {
+  const ranges = getSpecialRanges(spec).filter((range) => rectsOverlap(range, dataRect));
+  const width = dataRect.c1 - dataRect.c0 + 1;
+  const height = dataRect.r1 - dataRect.r0 + 1;
+  if (ranges.length === 0 || width <= 0 || height <= 0) return null;
+
+  const flags = new Uint8Array(width * height);
+  for (const range of ranges) {
+    const r0 = Math.max(dataRect.r0, range.r0);
+    const c0 = Math.max(dataRect.c0, range.c0);
+    const r1 = Math.min(dataRect.r1, range.r1);
+    const c1 = Math.min(dataRect.c1, range.c1);
+
+    for (let r = r0; r <= r1; r += 1) {
+      let offset = (r - dataRect.r0) * width + (c0 - dataRect.c0);
+      for (let c = c0; c <= c1; c += 1) {
+        flags[offset] = 1;
+        offset += 1;
+      }
+    }
+  }
+
+  return { dataRect, width, flags };
+}
+
+function isMaskedSpecialCell(mask: SpecialCellMask | null, r: number, c: number) {
+  if (!mask) return false;
+  const { dataRect, width, flags } = mask;
+  if (!isCellInRect(r, c, dataRect)) return false;
+  return flags[(r - dataRect.r0) * width + (c - dataRect.c0)] === 1;
+}
+
 export function buildDataRectCellRefs(dataRect: Rect): DynamicExcelInputCellRef[] {
   const refs: DynamicExcelInputCellRef[] = [];
   const width = dataRect.c1 - dataRect.c0 + 1;
@@ -141,9 +257,33 @@ export function buildInputCellRefs(
   dataRect: Rect,
   spec: HeaderSpec | null | undefined,
 ): DynamicExcelInputCellRef[] {
-  return buildDataRectCellRefs(dataRect)
-    .filter((ref) => isInputDataCell(spec, dataRect, ref.r, ref.c))
-    .map((ref, index) => ({ ...ref, index }));
+  const refs: DynamicExcelInputCellRef[] = [];
+  const width = dataRect.c1 - dataRect.c0 + 1;
+  if (width <= 0 || dataRect.r1 < dataRect.r0) return refs;
+
+  const mask = buildSpecialCellMask(dataRect, spec);
+  let index = 0;
+  for (let r = dataRect.r0; r <= dataRect.r1; r += 1) {
+    for (let c = dataRect.c0; c <= dataRect.c1; c += 1) {
+      if (isMaskedSpecialCell(mask, r, c)) continue;
+      const rowOffset = r - dataRect.r0;
+      const colOffset = c - dataRect.c0;
+      const dataOffset = rowOffset * width + colOffset;
+      refs.push({
+        index,
+        dataOffset,
+        r,
+        c,
+        rowOffset,
+        colOffset,
+        rowKey: `row_${rowOffset + 1}`,
+        columnKey: `col_${colOffset + 1}`,
+      });
+      index += 1;
+    }
+  }
+
+  return refs;
 }
 
 export function buildCellRefsForValues(
@@ -242,4 +382,23 @@ function toNonNegativeInt(value: unknown) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0) return null;
   return n;
+}
+
+function buildContiguousColumnRuns(cols: number[]) {
+  const sorted = [...cols].sort((a, b) => a - b);
+  const runs: Array<{ c0: number; c1: number }> = [];
+  let current: { c0: number; c1: number } | null = null;
+
+  for (const c of sorted) {
+    if (current && current.c1 + 1 === c) {
+      current.c1 = c;
+      continue;
+    }
+
+    if (current) runs.push(current);
+    current = { c0: c, c1: c };
+  }
+
+  if (current) runs.push(current);
+  return runs;
 }

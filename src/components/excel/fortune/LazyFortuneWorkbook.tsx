@@ -10,15 +10,17 @@ type LazyFortuneWorkbookProps = Record<string, any> & {
   fallback?: React.ReactNode;
 };
 
-export default function LazyFortuneWorkbook({
+const LazyFortuneWorkbook = React.forwardRef<any, LazyFortuneWorkbookProps>(function LazyFortuneWorkbook({
   fallback = null,
   ...props
-}: LazyFortuneWorkbookProps) {
+}, ref) {
   const WorkbookComponent = FortuneWorkbook as React.ComponentType<any>;
 
   return (
     <React.Suspense fallback={fallback}>
-      <WorkbookComponent {...props} />
+      <WorkbookComponent ref={ref} {...props} />
     </React.Suspense>
   );
-}
+});
+
+export default LazyFortuneWorkbook;

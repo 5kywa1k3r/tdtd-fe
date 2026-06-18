@@ -69,6 +69,9 @@ export default function MyReportTemplateGroupTable({
             <Tooltip title={uiText(UITextKey.TextMoChiTiet)}>
               <span>
                 <IconButton
+                  data-testid="report-template-open-button"
+                  data-dynamic-form-id={row.dynamicFormTemplateId || undefined}
+                  data-dynamic-excel-id={row.dynamicExcelId || undefined}
                   size="small"
                   onClick={(e) => {
                     e.stopPropagation();

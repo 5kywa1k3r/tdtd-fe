@@ -4,6 +4,7 @@ import type {
   MyReportTemplateRow,
   MyReportTemplateSearchRequest,
   PagedResult,
+  SaveWorkAssignmentReportDraftPatchRequest,
   SaveWorkAssignmentReportDraftRequest,
   ApplyDynamicFormAggregateDraftRequest,
   SubmitWorkAssignmentReportRequest,
@@ -12,7 +13,6 @@ import type {
   WorkAssignmentReportLogRow,
   WorkAssignmentReportResponse,
   WorkAssignmentReportSearchRequest,
-  CreateUserCreatedReportRequest,
 } from "../types/report";
 
 import type {
@@ -41,6 +41,7 @@ import type {
 
 import type { WorkAssignmentEvaluationLogRow } from "./workAssignmentApi";
 import type {EvaluateAssignmentRequest} from '../types/evaluation';
+import type { DynamicExcelDetail } from "./dynamicExcelApi";
 
 export const reportApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -77,20 +78,19 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
-    createUserCreatedReport: build.mutation<
-      WorkAssignmentReportResponse,
-      { workAssignmentId: string; data: CreateUserCreatedReportRequest }
-    >({
-      query: ({ workAssignmentId, data }) => ({
-        url: `work-assignments/${workAssignmentId}/reports/user-created`,
-        method: "POST",
-        data,
-      }),
-    }),
-
     getWorkAssignmentReport: build.query<WorkAssignmentReportResponse, string>({
       query: (id) => ({
         url: `work-assignment-reports/${id}`,
+        method: "GET",
+      }),
+    }),
+
+    getWorkAssignmentReportTemplateWorkbook: build.query<
+      DynamicExcelDetail,
+      { id: string; dynamicExcelTemplateId: string }
+    >({
+      query: ({ id, dynamicExcelTemplateId }) => ({
+        url: `work-assignment-reports/${id}/template-workbook/${dynamicExcelTemplateId}`,
         method: "GET",
       }),
     }),
@@ -148,13 +148,6 @@ export const reportApi = baseApi.injectEndpoints({
         url: `work-assignment-reports/${id}/submit`,
         method: "POST",
         data,
-      }),
-    }),
-
-    deleteUserCreatedReport: build.mutation<void, { id: string }>({
-      query: ({ id }) => ({
-        url: `work-assignment-reports/${id}/user-created`,
-        method: "DELETE",
       }),
     }),
 
@@ -304,6 +297,20 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
+    saveWorkAssignmentReportDraftPatch: build.mutation<
+      WorkAssignmentReportResponse,
+      {
+        id: string;
+        data: SaveWorkAssignmentReportDraftPatchRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/patch`,
+        method: "PATCH",
+        data,
+      }),
+    }),
+
     getWorkAssignmentAggregateConfig: build.query<
       WorkAssignmentAggregateConfigDto | null,
       string
@@ -330,7 +337,7 @@ export const reportApi = baseApi.injectEndpoints({
       WorkAssignmentBasicSummaryRequest
     >({
       query: (data) => ({
-        url: `work-assignment-basic-summary/once`,
+        url: `work-assignment-basic-summary/summary`,
         method: "POST",
         data,
       }),
@@ -403,15 +410,15 @@ export const {
   useLazyGetMyReportTemplateDetailQuery,
 
   useOpenWorkReportPeriodMutation,
-  useCreateUserCreatedReportMutation,
 
   useGetWorkAssignmentReportQuery,
+  useGetWorkAssignmentReportTemplateWorkbookQuery,
   useSaveWorkAssignmentReportDraftMutation,
+  useSaveWorkAssignmentReportDraftPatchMutation,
   useApplyDynamicFormAggregateDraftMutation,
   usePreviewDynamicFormAggregateDraftMutation,
   useSubmitWorkAssignmentReportMutation,
   useWithdrawSubmittedReportMutation,
-  useDeleteUserCreatedReportMutation,
   useGetWorkAssignmentReportLogsQuery,
   useLazyGetWorkAssignmentReportLogsQuery,
 

@@ -38,7 +38,6 @@ import {
   openReportDrawer,
   openSummary,
   openUnitDrawer,
-  resetMindMapState,
   setExpandedNodes,
   setSelectedWork,
   setSelectedWorkType,
@@ -333,8 +332,8 @@ function reportText(report: DashboardMindMapReportRowDto) {
   return parts.length ? parts.join(" | ") : "Chưa có ghi chú duyệt/trễ hạn.";
 }
 
-function getPeriodKindLabel(periodKind?: string | null): string {
-  return (periodKind ?? "").toUpperCase() === "USER_CREATED" ? "Chủ động" : "Bắt buộc";
+function getPeriodKindLabel(): string {
+  return "Bắt buộc";
 }
 
 function buildCoverageChips(coverage?: DashboardMindMapCoverageDto | null): MindMapGraphChip[] {
@@ -569,11 +568,8 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false, 
       Object.values(reportFilterTimeoutsRef.current).forEach(clearTimeout);
       templateUserSearchTimeoutsRef.current = {};
       reportFilterTimeoutsRef.current = {};
-      if (embedded) {
-        dispatch(resetMindMapState());
-      }
     };
-  }, [dispatch, embedded]);
+  }, []);
 
   const workOptions = useMemo(
     () => (worksResponse?.rows ?? []).map(mapWorkOptionFromListRow),
@@ -1257,8 +1253,8 @@ export default function WorkMindMapPage({ embedded = false, canvasOnly = false, 
         subtitle: reportText(report),
         chips: [
           {
-            label: getPeriodKindLabel(report.periodKind),
-            color: (report.periodKind ?? "").toUpperCase() === "USER_CREATED" ? "warning" : "default",
+            label: getPeriodKindLabel(),
+            color: "default",
             variant: "outlined",
           },
           { label: `Hạn ${formatDateOnly(report.dueAtUtc)}`, color: report.bucket === "OVERDUE" ? "error" : "default" },

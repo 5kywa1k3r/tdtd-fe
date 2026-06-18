@@ -6,6 +6,10 @@ import { useGetDynamicExcelQuery, useUpdateDynamicExcelMutation } from "../../ap
 import ExcelDesigner from "../../components/excel/fortune/ExcelDesigner";
 import { UITextKey, uiText } from "../../constants/uiText";
 
+function stableJson(value: unknown) {
+  return JSON.stringify(value ?? null);
+}
+
 export default function DynamicExcelEditPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -81,12 +85,17 @@ export default function DynamicExcelEditPage() {
         initialWorkbookData={parsed.workbook}
         onBack={() => navigate("/dynamic-excel")}
         onSaved={async (p) => {
+          const nextSpecJson = JSON.stringify(p.spec);
+          const nextWorkbookJson = JSON.stringify(p.rawWorkbookData);
+          const specChanged = stableJson(parsed.spec) !== stableJson(p.spec);
+          const workbookChanged = stableJson(parsed.workbook ?? []) !== stableJson(p.rawWorkbookData);
+
           await update({
             id,
             body: {
               name: p.name,
-              rawWorkbookDataJson: JSON.stringify(p.rawWorkbookData),
-              specJson: JSON.stringify(p.spec),
+              rawWorkbookDataJson: workbookChanged ? nextWorkbookJson : null,
+              specJson: specChanged ? nextSpecJson : null,
             },
           }).unwrap();
         }}

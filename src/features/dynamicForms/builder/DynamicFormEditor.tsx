@@ -826,7 +826,12 @@ function ExcelBlockCard({
           <Chip size="small" variant="outlined" label={summary.specKindLabel} />
           <Chip size="small" variant="outlined" label={summary.tableModeLabel} />
         </Stack>
-        {preview && <DynamicFormExcelBlockPreview blockJson={blockJson} showHeader={false} />}
+        {preview && (
+          <DynamicFormExcelBlockPreview
+            blockJson={blockJson}
+            showHeader={false}
+          />
+        )}
       </Stack>
     </Paper>
   );

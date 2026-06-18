@@ -5,6 +5,7 @@ import {
   type ReportRect,
 } from "./reportWorkbook";
 import { extractNumericValues1D } from "./fortuneAdapter";
+import type { HeaderSpec } from "./types";
 
 export interface WorkbookDataGridSavePayload {
   rawWorkbookData: any[];
@@ -190,6 +191,7 @@ export function buildSavePayload(
   opts?: {
     strictOutsideChanges?: boolean;
     lockOutsideDataRect?: boolean;
+    spec?: HeaderSpec | null;
   }
 ): WorkbookDataGridSavePayload {
   const normalizedLatest = ensureWorkbookShape(
@@ -232,7 +234,7 @@ export function buildSavePayload(
   const sheet = finalWorkbook?.[0];
   if (!sheet) throw new Error("Không lấy được sheet để lưu.");
 
-  const values1D = extractNumericValues1D(sheet, dataRect);
+  const values1D = extractNumericValues1D(sheet, dataRect, opts?.spec);
 
   return {
     rawWorkbookData: finalWorkbook,

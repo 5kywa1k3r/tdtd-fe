@@ -2,12 +2,14 @@ import React from "react";
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Paper,
   Stack,
   Typography,
 } from "@mui/material";
+import PreviewOutlinedIcon from "@mui/icons-material/PreviewOutlined";
 
 import { useGetDynamicExcelQuery } from "../../../api/dynamicExcelApi";
 import WorkbookDataGrid from "../../../components/excel/fortune/WorkbookDataGrid";
@@ -21,6 +23,7 @@ type DynamicFormExcelBlockPreviewProps = {
   dense?: boolean;
   showHeader?: boolean;
   tableMode?: keyof typeof tableModeLabels | null;
+  loadOnMount?: boolean;
 };
 
 type ExcelBlockSummary = {
@@ -35,12 +38,19 @@ export default function DynamicFormExcelBlockPreview({
   dense = false,
   showHeader = true,
   tableMode,
+  loadOnMount = false,
 }: DynamicFormExcelBlockPreviewProps) {
   const summary = React.useMemo(() => readExcelBlockSummary(blockJson), [blockJson]);
   const dynamicExcelId = summary.dynamicExcelId ?? "";
+  const [previewRequested, setPreviewRequested] = React.useState(loadOnMount);
+
+  React.useEffect(() => {
+    setPreviewRequested(loadOnMount);
+  }, [dynamicExcelId, loadOnMount]);
+
   const { data, isLoading, isError } = useGetDynamicExcelQuery(
     { id: dynamicExcelId },
-    { skip: !dynamicExcelId },
+    { skip: !dynamicExcelId || !previewRequested },
   );
 
   const parsed = React.useMemo(() => {
@@ -65,6 +75,39 @@ export default function DynamicFormExcelBlockPreview({
       );
     }
 
+    if (!previewRequested) {
+      return (
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          alignItems={{ xs: "stretch", sm: "center" }}
+          justifyContent="space-between"
+          sx={{
+            minHeight: dense ? 72 : 88,
+            border: "1px dashed",
+            borderColor: "divider",
+            borderRadius: 1,
+            px: dense ? 1 : 1.25,
+            py: dense ? 1 : 1.25,
+          }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            Workbook chỉ tải khi mở xem trước bảng.
+          </Typography>
+          <Button
+            data-testid="dynamic-form-excel-load-button"
+            size="small"
+            variant="outlined"
+            startIcon={<PreviewOutlinedIcon fontSize="small" />}
+            onClick={() => setPreviewRequested(true)}
+            sx={{ alignSelf: { xs: "stretch", sm: "center" }, textTransform: "none" }}
+          >
+            Tải bảng
+          </Button>
+        </Stack>
+      );
+    }
+
     if (isLoading) {
       return (
         <Stack alignItems="center" justifyContent="center" sx={{ minHeight: dense ? 160 : 240 }}>
@@ -78,7 +121,7 @@ export default function DynamicFormExcelBlockPreview({
     }
 
     return (
-      <Box sx={{ minWidth: 0 }}>
+      <Box data-testid="dynamic-form-excel-workbook" sx={{ minWidth: 0 }}>
         <WorkbookDataGrid
           initialSpec={parsed.spec}
           initialWorkbookData={parsed.workbook}
@@ -92,7 +135,12 @@ export default function DynamicFormExcelBlockPreview({
   })();
 
   return (
-    <Paper variant="outlined" sx={{ p: dense ? 1 : 1.25, borderRadius: 1, bgcolor: "background.default" }}>
+    <Paper
+      data-testid="dynamic-form-excel-preview"
+      data-dynamic-excel-id={dynamicExcelId || undefined}
+      variant="outlined"
+      sx={{ p: dense ? 1 : 1.25, borderRadius: 1, bgcolor: "background.default" }}
+    >
       <Stack spacing={1}>
         {showHeader && (
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>

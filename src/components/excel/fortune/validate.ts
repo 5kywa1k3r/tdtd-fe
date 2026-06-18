@@ -72,6 +72,7 @@ export function validateHeader(params: {
 
   const issues: ValidationIssue[] = [];
   const table = getTableRect(spec);
+  const dataRect = computeRegions(spec, table).dataRect;
   const masters = params.masterCells ?? [];
 
   /* ===== xác định vùng tiêu đề (Rect inclusive) ===== */
@@ -172,6 +173,9 @@ export function validateHeader(params: {
     for (let r = R.r0; r <= R.r1; r++) {
       for (let c = R.c0; c <= R.c1; c++) {
         if (!inRect(r, c, table)) continue;
+        // Data-region content is validated later by validateNoDataInRect,
+        // which understands FORMULA/TITLE/BLANK special ranges.
+        if (inRect(r, c, dataRect)) continue;
 
         if (!isInHeader(r, c)) {
           issues.push({
@@ -213,6 +217,7 @@ export function validateHeader(params: {
       topRange: top ? rectToExcel(top) : null,
       leftRange: left ? rectToExcel(left) : null,
       cornerGapRange: cornerGap ? rectToExcel(cornerGap) : null,
+      dataRange: rectToExcel(dataRect),
     },
   };
 }
@@ -225,9 +230,9 @@ export type DesignerLimitIssue = {
 };
 
 export const DESIGNER_LIMITS = {
-  MAX_DATA_CELLS: 10000,   // values1D length
+  MAX_DATA_CELLS: 11000,   // values1D length
   MAX_TABLE_STATISTIC_INPUT_CELLS: 250, // background per-cell statistic projection
-  MAX_DIRECT_AGGREGATE_INPUT_CELLS: 10000,
+  MAX_DIRECT_AGGREGATE_INPUT_CELLS: 11000,
   MAX_HEADER_ROWS: 30,     // headerRect height
   MAX_HEADER_COLS: 30,     // headerRect width
   MAX_SHEET_CELLS: 20000,  // max render cells (tableRect)

@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  ButtonBase,
   Card,
   CardActionArea,
   CardContent,
@@ -525,7 +526,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
           key: "DOCUMENT" as DetailTab,
           title: "Tài liệu",
           description: "Quản lý kho tài liệu dùng chung theo phạm vi toàn bộ công việc và từng nhánh công việc.",
-          badge: "MinIO",
+          badge: null,
           icon: <FolderOutlinedIcon />,
           accent: "#0f766e",
         },
@@ -583,7 +584,24 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
   const pageDescription = tab
     ? activeMeta?.description ?? subtitle
     : subtitle;
-  const listBackLabel = "Danh sách nhiệm vụ/chỉ tiêu";
+  const listBackLabel = "Danh sách công việc";
+  const workListPath = effectiveType === "TASK" ? "/tasks" : "/indicators";
+  const breadcrumbLinkSx = {
+    borderRadius: "6px",
+    color: "#334155",
+    minWidth: 0,
+    px: 0.5,
+    py: 0.25,
+    textAlign: "left",
+    "&:hover": {
+      color: "#0f5bd8",
+      bgcolor: alpha("#0f5bd8", 0.08),
+    },
+  };
+  const breadcrumbActiveSx = {
+    ...breadcrumbLinkSx,
+    color: "#0f5bd8",
+  };
   const ownerLabel =
     detail?.owner?.fullName?.trim() ||
     detail?.owner?.username?.trim() ||
@@ -725,38 +743,54 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                 sx={{ minWidth: 0, color: "#64748b" }}
               >
                 <HomeOutlinedIcon sx={{ fontSize: 18, flexShrink: 0 }} />
-                <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                  {workTypeLabel}
-                </Typography>
+                <ButtonBase onClick={() => navigate(workListPath)} sx={breadcrumbLinkSx}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                    {workTypeLabel}
+                  </Typography>
+                </ButtonBase>
                 <ChevronRightOutlinedIcon sx={{ fontSize: 18, flexShrink: 0 }} />
-                <Typography
-                  variant="body2"
+                <ButtonBase
+                  onClick={() => {
+                    if (tab) handleBackToLauncher();
+                  }}
                   sx={{
-                    fontWeight: 700,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    ...breadcrumbLinkSx,
+                    cursor: tab ? "pointer" : "default",
+                    "&:hover": tab
+                      ? breadcrumbLinkSx["&:hover"]
+                      : { color: "#334155", bgcolor: "transparent" },
                   }}
                 >
-                  {title}
-                </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 700,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {title}
+                  </Typography>
+                </ButtonBase>
                 {tab && (
                   <>
                     <ChevronRightOutlinedIcon sx={{ fontSize: 18, flexShrink: 0 }} />
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "#0f5bd8",
-                        fontWeight: 800,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {activeMeta?.title}
-                    </Typography>
+                    <ButtonBase onClick={() => handleOpenFunction(tab)} sx={breadcrumbActiveSx}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 800,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {activeMeta?.title}
+                      </Typography>
+                    </ButtonBase>
                   </>
                 )}
               </Stack>
@@ -1143,19 +1177,21 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                             >
                               {card.icon}
                             </Box>
-                            <Chip
-                              size="small"
-                              label={card.badge}
-                              sx={{
-                                height: 26,
-                                color: card.accent,
-                                bgcolor: alpha(card.accent, 0.08),
-                                border: `1px solid ${alpha(card.accent, 0.12)}`,
-                                borderRadius: "6px",
-                                fontWeight: 800,
-                                "& .MuiChip-label": { px: 1 },
-                              }}
-                            />
+                            {card.badge ? (
+                              <Chip
+                                size="small"
+                                label={card.badge}
+                                sx={{
+                                  height: 26,
+                                  color: card.accent,
+                                  bgcolor: alpha(card.accent, 0.08),
+                                  border: `1px solid ${alpha(card.accent, 0.12)}`,
+                                  borderRadius: "6px",
+                                  fontWeight: 800,
+                                  "& .MuiChip-label": { px: 1 },
+                                }}
+                              />
+                            ) : null}
                           </Stack>
 
                           <Box sx={{ mt: 3, flex: 1, minWidth: 0 }}>
