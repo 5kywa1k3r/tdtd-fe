@@ -624,7 +624,11 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
 
 function BasicSummaryJobAlert({ result }: { result: WorkAssignmentBasicSummaryResponse }) {
   const status = normalizeBasicSummaryJobStatus(result.meta.calculationStatus);
-  const jobSuffix = result.meta.calculationJobId ? ` Mã job: ${result.meta.calculationJobId}.` : "";
+  const jobParts = [
+    result.meta.calculationJobId ? `Mã job: ${result.meta.calculationJobId}` : "",
+    result.meta.calculationCorrelationId ? `Correlation: ${result.meta.calculationCorrelationId}` : "",
+  ].filter(Boolean);
+  const jobSuffix = jobParts.length ? ` ${jobParts.join(". ")}.` : "";
 
   if (status === "FAILED") {
     const error = result.meta.calculationError?.trim();

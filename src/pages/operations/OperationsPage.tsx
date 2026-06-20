@@ -28,16 +28,19 @@ import {
   useProcessActionLogRetryJobsMutation,
   useProcessProjectionRetryJobsMutation,
   useProcessStatisticRebuildJobsMutation,
+  useResetBasicSummaryJobMutation,
   useCheckReportPayloadDiagnosticsQuery,
   useRepairReportPayloadDiagnosticsMutation,
   useSearchActionLogRetryJobsQuery,
   useSearchActionLogsQuery,
+  useSearchBasicSummaryJobsQuery,
   useSearchJobOperationLogsQuery,
   useSearchMaterializeJobsQuery,
   useSearchProjectionRetryJobsQuery,
   useSearchStatisticRebuildJobsQuery,
 } from "../../api/operationsApi";
 import type {
+  BasicSummaryJobRow,
   JobRunSearchReq,
   MaterializeJobRow,
   ReportPayloadDiagnosticIssue,
@@ -57,7 +60,13 @@ import type { PagedResult } from "../../types/pagedResult";
 import { UITextKey, uiText } from '../../constants/uiText';
 
 type MainTab = "history" | "jobRuns" | "payloadDiagnostics";
-type JobRunTab = "operationLogs" | "materialize" | "projectionRetry" | "actionLogRetry" | "statisticRebuild";
+type JobRunTab =
+  | "operationLogs"
+  | "materialize"
+  | "projectionRetry"
+  | "actionLogRetry"
+  | "statisticRebuild"
+  | "basicSummary";
 type ChipColor = "default" | "success" | "error" | "warning" | "info";
 
 type HistoryFilters = {
@@ -179,6 +188,7 @@ const jobRunTabs = [
   ["projectionRetry", "Làm mới dữ liệu hiển thị"],
   ["actionLogRetry", "Ghi lại lịch sử thao tác"],
   ["statisticRebuild", "Tính lại thống kê"],
+  ["basicSummary", "Tổng hợp cơ bản"],
 ] as const;
 
 const operationResultOptions = [
@@ -205,6 +215,14 @@ const statisticRebuildStatusOptions = [
   ["RETRY_WAITING", "Lỗi - chờ chạy lại"],
   ["COMPLETED", "Đã chạy"],
   ["DEAD_LETTER", "Lỗi - dừng xử lý"],
+] as const;
+
+const basicSummaryStatusOptions = [
+  ["", "Tất cả trạng thái"],
+  ["QUEUED", "Đang chờ"],
+  ["RUNNING", "Đang chạy"],
+  ["DONE", "Đã chạy"],
+  ["FAILED", "Lỗi"],
 ] as const;
 
 const formatDateTime = (value?: string | null) => {
@@ -287,10 +305,11 @@ const priorityLabel = (value?: string | null) => {
 const statusLabel = (value?: string | null) => {
   const normalized = (value ?? "").replace(/[_\s-]/g, "").toLowerCase();
   if (!normalized) return "-";
+  if (normalized === "queued") return "Đang chờ";
   if (normalized === "pending") return "Chưa chạy";
   if (normalized === "running") return "Đang chạy";
   if (normalized === "retrywaiting") return "Lỗi - chờ chạy lại";
-  if (normalized === "completed" || normalized === "success") return "Đã chạy";
+  if (normalized === "completed" || normalized === "success" || normalized === "done") return "Đã chạy";
   if (normalized === "deadletter") return "Lỗi - dừng xử lý";
   if (normalized === "failed" || normalized === "error") return "Lỗi";
   if (normalized === "partialfailed") return "Lỗi một phần";
@@ -310,9 +329,9 @@ const actionResultLabel = (value?: string | null) => {
 
 const resultColor = (value?: string | null): ChipColor => {
   const normalized = (value ?? "").replace(/[_\s-]/g, "").toLowerCase();
-  if (["success", "completed", "ok"].includes(normalized)) return "success";
+  if (["success", "completed", "done", "ok"].includes(normalized)) return "success";
   if (["failed", "error", "deadletter"].includes(normalized)) return "error";
-  if (["partialfailed", "retrywaiting", "pending"].includes(normalized)) return "warning";
+  if (["partialfailed", "retrywaiting", "pending", "queued"].includes(normalized)) return "warning";
   if (["running", "skipped"].includes(normalized)) return "info";
   return "default";
 };
@@ -825,10 +844,12 @@ function JobRunsPanel() {
   const [processProjection, projectionProcessState] = useProcessProjectionRetryJobsMutation();
   const [processActionLog, actionLogProcessState] = useProcessActionLogRetryJobsMutation();
   const [processStatisticRebuild, statisticRebuildProcessState] = useProcessStatisticRebuildJobsMutation();
+  const [resetBasicSummary, resetBasicSummaryState] = useResetBasicSummaryJobMutation();
 
   const statusOptions = useMemo(() => {
     if (jobTab === "operationLogs") return operationResultOptions;
     if (jobTab === "statisticRebuild") return statisticRebuildStatusOptions;
+    if (jobTab === "basicSummary") return basicSummaryStatusOptions;
     return queueStatusOptions;
   }, [jobTab]);
 
@@ -864,6 +885,21 @@ function JobRunsPanel() {
   const statisticRebuildQuery = useSearchStatisticRebuildJobsQuery(queryArgs, {
     skip: jobTab !== "statisticRebuild",
   });
+  const basicSummaryQuery = useSearchBasicSummaryJobsQuery(queryArgs, {
+    skip: jobTab !== "basicSummary",
+  });
+
+  const resetBasicSummaryJob = async (snapshotId: string) => {
+    setNotice(null);
+    try {
+      const result = await resetBasicSummary(snapshotId).unwrap();
+      setNotice(
+        `Đã reset job tổng hợp cơ bản. Job: ${compactId(result.jobId)}. Correlation: ${compactId(result.correlationId)}.`,
+      );
+    } catch {
+      setNotice("Không reset được job tổng hợp cơ bản.");
+    }
+  };
 
   const operationColumns = useMemo<AppTableColumn<WorkStatusOperationLogRow>[]>(
     () => [
@@ -952,6 +988,84 @@ function JobRunsPanel() {
       { field: "lastError", header: "Lỗi gần nhất", render: (row) => renderLimitedText(row.lastError, 420) },
     ],
     [],
+  );
+
+  const basicSummaryColumns = useMemo<AppTableColumn<BasicSummaryJobRow>[]>(
+    () => [
+      {
+        field: "refreshQueuedAtUtc",
+        header: "Queue lúc",
+        width: 170,
+        render: (row) => formatDateTime(row.refreshQueuedAtUtc || row.createdAtUtc),
+      },
+      {
+        field: "refreshStatus",
+        header: "Trạng thái",
+        width: 140,
+        render: (row) => (
+          <Chip size="small" color={resultColor(row.refreshStatus)} label={statusLabel(row.refreshStatus)} />
+        ),
+      },
+      { field: "workId", header: "Đầu việc", width: 150, render: (row) => compactId(row.workId) },
+      {
+        field: "scopeAssignmentId",
+        header: "Scope",
+        width: 150,
+        render: (row) => compactId(row.scopeAssignmentId),
+      },
+      {
+        field: "dynamicFormTemplateId",
+        header: "Biểu mẫu",
+        width: 150,
+        render: (row) => compactId(row.dynamicFormTemplateId),
+      },
+      {
+        field: "sourceReportCount",
+        header: "Nguồn",
+        width: 110,
+        align: "right",
+        render: (row) => `${row.sourceReportCount}/${row.sourceAssignmentCount}`,
+      },
+      {
+        field: "refreshCorrelationId",
+        header: "Correlation",
+        width: 160,
+        render: (row) => compactId(row.refreshCorrelationId),
+      },
+      {
+        field: "snapshotRefreshedAtUtc",
+        header: "Tính xong",
+        width: 170,
+        render: (row) => formatDateTime(row.snapshotRefreshedAtUtc || row.refreshFinishedAtUtc),
+      },
+      {
+        field: "refreshError",
+        header: "Lỗi",
+        render: (row) => renderLimitedText(row.refreshError, 420),
+      },
+      {
+        field: "actions",
+        header: "",
+        width: 120,
+        align: "center",
+        render: (row) => {
+          const status = (row.refreshStatus ?? "").toUpperCase();
+          const busy = status === "QUEUED" || status === "RUNNING";
+          return (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ReplayIcon />}
+              disabled={busy || resetBasicSummaryState.isLoading}
+              onClick={() => resetBasicSummaryJob(row.id)}
+            >
+              Reset
+            </Button>
+          );
+        },
+      },
+    ],
+    [resetBasicSummaryState.isLoading],
   );
 
   const applyFilters = () => {
@@ -1190,6 +1304,19 @@ function JobRunsPanel() {
           isFetching={statisticRebuildQuery.isFetching}
           isError={statisticRebuildQuery.isError}
           columns={statisticRebuildColumns}
+          rowKey={(row) => row.id}
+          page={page}
+          pageSize={applied.pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      )}
+      {jobTab === "basicSummary" && (
+        <PagedTable
+          data={basicSummaryQuery.data}
+          isFetching={basicSummaryQuery.isFetching}
+          isError={basicSummaryQuery.isError}
+          columns={basicSummaryColumns}
           rowKey={(row) => row.id}
           page={page}
           pageSize={applied.pageSize}

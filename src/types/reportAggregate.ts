@@ -305,6 +305,7 @@ export interface WorkAssignmentBasicSummaryMetaDto {
   isCalculating?: boolean;
   calculationStatus?: "QUEUED" | "RUNNING" | "DONE" | "FAILED" | string | null;
   calculationJobId?: string | null;
+  calculationCorrelationId?: string | null;
   calculationQueuedAtUtc?: string | null;
   calculationStartedAtUtc?: string | null;
   calculationFinishedAtUtc?: string | null;

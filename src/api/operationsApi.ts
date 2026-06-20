@@ -203,6 +203,42 @@ export type StatisticRebuildJobRow = {
   updatedAtUtc: string;
 };
 
+export type BasicSummaryJobRow = {
+  id: string;
+  workId: string;
+  scopeAssignmentId: string;
+  dynamicFormTemplateId: string;
+  requestHash: string;
+  sourceSignatureHash?: string | null;
+  sourceAssignmentCount: number;
+  sourceReportCount: number;
+  snapshotDirty: boolean;
+  snapshotDirtyAtUtc?: string | null;
+  snapshotRefreshedAtUtc?: string | null;
+  refreshStatus?: string | null;
+  refreshJobId?: string | null;
+  refreshCorrelationId?: string | null;
+  refreshRequestedByUserId?: string | null;
+  refreshResetByUserId?: string | null;
+  refreshQueuedAtUtc?: string | null;
+  refreshStartedAtUtc?: string | null;
+  refreshFinishedAtUtc?: string | null;
+  refreshResetAtUtc?: string | null;
+  refreshError?: string | null;
+  isDeleted: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type BasicSummaryJobResetResponse = {
+  ok: boolean;
+  job?: BasicSummaryJobRow | null;
+  snapshotId: string;
+  jobId: string;
+  correlationId: string;
+  queuedAtUtc: string;
+};
+
 export type ProcessJobRunResponse = {
   ok: boolean;
   processed: number;
@@ -390,6 +426,23 @@ export const operationsApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: "JobRun" as const, id: "STATISTIC_REBUILD" }],
     }),
 
+    searchBasicSummaryJobs: build.query<PagedResult<BasicSummaryJobRow>, JobRunSearchReq>({
+      query: (req) => ({
+        url: "admin/operations/job-runs/basic-summary-jobs",
+        method: "GET",
+        params: cleanParams(req),
+      }),
+      providesTags: [{ type: "JobRun" as const, id: "BASIC_SUMMARY" }],
+    }),
+
+    resetBasicSummaryJob: build.mutation<BasicSummaryJobResetResponse, string>({
+      query: (snapshotId) => ({
+        url: `admin/operations/job-runs/basic-summary-jobs/${snapshotId}/reset`,
+        method: "POST",
+      }),
+      invalidatesTags: [{ type: "JobRun" as const, id: "BASIC_SUMMARY" }],
+    }),
+
     checkReportPayloadDiagnostics: build.query<ReportPayloadDiagnosticsResult, ReportPayloadDiagnosticsRequest>({
       query: (req) => ({
         url: "admin/operations/report-payloads/diagnostics",
@@ -428,6 +481,8 @@ export const {
   useProcessActionLogRetryJobsMutation,
   useSearchStatisticRebuildJobsQuery,
   useProcessStatisticRebuildJobsMutation,
+  useSearchBasicSummaryJobsQuery,
+  useResetBasicSummaryJobMutation,
   useCheckReportPayloadDiagnosticsQuery,
   useRepairReportPayloadDiagnosticsMutation,
 } = operationsApi;
