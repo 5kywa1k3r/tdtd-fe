@@ -62,7 +62,13 @@ export type BasicSummaryMethod =
   | "COUNT"
   | "MEAN"
   | "MIN"
-  | "MAX";
+  | "MAX"
+  | "TRUE_COUNT"
+  | "FALSE_COUNT"
+  | "MIN_DATE"
+  | "MAX_DATE"
+  | "JOIN"
+  | "BUCKET_COUNT";
 
 export type BasicSummaryMethodOption = {
   value: BasicSummaryMethod;
@@ -143,6 +149,12 @@ export const BASIC_SUMMARY_METHOD_LABELS: Record<BasicSummaryMethod, string> = {
   MEAN: "Trung bình",
   MIN: "Nhỏ nhất",
   MAX: "Lớn nhất",
+  TRUE_COUNT: "Đếm giá trị đúng",
+  FALSE_COUNT: "Đếm giá trị sai",
+  MIN_DATE: "Ngày sớm nhất",
+  MAX_DATE: "Ngày mới nhất",
+  JOIN: "Mẫu văn bản",
+  BUCKET_COUNT: "Đếm theo lựa chọn",
 };
 
 const METHOD_OPTIONS: BasicSummaryMethodOption[] = (
@@ -152,15 +164,21 @@ const METHOD_OPTIONS: BasicSummaryMethodOption[] = (
     "MEAN",
     "MIN",
     "MAX",
+    "TRUE_COUNT",
+    "FALSE_COUNT",
+    "MIN_DATE",
+    "MAX_DATE",
+    "JOIN",
+    "BUCKET_COUNT",
   ] as BasicSummaryMethod[]
 ).map((value) => ({ value, label: BASIC_SUMMARY_METHOD_LABELS[value] }));
 
 const DEFAULT_METHODS: Required<WorkAssignmentBasicSummaryDefaultMethodsDto> = {
   number: "SUM",
-  date: "SUM",
-  boolean: "SUM",
-  text: "SUM",
-  selection: "SUM",
+  date: "MAX_DATE",
+  boolean: "TRUE_COUNT",
+  text: "COUNT",
+  selection: "BUCKET_COUNT",
 };
 
 const SOURCE_VIEW_EMPTY: BasicSummarySourceViewState = {
@@ -477,10 +495,10 @@ function ConfigurationPanel({
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
               <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                Nâng cao theo field/range
+                Tùy chọn theo trường và vùng bảng
               </Typography>
-              <Chip size="small" variant="outlined" label={`${fieldRows.length} field`} />
-              <Chip size="small" variant="outlined" label={`${rangeRows.length} range`} />
+              <Chip size="small" variant="outlined" label={`${fieldRows.length} trường`} />
+              <Chip size="small" variant="outlined" label={`${rangeRows.length} vùng bảng`} />
             </Stack>
           </AccordionSummary>
           <AccordionDetails>
@@ -651,7 +669,7 @@ function RangeMethodTable({
   return (
     <Stack spacing={0.75}>
       <Typography variant="body2" sx={{ fontWeight: 800 }}>
-        Range trên sheet
+        Vùng bảng trên sheet
       </Typography>
       <AppTable
         rows={rows}
@@ -673,6 +691,10 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
         variant="outlined"
         label={result.meta.fromSnapshot ? "Snapshot" : "Vừa tính"}
       />
+      <Chip variant="outlined" label={result.meta.summaryType || "BASIC"} />
+      {result.meta.contractVersion && (
+        <Chip variant="outlined" label={result.meta.contractVersion} />
+      )}
       <Chip variant="outlined" label={`Công việc nguồn: ${result.meta.sourceAssignmentCount}`} />
       <Chip variant="outlined" label={`Báo cáo: ${result.meta.sourceReportCount}`} />
       <Chip variant="outlined" label={`Template: ${result.meta.dynamicFormTemplateCode || result.meta.dynamicFormTemplateId}`} />
@@ -1146,6 +1168,10 @@ const DEFAULT_METHOD_GROUPS: Array<{
   options: BasicSummaryMethodOption[];
 }> = [
   { key: "number", label: "Số", options: pickOptions(["SUM", "COUNT", "MEAN", "MIN", "MAX"]) },
+  { key: "date", label: "Ngày", options: pickOptions(["MAX_DATE", "MIN_DATE", "COUNT"]) },
+  { key: "boolean", label: "Đúng/sai", options: pickOptions(["TRUE_COUNT", "FALSE_COUNT", "COUNT"]) },
+  { key: "text", label: "Văn bản", options: pickOptions(["COUNT", "JOIN"]) },
+  { key: "selection", label: "Lựa chọn", options: pickOptions(["BUCKET_COUNT", "COUNT"]) },
 ];
 
 type BlockPreview = {

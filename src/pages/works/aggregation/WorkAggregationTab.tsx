@@ -265,7 +265,13 @@ type SummaryMethod =
   | "COUNT"
   | "MEAN"
   | "MIN"
-  | "MAX";
+  | "MAX"
+  | "TRUE_COUNT"
+  | "FALSE_COUNT"
+  | "MIN_DATE"
+  | "MAX_DATE"
+  | "JOIN"
+  | "BUCKET_COUNT";
 
 type SummaryMethodOption = {
   value: SummaryMethod;
@@ -291,6 +297,12 @@ const SUMMARY_METHOD_LABELS: Record<SummaryMethod, string> = {
   MEAN: "Trung bình",
   MIN: "Nhỏ nhất",
   MAX: "Lớn nhất",
+  TRUE_COUNT: "Đếm giá trị đúng",
+  FALSE_COUNT: "Đếm giá trị sai",
+  MIN_DATE: "Ngày sớm nhất",
+  MAX_DATE: "Ngày mới nhất",
+  JOIN: "Mẫu văn bản",
+  BUCKET_COUNT: "Đếm theo lựa chọn",
 };
 
 const SUMMARY_METHOD_OPTIONS: SummaryMethodOption[] = [
@@ -299,14 +311,20 @@ const SUMMARY_METHOD_OPTIONS: SummaryMethodOption[] = [
   "MEAN",
   "MIN",
   "MAX",
+  "TRUE_COUNT",
+  "FALSE_COUNT",
+  "MIN_DATE",
+  "MAX_DATE",
+  "JOIN",
+  "BUCKET_COUNT",
 ].map((value) => ({ value: value as SummaryMethod, label: SUMMARY_METHOD_LABELS[value as SummaryMethod] }));
 
 const DEFAULT_BASIC_SUMMARY_METHODS: Required<WorkAssignmentBasicSummaryDefaultMethodsDto> = {
   number: "SUM",
-  date: "SUM",
-  boolean: "SUM",
-  text: "SUM",
-  selection: "SUM",
+  date: "MAX_DATE",
+  boolean: "TRUE_COUNT",
+  text: "COUNT",
+  selection: "BUCKET_COUNT",
 };
 
 const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
@@ -318,15 +336,41 @@ const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
   pageSize: 10,
 };
 
-function methodOptionsForDataType(_dataType: DynamicExcelDataType): SummaryMethodOption[] {
-  return SUMMARY_METHOD_OPTIONS;
+function methodOptionsForDataType(dataType: DynamicExcelDataType): SummaryMethodOption[] {
+  switch (dataType) {
+    case "NUMBER":
+      return pickSummaryMethodOptions(["SUM", "COUNT", "MEAN", "MIN", "MAX"]);
+    case "DATE":
+    case "FULL_DATE":
+      return pickSummaryMethodOptions(["MAX_DATE", "MIN_DATE", "COUNT"]);
+    case "BOOLEAN":
+      return pickSummaryMethodOptions(["TRUE_COUNT", "FALSE_COUNT", "COUNT"]);
+    case "MULTI_SELECT":
+      return pickSummaryMethodOptions(["BUCKET_COUNT", "COUNT"]);
+    case "SHORT_TEXT":
+    default:
+      return pickSummaryMethodOptions(["COUNT", "JOIN"]);
+  }
 }
 
 function defaultSummaryMethodForDataType(
   dataType: DynamicExcelDataType,
   defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto = DEFAULT_BASIC_SUMMARY_METHODS,
 ): SummaryMethod {
-  return dataType === "NUMBER" ? normalizeSummaryMethod(defaultMethods.number, "SUM") : "SUM";
+  switch (dataType) {
+    case "NUMBER":
+      return normalizeSummaryMethod(defaultMethods.number, "SUM");
+    case "DATE":
+    case "FULL_DATE":
+      return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
+    case "BOOLEAN":
+      return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
+    case "MULTI_SELECT":
+      return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
+    case "SHORT_TEXT":
+    default:
+      return normalizeSummaryMethod(defaultMethods.text, "COUNT");
+  }
 }
 
 function formatRectLabel(rect: ReportRect) {
@@ -349,7 +393,7 @@ function buildTemplateDataTypeMethodRows(
   const inputRefs = buildInputCellRefs(templateRect, normalizedSpec);
 
   return getMatrixDataTypeRanges(normalizedSpec, templateRect)
-    .filter((range) => range.dataType === "NUMBER")
+    .filter((range) => range.dataType !== "IGNORE")
     .map((range, index) => {
       const id = range.id || `range_${index + 1}`;
       const inputIndexes = inputRefs.flatMap((ref, inputIndex) =>
@@ -384,15 +428,52 @@ function normalizeSummaryMethod(value: unknown, fallback: SummaryMethod): Summar
   return raw in SUMMARY_METHOD_LABELS ? (raw as SummaryMethod) : fallback;
 }
 
-function methodOptionsForFieldType(_fieldType: DynamicFormField["type"]): SummaryMethodOption[] {
-  return SUMMARY_METHOD_OPTIONS;
+function pickSummaryMethodOptions(values: SummaryMethod[]) {
+  const allowed = new Set(values);
+  return SUMMARY_METHOD_OPTIONS.filter((option) => allowed.has(option.value));
+}
+
+function methodOptionsForFieldType(fieldType: DynamicFormField["type"]): SummaryMethodOption[] {
+  switch (fieldType) {
+    case "number":
+      return pickSummaryMethodOptions(["SUM", "COUNT", "MEAN", "MIN", "MAX"]);
+    case "date":
+    case "fullDate":
+      return pickSummaryMethodOptions(["MAX_DATE", "MIN_DATE", "COUNT"]);
+    case "boolean":
+      return pickSummaryMethodOptions(["TRUE_COUNT", "FALSE_COUNT", "COUNT"]);
+    case "singleSelect":
+    case "multiSelect":
+      return pickSummaryMethodOptions(["BUCKET_COUNT", "COUNT"]);
+    case "shortText":
+    case "longText":
+    case "stringList":
+    default:
+      return pickSummaryMethodOptions(["COUNT", "JOIN"]);
+  }
 }
 
 function defaultSummaryMethodForFieldType(
   fieldType: DynamicFormField["type"],
   defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto,
 ): SummaryMethod {
-  return fieldType === "number" ? normalizeSummaryMethod(defaultMethods.number, "SUM") : "SUM";
+  switch (fieldType) {
+    case "number":
+      return normalizeSummaryMethod(defaultMethods.number, "SUM");
+    case "date":
+    case "fullDate":
+      return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
+    case "boolean":
+      return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
+    case "singleSelect":
+    case "multiSelect":
+      return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
+    case "shortText":
+    case "longText":
+    case "stringList":
+    default:
+      return normalizeSummaryMethod(defaultMethods.text, "COUNT");
+  }
 }
 
 function buildBasicSummaryFieldMethodRows(
@@ -416,7 +497,6 @@ function buildBasicSummaryFieldMethodRows(
   });
 
   return [...value.fields]
-    .filter((field) => field.type === "number")
     .sort((a, b) => a.order - b.order)
     .map((field) => {
       const defaultMethod = defaultSummaryMethodForFieldType(field.type, defaultMethods);

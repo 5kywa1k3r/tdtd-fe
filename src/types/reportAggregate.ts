@@ -280,6 +280,9 @@ export interface SaveWorkAssignmentBasicSummaryConfigRequest {
 }
 
 export interface WorkAssignmentBasicSummaryMetaDto {
+  summaryType?: "BASIC" | string;
+  contractVersion?: string | null;
+  snapshotPayloadKind?: string | null;
   snapshotId: string;
   scopeAssignmentId: string;
   scopeMode: string;
