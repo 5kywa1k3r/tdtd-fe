@@ -358,6 +358,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
       {result && (
         <>
           <SummaryMetaChips result={result} />
+          <BasicSummaryJobAlert result={result} />
 
           {result.warnings.map((warning) => (
             <Alert key={warning} severity="warning">
@@ -600,6 +601,12 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
         variant="outlined"
         label={result.meta.fromSnapshot ? "Snapshot" : "Vừa tính"}
       />
+      {isActiveBasicSummaryJob(result.meta.calculationStatus) && (
+        <Chip color="warning" variant="outlined" label="Đang tính ngầm" />
+      )}
+      {normalizeBasicSummaryJobStatus(result.meta.calculationStatus) === "FAILED" && (
+        <Chip color="error" variant="outlined" label="Lỗi job" />
+      )}
       <Chip variant="outlined" label={result.meta.summaryType || "BASIC"} />
       {result.meta.contractVersion && (
         <Chip variant="outlined" label={result.meta.contractVersion} />
@@ -613,6 +620,47 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
       <Chip variant="outlined" label={`Cập nhật: ${formatDateTime(result.meta.snapshotRefreshedAtUtc)}`} />
     </Stack>
   );
+}
+
+function BasicSummaryJobAlert({ result }: { result: WorkAssignmentBasicSummaryResponse }) {
+  const status = normalizeBasicSummaryJobStatus(result.meta.calculationStatus);
+  const jobSuffix = result.meta.calculationJobId ? ` Mã job: ${result.meta.calculationJobId}.` : "";
+
+  if (status === "FAILED") {
+    const error = result.meta.calculationError?.trim();
+    return (
+      <Alert severity="error">
+        Job tính snapshot thống kê cơ bản thất bại{error ? `: ${error}` : "."} Bấm Tính lại để enqueue lại.{jobSuffix}
+      </Alert>
+    );
+  }
+
+  if (result.meta.isCalculating || isActiveBasicSummaryJob(status)) {
+    return (
+      <Alert severity="info">
+        Snapshot thống kê cơ bản đang được tính ngầm. Tải lại sau để xem kết quả mới.{jobSuffix}
+      </Alert>
+    );
+  }
+
+  if (result.meta.snapshotDirty) {
+    return (
+      <Alert severity="warning">
+        Snapshot thống kê cơ bản đang cần tính lại. Bấm Tính lại để enqueue job mới.{jobSuffix}
+      </Alert>
+    );
+  }
+
+  return null;
+}
+
+function normalizeBasicSummaryJobStatus(status?: string | null) {
+  return (status || "").trim().toUpperCase();
+}
+
+function isActiveBasicSummaryJob(status?: string | null) {
+  const normalized = normalizeBasicSummaryJobStatus(status);
+  return normalized === "QUEUED" || normalized === "RUNNING";
 }
 
 function formatSummaryPeriodScope(result: WorkAssignmentBasicSummaryResponse) {

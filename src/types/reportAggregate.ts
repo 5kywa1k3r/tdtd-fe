@@ -302,6 +302,13 @@ export interface WorkAssignmentBasicSummaryMetaDto {
   snapshotDirtyAtUtc?: string | null;
   snapshotRefreshedAtUtc?: string | null;
   sourceSignatureHash?: string | null;
+  isCalculating?: boolean;
+  calculationStatus?: "QUEUED" | "RUNNING" | "DONE" | "FAILED" | string | null;
+  calculationJobId?: string | null;
+  calculationQueuedAtUtc?: string | null;
+  calculationStartedAtUtc?: string | null;
+  calculationFinishedAtUtc?: string | null;
+  calculationError?: string | null;
 }
 
 export interface WorkAssignmentBasicSummaryBucketDto {
