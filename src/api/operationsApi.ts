@@ -348,6 +348,85 @@ export type AdvancedSummaryDayDiagnosticsResponse = {
   direct: AdvancedSummaryDayDiagnosticSnapshot;
 };
 
+export type WorkSummaryTokenQuotaQuery = {
+  ownerUnitId?: string;
+  tokenKind?: string;
+  periodMonthKey?: string;
+};
+
+export type WorkSummaryTokenQuotaResponse = {
+  ownerUnitId: string;
+  tokenKind: string;
+  periodMonthKey: string;
+  baseMonthlyQuota: number;
+  grantedUnits: number;
+  usedUnits: number;
+  monthlyQuota: number;
+  remainingUnits: number;
+};
+
+export type WorkSummaryTokenGrantRequest = {
+  ownerUnitId: string;
+  units: number;
+  tokenKind?: string;
+  periodMonthKey?: string;
+  reason?: string;
+};
+
+export type WorkSummaryTokenGrantResponse = {
+  ledgerId: string;
+  ownerUnitId: string;
+  issuerUserId: string;
+  tokenKind: string;
+  periodMonthKey: string;
+  units: number;
+  quota: WorkSummaryTokenQuotaResponse;
+  createdAtUtc: string;
+};
+
+export type WorkSummaryTokenLedgerRow = {
+  id: string;
+  ownerUserId?: string | null;
+  ownerUnitId?: string | null;
+  actorUserId: string;
+  issuerUserId?: string | null;
+  tokenKind: string;
+  direction: string;
+  units: number;
+  monthlyQuota: number;
+  periodMonthKey: string;
+  requestTokenId?: string | null;
+  workId?: string | null;
+  workAssignmentId?: string | null;
+  dynamicFormTemplateId?: string | null;
+  sectionId?: string | null;
+  configId?: string | null;
+  configVersionNo?: number | null;
+  configHash?: string | null;
+  jobId?: string | null;
+  reason: string;
+  outcome: string;
+  error?: string | null;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type WorkSummaryTokenLedgerSearchReq = {
+  ownerUnitId?: string;
+  ownerUserId?: string;
+  actorUserId?: string;
+  issuerUserId?: string;
+  tokenKind?: string;
+  direction?: string;
+  outcome?: string;
+  periodMonthKey?: string;
+  configId?: string;
+  jobId?: string;
+  q?: string;
+  page: number;
+  pageSize: number;
+};
+
 export type ProcessJobRunResponse = {
   ok: boolean;
   processed: number;
@@ -598,6 +677,48 @@ export const operationsApi = baseApi.injectEndpoints({
       }),
     }),
 
+    getWorkSummaryTokenQuota: build.query<WorkSummaryTokenQuotaResponse, WorkSummaryTokenQuotaQuery>({
+      query: (req) => ({
+        url: "work-summary-tokens/quota",
+        method: "GET",
+        params: cleanParams(req),
+      }),
+      providesTags: (_result, _error, req) => [
+        { type: "SummaryToken" as const, id: "QUOTA" },
+        {
+          type: "SummaryToken" as const,
+          id: `quota:${req.ownerUnitId || "self"}:${req.tokenKind || "default"}:${req.periodMonthKey || "current"}`,
+        },
+      ],
+    }),
+
+    searchWorkSummaryTokenLedger: build.query<
+      PagedResult<WorkSummaryTokenLedgerRow>,
+      WorkSummaryTokenLedgerSearchReq
+    >({
+      query: (req) => ({
+        url: "work-summary-tokens/ledger",
+        method: "GET",
+        params: cleanParams(req),
+      }),
+      providesTags: [{ type: "SummaryToken" as const, id: "LEDGER" }],
+    }),
+
+    grantWorkSummaryTokenQuota: build.mutation<
+      WorkSummaryTokenGrantResponse,
+      WorkSummaryTokenGrantRequest
+    >({
+      query: (req) => ({
+        url: "work-summary-tokens/grants",
+        method: "POST",
+        data: cleanParams(req),
+      }),
+      invalidatesTags: [
+        { type: "SummaryToken" as const, id: "LEDGER" },
+        { type: "SummaryToken" as const, id: "QUOTA" },
+      ],
+    }),
+
     checkReportPayloadDiagnostics: build.query<ReportPayloadDiagnosticsResult, ReportPayloadDiagnosticsRequest>({
       query: (req) => ({
         url: "admin/operations/report-payloads/diagnostics",
@@ -642,6 +763,9 @@ export const {
   useResetAdvancedSummaryNodeMutation,
   useCleanupAdvancedSummaryNodesMutation,
   useDiagnoseAdvancedSummaryDayNodeMutation,
+  useGetWorkSummaryTokenQuotaQuery,
+  useSearchWorkSummaryTokenLedgerQuery,
+  useGrantWorkSummaryTokenQuotaMutation,
   useCheckReportPayloadDiagnosticsQuery,
   useRepairReportPayloadDiagnosticsMutation,
 } = operationsApi;

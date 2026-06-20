@@ -33,7 +33,7 @@ export const Sidebar = () => {
       role === Role.MANAGER_LEVEL ||
       isManagerUnitRole(role),
   );
-  const canSeeOperations = canManageLabels;
+  const canSeeOperations = canManageLabels || roles.includes(Role.ADMIN);
 
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");

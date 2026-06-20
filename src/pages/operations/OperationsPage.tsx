@@ -33,6 +33,8 @@ import {
   useRepairReportPayloadDiagnosticsMutation,
   useCleanupAdvancedSummaryNodesMutation,
   useDiagnoseAdvancedSummaryDayNodeMutation,
+  useGetWorkSummaryTokenQuotaQuery,
+  useGrantWorkSummaryTokenQuotaMutation,
   useResetAdvancedSummaryNodeMutation,
   useSearchActionLogRetryJobsQuery,
   useSearchActionLogsQuery,
@@ -42,6 +44,7 @@ import {
   useSearchMaterializeJobsQuery,
   useSearchProjectionRetryJobsQuery,
   useSearchStatisticRebuildJobsQuery,
+  useSearchWorkSummaryTokenLedgerQuery,
 } from "../../api/operationsApi";
 import type {
   AdvancedSummaryDayDiagnosticsResponse,
@@ -58,15 +61,18 @@ import type {
   UserActionLogRow,
   UserActionLogSearchReq,
   UserActionLogUserDto,
+  WorkSummaryTokenGrantRequest,
+  WorkSummaryTokenLedgerRow,
+  WorkSummaryTokenLedgerSearchReq,
   WorkStatusOperationLogRow,
 } from "../../api/operationsApi";
 import { AppTable } from "../../components/common/AppTable";
 import type { AppTableColumn } from "../../components/common/AppTable";
-import { Role } from "../../constants/roles";
+import { Role, isManagerLevelRole, isManagerUnitRole } from "../../constants/roles";
 import type { PagedResult } from "../../types/pagedResult";
 import { UITextKey, uiText } from '../../constants/uiText';
 
-type MainTab = "history" | "jobRuns" | "payloadDiagnostics";
+type MainTab = "history" | "jobRuns" | "payloadDiagnostics" | "summaryTokens";
 type JobRunTab =
   | "operationLogs"
   | "materialize"
@@ -110,6 +116,29 @@ type PayloadDiagnosticsFilters = {
   workReportPeriodId: string;
   workAssignmentReportId: string;
   limit: number;
+};
+
+type SummaryTokenFilters = {
+  q: string;
+  ownerUnitId: string;
+  ownerUserId: string;
+  actorUserId: string;
+  issuerUserId: string;
+  tokenKind: string;
+  direction: string;
+  outcome: string;
+  periodMonthKey: string;
+  configId: string;
+  jobId: string;
+  pageSize: number;
+};
+
+type SummaryTokenGrantDraft = {
+  ownerUnitId: string;
+  tokenKind: string;
+  periodMonthKey: string;
+  units: number;
+  reason: string;
 };
 
 type PagedTableProps<T> = {
@@ -157,6 +186,33 @@ const payloadDiagnosticsDefaultFilters: PayloadDiagnosticsFilters = {
   workReportPeriodId: "",
   workAssignmentReportId: "",
   limit: 100,
+};
+
+const defaultSummaryTokenKind = "ADVANCED_SUMMARY_CONFIG_LOCK";
+
+const currentMonthKey = () => new Date().toISOString().slice(0, 7);
+
+const summaryTokenDefaultFilters: SummaryTokenFilters = {
+  q: "",
+  ownerUnitId: "",
+  ownerUserId: "",
+  actorUserId: "",
+  issuerUserId: "",
+  tokenKind: defaultSummaryTokenKind,
+  direction: "",
+  outcome: "",
+  periodMonthKey: currentMonthKey(),
+  configId: "",
+  jobId: "",
+  pageSize: 25,
+};
+
+const summaryTokenDefaultGrantDraft: SummaryTokenGrantDraft = {
+  ownerUnitId: "",
+  tokenKind: defaultSummaryTokenKind,
+  periodMonthKey: currentMonthKey(),
+  units: 1,
+  reason: "",
 };
 
 const operationsFilterRowSx = {
@@ -264,6 +320,24 @@ const advancedSummaryGrainOptions = [
   ["YEAR", "Year"],
 ] as const;
 
+const summaryTokenKindOptions = [
+  ["ADVANCED_SUMMARY_CONFIG_LOCK", "Advanced config lock"],
+  ["ADVANCED_SUMMARY_BROAD_HISTORICAL_BUILD", "Broad historical build"],
+] as const;
+
+const summaryTokenDirectionOptions = [
+  ["", "All directions"],
+  ["FREE", "Free"],
+  ["CONSUME", "Consume"],
+  ["GRANT", "Grant"],
+] as const;
+
+const summaryTokenOutcomeOptions = [
+  ["", "All outcomes"],
+  ["SUCCESS", "Success"],
+  ["FAILED", "Failed"],
+] as const;
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -276,6 +350,15 @@ const compactId = (value?: string | null) =>
 
 const labelFromOptions = <T extends readonly (readonly [string, string])[]>(options: T, value?: string | null) =>
   options.find(([key]) => key === value)?.[1];
+
+const summaryTokenKindLabel = (value?: string | null) =>
+  labelFromOptions(summaryTokenKindOptions, value) ?? value ?? "-";
+
+const summaryTokenDirectionLabel = (value?: string | null) =>
+  labelFromOptions(summaryTokenDirectionOptions, value) ?? value ?? "-";
+
+const summaryTokenOutcomeLabel = (value?: string | null) =>
+  labelFromOptions(summaryTokenOutcomeOptions, value) ?? value ?? "-";
 
 const actionLabel = (value: string) => {
   const normalized = value.toUpperCase();
@@ -489,6 +572,36 @@ const toAdvancedSummaryCleanupRequest = (
   limit: Math.max(1, Math.min(1000, filters.cleanupLimit || 100)),
 });
 
+const toSummaryTokenLedgerRequest = (
+  filters: SummaryTokenFilters,
+  page: number,
+): WorkSummaryTokenLedgerSearchReq => ({
+  ownerUnitId: filters.ownerUnitId.trim() || undefined,
+  ownerUserId: filters.ownerUserId.trim() || undefined,
+  actorUserId: filters.actorUserId.trim() || undefined,
+  issuerUserId: filters.issuerUserId.trim() || undefined,
+  tokenKind: filters.tokenKind || undefined,
+  direction: filters.direction || undefined,
+  outcome: filters.outcome || undefined,
+  periodMonthKey: filters.periodMonthKey.trim() || undefined,
+  configId: filters.configId.trim() || undefined,
+  jobId: filters.jobId.trim() || undefined,
+  q: filters.q.trim() || undefined,
+  page,
+  pageSize: Math.max(10, Math.min(100, filters.pageSize || 25)),
+});
+
+const toSummaryTokenGrantRequest = (
+  draft: SummaryTokenGrantDraft,
+  fallbackOwnerUnitId: string,
+): WorkSummaryTokenGrantRequest => ({
+  ownerUnitId: draft.ownerUnitId.trim() || fallbackOwnerUnitId.trim(),
+  tokenKind: draft.tokenKind || defaultSummaryTokenKind,
+  periodMonthKey: draft.periodMonthKey.trim() || currentMonthKey(),
+  units: Math.max(1, Math.min(1000, draft.units || 1)),
+  reason: draft.reason.trim() || undefined,
+});
+
 function PagedTable<T>({
   data,
   isFetching,
@@ -529,11 +642,38 @@ function OperationsPage() {
   const meQuery = useGetMeQuery();
   const roles = meQuery.data?.roles ?? [];
   const isSystemAdmin = roles.includes(Role.SYSTEM_ADMIN);
+  const isAdmin = roles.includes(Role.ADMIN);
+  const canViewHistory = isSystemAdmin || roles.some(
+    (role) =>
+      role === Role.MANAGER_LEVEL ||
+      role === Role.MANAGER_UNIT ||
+      isManagerLevelRole(role) ||
+      isManagerUnitRole(role),
+  );
+  const canManageSummaryTokenGrants = isSystemAdmin || isAdmin;
+  const canReadSummaryTokens = canViewHistory || canManageSummaryTokenGrants;
   const [tab, setTab] = useState<MainTab>("history");
+  const activeTab =
+    tab === "jobRuns" && !isSystemAdmin
+      ? canReadSummaryTokens ? "summaryTokens" : "history"
+      : tab === "payloadDiagnostics" && !isSystemAdmin
+        ? canReadSummaryTokens ? "summaryTokens" : "history"
+        : tab === "summaryTokens" && !canReadSummaryTokens
+          ? canViewHistory ? "history" : "summaryTokens"
+          : tab === "history" && !canViewHistory
+            ? canReadSummaryTokens ? "summaryTokens" : "history"
+            : tab;
 
   const handleMainTabChange = (_event: unknown, value: MainTab) => {
-    setTab(value !== "history" && !isSystemAdmin ? "history" : value);
+    if (value === "history" && !canViewHistory) return;
+    if ((value === "jobRuns" || value === "payloadDiagnostics") && !isSystemAdmin) return;
+    if (value === "summaryTokens" && !canReadSummaryTokens) return;
+    setTab(value);
   };
+
+  if (meQuery.isLoading) {
+    return <LinearProgress />;
+  }
 
   return (
     <Box sx={{ p: 2 }}>
@@ -548,20 +688,427 @@ function OperationsPage() {
         </Box>
       </Stack>
 
-      <Tabs value={tab} onChange={handleMainTabChange} sx={{ mb: 2 }}>
-        <Tab value="history" icon={<HistoryIcon />} iconPosition="start" label={uiText(UITextKey.TextLichSuThaoTac)} />
+      <Tabs value={activeTab} onChange={handleMainTabChange} sx={{ mb: 2 }}>
+        {canViewHistory && (
+          <Tab value="history" icon={<HistoryIcon />} iconPosition="start" label={uiText(UITextKey.TextLichSuThaoTac)} />
+        )}
         {isSystemAdmin && (
           <Tab value="jobRuns" icon={<ManageSearchIcon />} iconPosition="start" label={uiText(UITextKey.TextJobRun)} />
         )}
         {isSystemAdmin && (
           <Tab value="payloadDiagnostics" icon={<FactCheckIcon />} iconPosition="start" label="Payload báo cáo" />
         )}
+        {canReadSummaryTokens && (
+          <Tab value="summaryTokens" icon={<ManageSearchIcon />} iconPosition="start" label="Summary tokens" />
+        )}
       </Tabs>
 
-      {tab === "history" && <HistoryPanel />}
-      {tab === "jobRuns" && isSystemAdmin && <JobRunsPanel />}
-      {tab === "payloadDiagnostics" && isSystemAdmin && <ReportPayloadDiagnosticsPanel />}
+      {activeTab === "history" && canViewHistory && <HistoryPanel />}
+      {activeTab === "jobRuns" && isSystemAdmin && <JobRunsPanel />}
+      {activeTab === "payloadDiagnostics" && isSystemAdmin && <ReportPayloadDiagnosticsPanel />}
+      {activeTab === "summaryTokens" && canReadSummaryTokens && (
+        <SummaryTokensPanel canGrant={canManageSummaryTokenGrants} />
+      )}
     </Box>
+  );
+}
+
+function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
+  const [draft, setDraft] = useState<SummaryTokenFilters>(summaryTokenDefaultFilters);
+  const [applied, setApplied] = useState<SummaryTokenFilters>(summaryTokenDefaultFilters);
+  const [grantDraft, setGrantDraft] = useState<SummaryTokenGrantDraft>(summaryTokenDefaultGrantDraft);
+  const [page, setPage] = useState(0);
+  const [notice, setNotice] = useState<ReactNode>(null);
+  const [grantQuota, grantState] = useGrantWorkSummaryTokenQuotaMutation();
+
+  const ledgerArgs = useMemo(
+    () => toSummaryTokenLedgerRequest(applied, page),
+    [applied, page],
+  );
+  const ledgerQuery = useSearchWorkSummaryTokenLedgerQuery(ledgerArgs);
+  const quotaArgs = useMemo(
+    () => ({
+      ownerUnitId: applied.ownerUnitId.trim() || undefined,
+      tokenKind: applied.tokenKind || defaultSummaryTokenKind,
+      periodMonthKey: applied.periodMonthKey.trim() || undefined,
+    }),
+    [applied],
+  );
+  const quotaQuery = useGetWorkSummaryTokenQuotaQuery(quotaArgs, {
+    skip: canGrant && !applied.ownerUnitId.trim(),
+  });
+
+  const tokenDirectionColor = (value?: string | null): ChipColor => {
+    if (value === "GRANT") return "success";
+    if (value === "CONSUME") return "warning";
+    if (value === "FREE") return "info";
+    return "default";
+  };
+
+  const columns = useMemo<AppTableColumn<WorkSummaryTokenLedgerRow>[]>(
+    () => [
+      {
+        field: "createdAtUtc",
+        header: "Created",
+        width: 170,
+        render: (row) => formatDateTime(row.createdAtUtc),
+      },
+      {
+        field: "ownerUnitId",
+        header: "Owner unit",
+        width: 160,
+        render: (row) => compactId(row.ownerUnitId),
+      },
+      {
+        field: "periodMonthKey",
+        header: "Month",
+        width: 100,
+        render: (row) => row.periodMonthKey || "-",
+      },
+      {
+        field: "tokenKind",
+        header: "Token kind",
+        width: 220,
+        render: (row) => <Chip size="small" label={summaryTokenKindLabel(row.tokenKind)} />,
+      },
+      {
+        field: "direction",
+        header: "Direction",
+        width: 120,
+        render: (row) => (
+          <Chip
+            size="small"
+            color={tokenDirectionColor(row.direction)}
+            label={summaryTokenDirectionLabel(row.direction)}
+          />
+        ),
+      },
+      {
+        field: "outcome",
+        header: "Outcome",
+        width: 110,
+        render: (row) => (
+          <Chip size="small" color={resultColor(row.outcome)} label={summaryTokenOutcomeLabel(row.outcome)} />
+        ),
+      },
+      {
+        field: "units",
+        header: "Units",
+        width: 110,
+        align: "right",
+        render: (row) => `${row.units}/${row.monthlyQuota}`,
+      },
+      {
+        field: "configId",
+        header: "Config / job",
+        width: 180,
+        render: (row) => (
+          <Stack spacing={0.25}>
+            <Typography variant="body2">{compactId(row.configId)}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {compactId(row.jobId)}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "actorUserId",
+        header: "Actor / issuer",
+        width: 180,
+        render: (row) => (
+          <Stack spacing={0.25}>
+            <Typography variant="body2">{compactId(row.actorUserId)}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {compactId(row.issuerUserId)}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "reason",
+        header: "Reason / error",
+        render: (row) => renderLimitedText(row.error || row.reason, 420),
+      },
+    ],
+    [],
+  );
+
+  const applyFilters = () => {
+    setNotice(null);
+    setPage(0);
+    setApplied(draft);
+    if (!grantDraft.ownerUnitId.trim() && draft.ownerUnitId.trim()) {
+      setGrantDraft((current) => ({ ...current, ownerUnitId: draft.ownerUnitId.trim() }));
+    }
+  };
+
+  const setPageSize = (pageSize: number) => {
+    setPage(0);
+    setDraft((current) => ({ ...current, pageSize }));
+    setApplied((current) => ({ ...current, pageSize }));
+  };
+
+  const runGrant = async () => {
+    if (!canGrant) return;
+
+    const request = toSummaryTokenGrantRequest(grantDraft, draft.ownerUnitId || applied.ownerUnitId);
+    if (!request.ownerUnitId) {
+      setNotice("Enter Owner unit ID before granting extra quota.");
+      return;
+    }
+
+    setNotice(null);
+    try {
+      const result = await grantQuota(request).unwrap();
+      setNotice(
+        `Granted ${result.units} token(s) to unit ${compactId(result.ownerUnitId)}. Remaining: ${result.quota.remainingUnits}/${result.quota.monthlyQuota}.`,
+      );
+      setPage(0);
+      setDraft((current) => ({
+        ...current,
+        ownerUnitId: request.ownerUnitId,
+        tokenKind: request.tokenKind || defaultSummaryTokenKind,
+        periodMonthKey: request.periodMonthKey || currentMonthKey(),
+      }));
+      setApplied((current) => ({
+        ...current,
+        ownerUnitId: request.ownerUnitId,
+        tokenKind: request.tokenKind || defaultSummaryTokenKind,
+        periodMonthKey: request.periodMonthKey || currentMonthKey(),
+      }));
+    } catch {
+      setNotice("Grant failed. Check unit scope, token kind, month key, and units.");
+    }
+  };
+
+  return (
+    <Stack spacing={2}>
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Box sx={operationsFilterRowSx}>
+          <TextField
+            size="small"
+            label="Search ledger"
+            value={draft.q}
+            onChange={(event) => setDraft((current) => ({ ...current, q: event.target.value }))}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") applyFilters();
+            }}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 1.4 }}
+          />
+          <TextField
+            size="small"
+            label="Owner unit ID"
+            value={draft.ownerUnitId}
+            onChange={(event) => setDraft((current) => ({ ...current, ownerUnitId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            select
+            size="small"
+            label="Token kind"
+            value={draft.tokenKind}
+            onChange={(event) => setDraft((current) => ({ ...current, tokenKind: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          >
+            {summaryTokenKindOptions.map(([value, label]) => (
+              <MenuItem key={value} value={value}>
+                {label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Direction"
+            value={draft.direction}
+            onChange={(event) => setDraft((current) => ({ ...current, direction: event.target.value }))}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.8 }}
+          >
+            {summaryTokenDirectionOptions.map(([value, label]) => (
+              <MenuItem key={value} value={value}>
+                {label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Outcome"
+            value={draft.outcome}
+            onChange={(event) => setDraft((current) => ({ ...current, outcome: event.target.value }))}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.8 }}
+          >
+            {summaryTokenOutcomeOptions.map(([value, label]) => (
+              <MenuItem key={value} value={value}>
+                {label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            label="Month"
+            value={draft.periodMonthKey}
+            onChange={(event) => setDraft((current) => ({ ...current, periodMonthKey: event.target.value }))}
+            sx={{ ...operationsFilterFieldSx, flexGrow: 0.7 }}
+            placeholder="yyyy-MM"
+          />
+          <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters} sx={operationsFilterButtonSx}>
+            Filter
+          </Button>
+        </Box>
+        <Box sx={{ ...operationsFilterRowSx, mt: 1.5 }}>
+          <TextField
+            size="small"
+            label="Owner user ID"
+            value={draft.ownerUserId}
+            onChange={(event) => setDraft((current) => ({ ...current, ownerUserId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label="Actor user ID"
+            value={draft.actorUserId}
+            onChange={(event) => setDraft((current) => ({ ...current, actorUserId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label="Issuer user ID"
+            value={draft.issuerUserId}
+            onChange={(event) => setDraft((current) => ({ ...current, issuerUserId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label="Config ID"
+            value={draft.configId}
+            onChange={(event) => setDraft((current) => ({ ...current, configId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+          <TextField
+            size="small"
+            label="Job ID"
+            value={draft.jobId}
+            onChange={(event) => setDraft((current) => ({ ...current, jobId: event.target.value }))}
+            sx={operationsFilterFieldSx}
+          />
+        </Box>
+      </Paper>
+
+      <Stack direction={{ xs: "column", lg: "row" }} spacing={2}>
+        <Paper variant="outlined" sx={{ p: 2, flex: 1 }}>
+          <Stack spacing={1}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Quota pool
+            </Typography>
+            {quotaQuery.isFetching && <LinearProgress />}
+            {quotaQuery.isError && (
+              <Alert severity="warning">Cannot load quota. Set Owner unit ID if this account has no default unit.</Alert>
+            )}
+            {!quotaQuery.isFetching && !quotaQuery.data && !quotaQuery.isError && (
+              <Alert severity="info">Set Owner unit ID to inspect a unit quota pool.</Alert>
+            )}
+            {quotaQuery.data && (
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Chip label={`Unit: ${compactId(quotaQuery.data.ownerUnitId)}`} />
+                <Chip label={`Month: ${quotaQuery.data.periodMonthKey}`} />
+                <Chip label={`Base: ${quotaQuery.data.baseMonthlyQuota}`} />
+                <Chip label={`Granted: ${quotaQuery.data.grantedUnits}`} />
+                <Chip label={`Used: ${quotaQuery.data.usedUnits}`} />
+                <Chip
+                  color={quotaQuery.data.remainingUnits > 0 ? "success" : "warning"}
+                  label={`Remaining: ${quotaQuery.data.remainingUnits}/${quotaQuery.data.monthlyQuota}`}
+                />
+              </Stack>
+            )}
+          </Stack>
+        </Paper>
+
+        {canGrant && (
+          <Paper variant="outlined" sx={{ p: 2, flex: 1 }}>
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Admin grant
+              </Typography>
+              <Box sx={operationsFilterRowSx}>
+                <TextField
+                  size="small"
+                  label="Owner unit ID"
+                  value={grantDraft.ownerUnitId}
+                  onChange={(event) => setGrantDraft((current) => ({ ...current, ownerUnitId: event.target.value }))}
+                  sx={operationsFilterFieldSx}
+                />
+                <TextField
+                  select
+                  size="small"
+                  label="Token kind"
+                  value={grantDraft.tokenKind}
+                  onChange={(event) => setGrantDraft((current) => ({ ...current, tokenKind: event.target.value }))}
+                  sx={operationsFilterFieldSx}
+                >
+                  {summaryTokenKindOptions.map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+              <Box sx={operationsFilterRowSx}>
+                <TextField
+                  size="small"
+                  label="Month"
+                  value={grantDraft.periodMonthKey}
+                  onChange={(event) => setGrantDraft((current) => ({ ...current, periodMonthKey: event.target.value }))}
+                  placeholder="yyyy-MM"
+                  sx={operationsFilterFieldSx}
+                />
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Units"
+                  value={grantDraft.units}
+                  onChange={(event) => setGrantDraft((current) => ({ ...current, units: Number(event.target.value) || 1 }))}
+                  inputProps={{ min: 1, max: 1000 }}
+                  sx={operationsFilterFieldSx}
+                />
+              </Box>
+              <Box sx={operationsFilterRowSx}>
+                <TextField
+                  size="small"
+                  label="Reason"
+                  value={grantDraft.reason}
+                  onChange={(event) => setGrantDraft((current) => ({ ...current, reason: event.target.value }))}
+                  sx={{ ...operationsFilterFieldSx, flexGrow: 1.8 }}
+                />
+                <Button
+                  variant="contained"
+                  color="warning"
+                  disabled={grantState.isLoading}
+                  onClick={runGrant}
+                  sx={operationsFilterButtonSx}
+                >
+                  Grant
+                </Button>
+              </Box>
+            </Stack>
+          </Paper>
+        )}
+      </Stack>
+
+      {notice && <Alert severity="info">{notice}</Alert>}
+
+      <PagedTable
+        data={ledgerQuery.data}
+        isFetching={ledgerQuery.isFetching}
+        isError={ledgerQuery.isError}
+        columns={columns}
+        rowKey={(row) => row.id}
+        page={page}
+        pageSize={applied.pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+    </Stack>
   );
 }
 

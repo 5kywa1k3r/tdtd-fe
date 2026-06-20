@@ -137,7 +137,7 @@ export const appRoutes: RouteObject[] = [
       {
         path: "operations",
         element: withSuspense(
-          <RequireRole allow={[Role.SYSTEM_ADMIN, Role.MANAGER_LEVEL, Role.MANAGER_UNIT]}>
+          <RequireRole allow={[Role.SYSTEM_ADMIN, Role.ADMIN, Role.MANAGER_LEVEL, Role.MANAGER_UNIT]}>
             <OperationsPage />
           </RequireRole>,
         ),

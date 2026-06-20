@@ -15,7 +15,7 @@ export const baseApi = createApi({
      'AdvancedSummaryConfig',
      'ReportPayloadDiagnostics',
      'Notification',
-     'UserActionLog', 'JobRun',
+     'UserActionLog', 'JobRun', 'SummaryToken',
      //evaluation
      'EvaluationTemplate',
      'DashboardMindMap',
