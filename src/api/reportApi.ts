@@ -23,6 +23,7 @@ import type {
   DynamicFormAggregateRequest,
   DynamicFormAggregateResponse,
   LockWorkAssignmentAdvancedSummaryConfigRequest,
+  PreviewWorkAssignmentAdvancedSummaryConfigRequest,
   SaveWorkAssignmentAggregateConfigRequest,
   SaveWorkAssignmentAdvancedSummaryDraftRequest,
   SaveWorkAssignmentBasicSummaryConfigRequest,
@@ -443,6 +444,18 @@ export const reportApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: "AdvancedSummaryConfig" as const }],
     }),
 
+    requestWorkAssignmentAdvancedSummaryPreview: build.mutation<
+      WorkAssignmentAdvancedSummaryConfigDto,
+      { configId: string; data?: PreviewWorkAssignmentAdvancedSummaryConfigRequest }
+    >({
+      query: ({ configId, data }) => ({
+        url: `work-assignment-advanced-summary/configs/${configId}/preview`,
+        method: "POST",
+        data: data ?? {},
+      }),
+      invalidatesTags: [{ type: "AdvancedSummaryConfig" as const }],
+    }),
+
     evaluateAssignment: build.mutation<
       void,
       { assignmentId: string; data: EvaluateAssignmentRequest }
@@ -517,6 +530,7 @@ export const {
   useGetWorkAssignmentBasicSummaryMutation,
   useListWorkAssignmentAdvancedSummaryConfigsQuery,
   useLockWorkAssignmentAdvancedSummaryConfigMutation,
+  useRequestWorkAssignmentAdvancedSummaryPreviewMutation,
   useSaveWorkAssignmentAdvancedSummaryDraftMutation,
   useSaveWorkAssignmentBasicSummaryConfigMutation,
   useSaveWorkAssignmentAggregateConfigMutation,

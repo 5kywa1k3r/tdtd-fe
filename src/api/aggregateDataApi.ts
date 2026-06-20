@@ -8,6 +8,7 @@ export {
   useListWorkAssignmentAdvancedSummaryConfigsQuery,
   useLockWorkAssignmentAdvancedSummaryConfigMutation,
   usePreviewDynamicFormAggregateDraftMutation,
+  useRequestWorkAssignmentAdvancedSummaryPreviewMutation,
   useSaveWorkAssignmentAdvancedSummaryDraftMutation,
   useSaveWorkAssignmentBasicSummaryConfigMutation,
   useSaveWorkAssignmentAggregateConfigMutation,

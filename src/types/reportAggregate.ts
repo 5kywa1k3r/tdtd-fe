@@ -317,6 +317,10 @@ export interface LockWorkAssignmentAdvancedSummaryConfigRequest {
   tokenId?: string | null;
 }
 
+export interface PreviewWorkAssignmentAdvancedSummaryConfigRequest {
+  forceRefresh?: boolean;
+}
+
 export interface WorkAssignmentBasicSummaryMetaDto {
   summaryType?: "BASIC" | string;
   contractVersion?: string | null;
