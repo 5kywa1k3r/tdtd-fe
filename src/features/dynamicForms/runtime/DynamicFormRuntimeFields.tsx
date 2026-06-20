@@ -24,6 +24,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 import type { DynamicFormField, DynamicFormSection } from "../dynamicForm.types";
 import DynamicFormSectionSelect, {
+  type DynamicFormSectionEntryStatus,
   type DynamicFormSectionValidationStatus,
 } from "../components/DynamicFormSectionSelect";
 import { getDynamicFormFieldDisplayName } from "../dynamicFormSchema";
@@ -64,7 +65,10 @@ export type DynamicFormRuntimeFieldsProps = {
   getSectionValidationState?: (
     section: DynamicFormSection,
   ) => { status: DynamicFormSectionValidationStatus; issueCount?: number } | null;
-  onSectionChange?: (section: DynamicFormSection) => void;
+  getSectionEntryState?: (
+    section: DynamicFormSection,
+  ) => { status: DynamicFormSectionEntryStatus; lastUpdatedAt?: string | null } | null;
+  onSectionChange?: (section: DynamicFormSection) => void | boolean | Promise<void | boolean>;
 };
 
 function clampSpan(value: number | undefined) {
@@ -262,13 +266,60 @@ function renderRuntimeSectionValidationChip(item: {
   return null;
 }
 
+function renderRuntimeSectionEntryChip(item: {
+  entryStatus?: DynamicFormSectionEntryStatus;
+}) {
+  if (item.entryStatus === "entered") {
+    return (
+      <Chip
+        size="small"
+        color="success"
+        variant="outlined"
+        label="Đã nhập"
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  if (item.entryStatus === "empty") {
+    return (
+      <Chip
+        size="small"
+        color="warning"
+        variant="outlined"
+        label="Chưa nhập"
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  return null;
+}
+
+function formatRuntimeSectionDateTime(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear()).padStart(4, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
 function formatRuntimeSectionSummary(item: {
   fieldCount?: number;
   blockCount?: number;
+  lastUpdatedAt?: string | null;
 }) {
   return [
     item.fieldCount ? `${item.fieldCount} trường` : null,
     item.blockCount ? `${item.blockCount} bảng` : null,
+    formatRuntimeSectionDateTime(item.lastUpdatedAt)
+      ? `Cập nhật: ${formatRuntimeSectionDateTime(item.lastUpdatedAt)}`
+      : null,
   ].filter(Boolean).join(" · ") || "Chưa có nội dung";
 }
 
@@ -606,6 +657,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
     renderSectionExtra,
     getSectionExtraCount,
     getSectionValidationState,
+    getSectionEntryState,
     onSectionChange,
   } = props;
 
@@ -636,6 +688,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
     [fields],
   );
   const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [sectionSwitching, setSectionSwitching] = useState(false);
   const selectedSection =
     visibleSections.find((section) => section.id === selectedSectionId) ??
     visibleSections[0] ??
@@ -646,14 +699,21 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
   const selectedSectionExtra = selectedSection ? renderSectionExtra?.(selectedSection) : null;
   const sectionItems = useMemo(
     () =>
-      visibleSections.map((section) => ({
-        section,
-        fieldCount: fieldsBySection[section.id]?.length ?? 0,
-        blockCount: getSectionExtraCount?.(section) ?? 0,
-        validationStatus: getSectionValidationState?.(section)?.status,
-        validationIssueCount: getSectionValidationState?.(section)?.issueCount,
-      })),
-    [fieldsBySection, getSectionExtraCount, getSectionValidationState, visibleSections],
+      visibleSections.map((section) => {
+        const validationState = getSectionValidationState?.(section);
+        const entryState = getSectionEntryState?.(section);
+
+        return {
+          section,
+          fieldCount: fieldsBySection[section.id]?.length ?? 0,
+          blockCount: getSectionExtraCount?.(section) ?? 0,
+          entryStatus: entryState?.status,
+          lastUpdatedAt: entryState?.lastUpdatedAt,
+          validationStatus: validationState?.status,
+          validationIssueCount: validationState?.issueCount,
+        };
+      }),
+    [fieldsBySection, getSectionEntryState, getSectionExtraCount, getSectionValidationState, visibleSections],
   );
 
   useEffect(() => {
@@ -665,6 +725,27 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
   }, [visibleSections]);
 
   if (visibleSections.length === 0) return null;
+
+  const requestSectionChange = async (section: DynamicFormSection) => {
+    if (sectionSwitching || section.id === selectedSection?.id) return;
+
+    try {
+      const result = onSectionChange?.(section);
+      if (result && typeof (result as Promise<void | boolean>).then === "function") {
+        setSectionSwitching(true);
+        const allowed = await result;
+        if (allowed === false) return;
+      } else if (result === false) {
+        return;
+      }
+
+      setSelectedSectionId(section.id);
+    } catch {
+      // Caller owns user-facing error messaging.
+    } finally {
+      setSectionSwitching(false);
+    }
+  };
 
   const renderSelectedSectionContent = () => (
     selectedSection && (
@@ -804,10 +885,8 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                   <ListItemButton
                     key={item.section.id}
                     selected={selected}
-                    onClick={() => {
-                      if (item.section.id !== selectedSection?.id) onSectionChange?.(item.section);
-                      setSelectedSectionId(item.section.id);
-                    }}
+                    disabled={sectionSwitching}
+                    onClick={() => void requestSectionChange(item.section)}
                     sx={{
                       borderRadius: 1,
                       alignItems: "flex-start",
@@ -823,6 +902,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                           <Typography variant="body2" fontWeight={800} noWrap sx={{ minWidth: 0 }}>
                             {index + 1}. {item.section.title || "Chưa đặt tiêu đề"}
                           </Typography>
+                          {renderRuntimeSectionEntryChip(item)}
                           {renderRuntimeSectionValidationChip(item)}
                         </Stack>
                       }
@@ -891,17 +971,9 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
               <DynamicFormSectionSelect
                 label="Phần"
                 value={selectedSection?.id ?? ""}
-                items={visibleSections.map((section) => ({
-                  section,
-                  fieldCount: fieldsBySection[section.id]?.length ?? 0,
-                  blockCount: getSectionExtraCount?.(section) ?? 0,
-                  validationStatus: getSectionValidationState?.(section)?.status,
-                  validationIssueCount: getSectionValidationState?.(section)?.issueCount,
-                }))}
-                onChange={(section) => {
-                  if (section.id !== selectedSection?.id) onSectionChange?.(section);
-                  setSelectedSectionId(section.id);
-                }}
+                items={sectionItems}
+                disabled={sectionSwitching}
+                onChange={(section) => void requestSectionChange(section)}
               />
             </Box>
 

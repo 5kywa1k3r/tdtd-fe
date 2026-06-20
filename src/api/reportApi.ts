@@ -12,6 +12,8 @@ import type {
   WorkAssignmentReportListRow,
   WorkAssignmentReportLogRow,
   WorkAssignmentReportResponse,
+  WorkAssignmentReportSectionDetailResponse,
+  WorkAssignmentReportSectionSummaryRow,
   WorkAssignmentReportSearchRequest,
 } from "../types/report";
 
@@ -81,6 +83,26 @@ export const reportApi = baseApi.injectEndpoints({
     getWorkAssignmentReport: build.query<WorkAssignmentReportResponse, string>({
       query: (id) => ({
         url: `work-assignment-reports/${id}`,
+        method: "GET",
+      }),
+    }),
+
+    getWorkAssignmentReportSections: build.query<
+      WorkAssignmentReportSectionSummaryRow[],
+      string
+    >({
+      query: (id) => ({
+        url: `work-assignment-reports/${id}/sections`,
+        method: "GET",
+      }),
+    }),
+
+    getWorkAssignmentReportSectionDetail: build.query<
+      WorkAssignmentReportSectionDetailResponse,
+      { id: string; sectionId: string }
+    >({
+      query: ({ id, sectionId }) => ({
+        url: `work-assignment-reports/${id}/sections/${encodeURIComponent(sectionId)}`,
         method: "GET",
       }),
     }),
@@ -412,6 +434,9 @@ export const {
   useOpenWorkReportPeriodMutation,
 
   useGetWorkAssignmentReportQuery,
+  useGetWorkAssignmentReportSectionsQuery,
+  useGetWorkAssignmentReportSectionDetailQuery,
+  useLazyGetWorkAssignmentReportSectionDetailQuery,
   useGetWorkAssignmentReportTemplateWorkbookQuery,
   useSaveWorkAssignmentReportDraftMutation,
   useSaveWorkAssignmentReportDraftPatchMutation,

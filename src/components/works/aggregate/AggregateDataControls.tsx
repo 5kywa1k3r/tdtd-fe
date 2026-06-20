@@ -35,6 +35,16 @@ export type AggregateDataAction = {
   color?: "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning";
 };
 
+export type AggregateUnitSelectorProps = {
+  selectedUnitIds: string[];
+  onSelectedUnitIdsChange: (value: string[]) => void;
+  unitOptions?: AggregateUnitOption[];
+  disabled?: boolean;
+  label?: string;
+  helperText?: string;
+  emptyHelperText?: string;
+};
+
 export type AggregateDataControlsProps = {
   title?: string;
   subtitle?: string;
@@ -61,6 +71,67 @@ export type AggregateDataControlsProps = {
   primaryLoading?: boolean;
   onPrimary?: () => void;
 };
+
+export function AggregateUnitSelector({
+  selectedUnitIds,
+  onSelectedUnitIdsChange,
+  unitOptions,
+  disabled = false,
+  label = "Đơn vị",
+  helperText = "Để trống để lấy tất cả.",
+  emptyHelperText = "Chưa có đơn vị phù hợp.",
+}: AggregateUnitSelectorProps) {
+  const restrictedUnitOptions = Array.isArray(unitOptions);
+  const unitOptionList = unitOptions ?? [];
+  const selectedUnits = React.useMemo(() => {
+    const selected = new Set(selectedUnitIds);
+    return unitOptionList.filter((item) => selected.has(item.id));
+  }, [selectedUnitIds, unitOptionList]);
+
+  if (!restrictedUnitOptions) {
+    return (
+      <LazyUnitMultiSelect
+        mode="multiple"
+        label={label}
+        value={selectedUnitIds}
+        onChange={onSelectedUnitIdsChange}
+      />
+    );
+  }
+
+  return (
+    <Autocomplete
+      multiple
+      size="small"
+      options={unitOptionList}
+      value={selectedUnits}
+      getOptionLabel={(option) => option.label}
+      isOptionEqualToValue={(option, selected) => option.id === selected.id}
+      limitTags={2}
+      disabled={disabled || unitOptionList.length === 0}
+      onChange={(_, next) => onSelectedUnitIdsChange(next.map((item) => item.id))}
+      renderOption={(listProps, option) => (
+        <li {...listProps}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2">{option.label}</Typography>
+            {option.secondaryLabel && (
+              <Typography variant="caption" color="text.secondary">
+                {option.secondaryLabel}
+              </Typography>
+            )}
+          </Box>
+        </li>
+      )}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          helperText={unitOptionList.length ? helperText : emptyHelperText}
+        />
+      )}
+    />
+  );
+}
 
 export default function AggregateDataControls(props: AggregateDataControlsProps) {
   const {
@@ -89,13 +160,6 @@ export default function AggregateDataControls(props: AggregateDataControlsProps)
     primaryLoading,
     onPrimary,
   } = props;
-
-  const restrictedUnitOptions = Array.isArray(unitOptions);
-  const unitOptionList = unitOptions ?? [];
-  const selectedUnits = React.useMemo(() => {
-    const selected = new Set(selectedUnitIds);
-    return unitOptionList.filter((item) => selected.has(item.id));
-  }, [selectedUnitIds, unitOptionList]);
 
   const selectedMetrics = React.useMemo(() => {
     const selected = new Set(selectedMetricKeys);
@@ -198,45 +262,11 @@ export default function AggregateDataControls(props: AggregateDataControlsProps)
             <Typography variant="caption" color="text.secondary" fontWeight={700}>
               Đơn vị tập hợp
             </Typography>
-            {restrictedUnitOptions ? (
-              <Autocomplete
-                multiple
-                size="small"
-                options={unitOptionList}
-                value={selectedUnits}
-                getOptionLabel={(option) => option.label}
-                isOptionEqualToValue={(option, selected) => option.id === selected.id}
-                limitTags={2}
-                disabled={unitOptionList.length === 0}
-                onChange={(_, next) => onSelectedUnitIdsChange(next.map((item) => item.id))}
-                renderOption={(listProps, option) => (
-                  <li {...listProps}>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2">{option.label}</Typography>
-                      {option.secondaryLabel && (
-                        <Typography variant="caption" color="text.secondary">
-                          {option.secondaryLabel}
-                        </Typography>
-                      )}
-                    </Box>
-                  </li>
-                )}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Đơn vị"
-                    helperText={unitOptionList.length ? "Để trống để lấy tất cả." : "Chưa có đơn vị phù hợp."}
-                  />
-                )}
-              />
-            ) : (
-              <LazyUnitMultiSelect
-                mode="multiple"
-                label="Đơn vị"
-                value={selectedUnitIds}
-                onChange={onSelectedUnitIdsChange}
-              />
-            )}
+            <AggregateUnitSelector
+              selectedUnitIds={selectedUnitIds}
+              onSelectedUnitIdsChange={onSelectedUnitIdsChange}
+              unitOptions={unitOptions}
+            />
           </Stack>
 
           <Stack spacing={1}>

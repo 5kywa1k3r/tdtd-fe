@@ -21,7 +21,6 @@ import {
   MenuItem,
   Paper,
   Select,
-  Snackbar,
   Stack,
   Switch,
   TextField,
@@ -47,6 +46,7 @@ import type {
 } from "../../../components/excel/fortune/WorkbookDataGrid";
 import {
   extractTypedValues1D,
+  hashWorkbookValues,
   type WorkbookValueValidationIssue,
 } from "../../../components/excel/fortune/fortuneAdapter";
 import AggregateDataControls, {
@@ -83,10 +83,13 @@ import SingleDayKeyField, {
   dayKeyToIsoDate,
   isoDateToDayKey,
 } from "../../../components/common/SingleDayKeyField";
+import { ActionToast, type ActionToastSeverity, type ActionToastState } from "../../../components/common/ActionToast";
+import { UnsavedChangesDialog } from "../../../components/common/UnsavedChangesDialog";
 
 import {
   useGetWorkAssignmentReportLogsQuery,
   useGetWorkAssignmentReportQuery,
+  useGetWorkAssignmentReportSectionsQuery,
   useGetWorkAssignmentReportTemplateWorkbookQuery,
   useSaveWorkAssignmentReportDraftMutation,
   useSaveWorkAssignmentReportDraftPatchMutation,
@@ -108,6 +111,7 @@ import {
 import type {
   WorkAssignmentReportLogRow,
   WorkAssignmentReportResponse,
+  WorkAssignmentReportSectionSummaryRow,
   WorkReportCumulativeContributionMode,
   WorkReportDataOrigin,
 } from "../../../types/report";
@@ -165,13 +169,22 @@ export interface WorkReportEditorPageProps {
 type WorkbookSavePayload = {
   blockId?: string;
   values1D: ReportCellValue[];
+  valuesHash?: string;
   rawWorkbookData?: any[];
   validationIssues?: WorkbookValueValidationIssue[];
 };
 
 type WorkbookValueMap = Record<string, ReportCellValue[]>;
+type WorkbookHashMap = Record<string, string>;
 type WorkbookValidationIssueMap = Record<string, WorkbookValueValidationIssue[]>;
 type WorkbookRawDataMap = Record<string, any[]>;
+type DirtyReportBlockMap = Record<string, boolean>;
+type UnsavedTableCloseState = {
+  open: boolean;
+  blockId: string;
+  blockLabel: string;
+  payload: WorkbookSavePayload | null;
+};
 type ReportSectionValidationState = Record<
   string,
   {
@@ -325,7 +338,6 @@ function isCompletedAfterDue(completedDate?: string | null, dueAtUtc?: string | 
 function resolveInitialCompletedDayKey(detail: ParsedReportDetail) {
   const existing = toDayKey(detail.completedDate);
   if (existing) return existing;
-  if (detail.requiresCompletedDate) return getReportAnchorDayKey(detail);
   return "";
 }
 
@@ -1115,6 +1127,22 @@ function resolveTopLevelBlockId(
   );
 }
 
+function resolveStoredReportBlockValues(
+  detail: ParsedReportDetail,
+  block: ReportExcelBlockRuntime,
+  topLevelBlockId: string,
+) {
+  const expectedLength = getExpectedValueLength(block);
+  if (block.blockId === topLevelBlockId) {
+    return normalizeWorkbookValues(detail.values1D, expectedLength);
+  }
+
+  return normalizeWorkbookValues(
+    getStoredBlockValues(detail.tableValuesJson, block.blockId),
+    expectedLength,
+  );
+}
+
 function resolveReportBlockValues(
   detail: ParsedReportDetail,
   block: ReportExcelBlockRuntime,
@@ -1125,14 +1153,67 @@ function resolveReportBlockValues(
   const latest = latestValues[block.blockId];
   if (Array.isArray(latest)) return normalizeWorkbookValues(latest, expectedLength);
 
-  if (block.blockId === topLevelBlockId) {
-    return normalizeWorkbookValues(detail.values1D, expectedLength);
-  }
+  return resolveStoredReportBlockValues(detail, block, topLevelBlockId);
+}
 
-  return normalizeWorkbookValues(
-    getStoredBlockValues(detail.tableValuesJson, block.blockId),
-    expectedLength,
-  );
+function buildStoredWorkbookHashByBlock(
+  detail: ParsedReportDetail,
+  blocks: ReportExcelBlockRuntime[],
+  topLevelBlockId: string,
+) {
+  return Object.fromEntries(
+    blocks.map((block) => [
+      block.blockId,
+      hashWorkbookValues(
+        resolveStoredReportBlockValues(detail, block, topLevelBlockId),
+        getExpectedValueLength(block),
+      ),
+    ]),
+  ) as WorkbookHashMap;
+}
+
+const REPORT_ROW_LABEL_HASH_SEED = 2166136261;
+
+function appendReportRowLabelHashText(hash: number, text: string) {
+  let next = hash;
+  for (let i = 0; i < text.length; i += 1) {
+    next ^= text.charCodeAt(i);
+    next = Math.imul(next, 16777619);
+  }
+  return next >>> 0;
+}
+
+function hashReportRowLabels(rowLabels?: ReportRuntimeRowLabel[] | null) {
+  const normalized = normalizeRuntimeRowLabels(rowLabels);
+  let hash = REPORT_ROW_LABEL_HASH_SEED;
+  for (const row of normalized) {
+    hash = appendReportRowLabelHashText(hash, `r:${Number(row.rowIndex ?? 0)}|`);
+    const codes = normalizeLabelCodes(row.rowLabelCodes ?? []);
+    hash = appendReportRowLabelHashText(hash, `c:${codes.length}|`);
+    for (const code of codes) {
+      hash = appendReportRowLabelHashText(hash, `${code.length}:${code}|`);
+    }
+  }
+  return appendReportRowLabelHashText(hash, `len:${normalized.length}|`).toString(36);
+}
+
+function buildRowLabelHashByBlock(
+  blocks: ReportExcelBlockRuntime[],
+  rowLabelsByBlock: RowLabelStateMap,
+) {
+  return Object.fromEntries(
+    blocks.map((block) => [
+      block.blockId,
+      hashReportRowLabels(rowLabelsByBlock[block.blockId]),
+    ]),
+  ) as WorkbookHashMap;
+}
+
+function getWorkbookPayloadHash(
+  block: ReportExcelBlockRuntime,
+  payload: WorkbookSavePayload,
+) {
+  return payload.valuesHash ?? hashWorkbookValues(payload.values1D, getExpectedValueLength(block));
 }
 
 function buildWorkbookValuesByBlock(
@@ -1443,6 +1524,56 @@ function isBlankReportCellValue(value: ReportCellValue | undefined) {
   return value == null ||
     (typeof value === "string" && value.trim() === "") ||
     (Array.isArray(value) && value.every((item) => !item.trim()));
+}
+
+function hasEnteredRuntimeValue(value: DynamicFormRuntimeValue | undefined) {
+  if (typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some((item) => String(item).trim().length > 0);
+  return false;
+}
+
+function hasEnteredReportBlockValues(
+  detail: ParsedReportDetail,
+  block: ReportExcelBlockRuntime,
+  topLevelBlockId: string,
+  latestValues: WorkbookValueMap,
+) {
+  return resolveReportBlockValues(detail, block, topLevelBlockId, latestValues)
+    .some((value) => !isBlankReportCellValue(value));
+}
+
+function getJsonUpdatedAtUtc(input?: string | null) {
+  const root = parseObjectJson(input);
+  const raw = typeof root?.updatedAtUtc === "string" ? root.updatedAtUtc.trim() : "";
+  return raw || null;
+}
+
+function pickLatestDateTime(values: Array<string | null | undefined>) {
+  let latest: { value: string; time: number } | null = null;
+
+  for (const value of values) {
+    if (!value) continue;
+    const time = new Date(value).getTime();
+    if (Number.isNaN(time)) continue;
+    if (!latest || time > latest.time) latest = { value, time };
+  }
+
+  return latest?.value ?? null;
+}
+
+function resolveReportSectionLastUpdatedAt(
+  detail: ParsedReportDetail,
+  hasFields: boolean,
+  hasTables: boolean,
+) {
+  return pickLatestDateTime([
+    detail.updatedAtUtc,
+    detail.createdAtUtc,
+    hasFields ? getJsonUpdatedAtUtc(detail.fieldValuesJson) : null,
+    hasTables ? getJsonUpdatedAtUtc(detail.tableValuesJson) : null,
+  ]);
 }
 
 type ReportTableMetricDefinition = {
@@ -2175,7 +2306,7 @@ type ReportAggregateMapSectionProps = {
   onPreview: (report: WorkAssignmentReportResponse) => void;
   onApplied: () => Promise<void> | void;
   onSelectTargetBlock: (blockId: string) => void;
-  showMessage: (message: string) => void;
+  showMessage: (message: string, severity?: ActionToastSeverity) => void;
 };
 
 function formatSourceAssignmentLabel(row: WorkAssignmentListResponse) {
@@ -2371,23 +2502,23 @@ function ReportAggregateMapSection(props: ReportAggregateMapSectionProps) {
 
   const buildRequest = React.useCallback(() => {
     if (!selectedSourceAssignment || !sourceDynamicFormTemplateId) {
-      showMessage("Chọn biểu mẫu/công việc nguồn để tập hợp dữ liệu.");
+      showMessage("Chọn biểu mẫu/công việc nguồn để tập hợp dữ liệu.", "warning");
       return null;
     }
     if (!selectedSourceBlock) {
-      showMessage("Chọn field/table nguồn trong biểu mẫu nguồn.");
+      showMessage("Chọn field/table nguồn trong biểu mẫu nguồn.", "warning");
       return null;
     }
     if (!selectedTargetBlockOption) {
-      showMessage("Chọn field/table đích trong báo cáo hiện tại.");
+      showMessage("Chọn field/table đích trong báo cáo hiện tại.", "warning");
       return null;
     }
     if (!periodKeyFrom || !periodKeyTo) {
-      showMessage("Chọn Từ ngày và Đến ngày để tập hợp dữ liệu.");
+      showMessage("Chọn Từ ngày và Đến ngày để tập hợp dữ liệu.", "warning");
       return null;
     }
     if (periodKeyFrom > periodKeyTo) {
-      showMessage("Từ ngày không được lớn hơn Đến ngày.");
+      showMessage("Từ ngày không được lớn hơn Đến ngày.", "warning");
       return null;
     }
 
@@ -2489,7 +2620,7 @@ function ReportAggregateMapSection(props: ReportAggregateMapSectionProps) {
       onPreview(response);
     } catch (err) {
       console.error(err);
-      showMessage("Không xem trước được báo cáo sau khi gán dữ liệu tổng hợp.");
+      showMessage("Không xem trước được báo cáo sau khi gán dữ liệu tổng hợp.", "error");
     }
   }, [buildRequest, detail.id, onPreview, previewDynamicFormAggregateDraft, showMessage]);
 
@@ -2503,10 +2634,10 @@ function ReportAggregateMapSection(props: ReportAggregateMapSectionProps) {
       }).unwrap();
       await onApplied();
       setAggregateDialogOpen(false);
-      showMessage("Đã gắn dữ liệu tổng hợp vào báo cáo hiện tại.");
+      showMessage("Đã gắn dữ liệu tổng hợp vào báo cáo hiện tại.", "success");
     } catch (err) {
       console.error(err);
-      showMessage("Không gắn được dữ liệu tổng hợp vào báo cáo.");
+      showMessage("Không gắn được dữ liệu tổng hợp vào báo cáo.", "error");
     }
   }, [applyDynamicFormAggregateDraft, buildRequest, detail.id, onApplied, showMessage]);
 
@@ -2887,6 +3018,8 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
     setLateReason,
   } = props;
   const showCompletedDate = canEditCompletedDate || Boolean(completedDate);
+  const showCompletedDateRequiredHint =
+    isHistoricalData && requiresCompletedDate && canEditCompletedDate && !completedDate;
 
   return (
     <Card variant="outlined">
@@ -2902,6 +3035,12 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
             </Alert>
           )}
 
+          {showCompletedDateRequiredHint && (
+            <Alert severity="info">
+              Có thể lưu nháp trước. Khi nộp báo cáo, bắt buộc nhập ngày hoàn thành để hệ thống đánh giá đúng hạn hoặc chậm muộn.
+            </Alert>
+          )}
+
           {showCompletedDate && (
             <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
               <SingleDayKeyField
@@ -2911,6 +3050,11 @@ function ReportBusinessFormSection(props: BusinessFormSectionProps) {
                 fullWidth
                 minDayKey={completedDateMin || undefined}
                 maxDayKey={completedDateMax || undefined}
+                helperText={
+                  requiresCompletedDate
+                    ? "Có thể để trống khi lưu nháp; bắt buộc nhập trước khi nộp báo cáo."
+                    : undefined
+                }
                 onChange={setCompletedDate}
               />
             </Stack>
@@ -3191,6 +3335,12 @@ export default function WorkReportEditorPage(
     reportId,
     { skip: !reportId || Boolean(props.previewData) }
   );
+  const {
+    data: reportSectionSummaries,
+    refetch: refetchReportSectionSummaries,
+  } = useGetWorkAssignmentReportSectionsQuery(reportId, {
+    skip: !reportId || Boolean(props.previewData),
+  });
 
   const [saveDraft, saveDraftState] = useSaveWorkAssignmentReportDraftMutation();
   const [saveDraftPatch, saveDraftPatchState] = useSaveWorkAssignmentReportDraftPatchMutation();
@@ -3219,6 +3369,13 @@ export default function WorkReportEditorPage(
     () => (effectiveData ? parseReportDetail(effectiveData) : null),
     [effectiveData]
   );
+  const reportSectionSummaryById = React.useMemo(() => {
+    const map = new Map<string, WorkAssignmentReportSectionSummaryRow>();
+    for (const summary of reportSectionSummaries ?? []) {
+      if (summary.sectionId) map.set(summary.sectionId, summary);
+    }
+    return map;
+  }, [reportSectionSummaries]);
 
   const dynamicFormTemplateId = detail?.dynamicFormTemplateId?.trim() ?? "";
   const {
@@ -3233,8 +3390,13 @@ export default function WorkReportEditorPage(
     [dynamicFormDetail],
   );
   const latestWorkbookPayloadRef = React.useRef<WorkbookValueMap>({});
+  const latestWorkbookHashRef = React.useRef<WorkbookHashMap>({});
   const latestWorkbookIssuesRef = React.useRef<WorkbookValidationIssueMap>({});
   const latestWorkbookRawRef = React.useRef<WorkbookRawDataMap>({});
+  const baselineWorkbookHashRef = React.useRef<WorkbookHashMap>({});
+  const baselineRowLabelHashRef = React.useRef<WorkbookHashMap>({});
+  const dirtyReportBlockIdsRef = React.useRef<DirtyReportBlockMap>({});
+  const fieldValuesDirtyRef = React.useRef(false);
   const selectedWorkbookGridRef = React.useRef<WorkbookDataGridHandle | null>(null);
   const [sectionValidationState, setSectionValidationState] =
     React.useState<ReportSectionValidationState>({});
@@ -3255,6 +3417,9 @@ export default function WorkReportEditorPage(
     [reportBlocks, selectedBlockKey],
   );
   const [tableDialogOpen, setTableDialogOpen] = React.useState(false);
+  const [dirtyReportBlockIds, setDirtyReportBlockIds] = React.useState<DirtyReportBlockMap>({});
+  const [unsavedTableClose, setUnsavedTableClose] =
+    React.useState<UnsavedTableCloseState | null>(null);
   const selectedDynamicExcelId = selectedReportBlock?.dynamicExcelTemplateId?.trim() ?? "";
   const selectedReportId = detail?.id?.trim() ?? reportId;
   const { data: selectedDynamicExcelDetail, isFetching: isFetchingSelectedDynamicExcel } = useGetWorkAssignmentReportTemplateWorkbookQuery(
@@ -3284,6 +3449,14 @@ export default function WorkReportEditorPage(
   }, [selectedDynamicExcelDetail, selectedReportBlock]);
   const topLevelBlockId = React.useMemo(
     () => (detail ? resolveTopLevelBlockId(detail, reportBlocks) : "excel_block"),
+    [detail, reportBlocks],
+  );
+  const storedWorkbookHashesByBlock = React.useMemo<WorkbookHashMap>(
+    () => detail ? buildStoredWorkbookHashByBlock(detail, reportBlocks, topLevelBlockId) : {},
+    [detail, reportBlocks, topLevelBlockId],
+  );
+  const storedRowLabelHashesByBlock = React.useMemo<WorkbookHashMap>(
+    () => detail ? buildRowLabelHashByBlock(reportBlocks, buildInitialRowLabelsByBlock(detail, reportBlocks)) : {},
     [detail, reportBlocks],
   );
   const selectedBlockValues = React.useMemo(
@@ -3325,6 +3498,9 @@ export default function WorkReportEditorPage(
     () => getReportBlockRowLabelDataType(selectedReportBlock),
     [selectedReportBlock],
   );
+  const selectedReportBlockDirty = Boolean(
+    selectedReportBlock && dirtyReportBlockIds[selectedReportBlock.blockId],
+  );
 
   const canEdit = detail ? !props.forceReadOnly && isEditableReportStatus(detail.status) : false;
   const canWithdraw = detail
@@ -3336,9 +3512,6 @@ export default function WorkReportEditorPage(
     : false;
   const isHistoricalData = isHistoricalReportDetail(detail);
   const overdue = isOverdue(detail?.dueAtUtc);
-  const requiresLateReason = isHistoricalData
-    ? isCompletedAfterDue(detail?.completedDate, detail?.dueAtUtc)
-    : overdue;
   const canEditCompletedDate = Boolean(detail?.canEditCompletedDate);
   const requiresCompletedDate = Boolean(detail?.requiresCompletedDate);
   const completedDateMin = toDayKey(detail?.completedDateMin);
@@ -3346,6 +3519,9 @@ export default function WorkReportEditorPage(
 
   const [lateReason, setLateReason] = React.useState("");
   const [completedDate, setCompletedDate] = React.useState("");
+  const requiresLateReason = isHistoricalData
+    ? isCompletedAfterDue(completedDate, detail?.dueAtUtc)
+    : overdue;
   const [dataOrigin, setDataOrigin] = React.useState<WorkReportDataOrigin>(
     DEFAULT_REPORT_DATA_ORIGIN,
   );
@@ -3374,20 +3550,24 @@ export default function WorkReportEditorPage(
   const [sectionValidationPrompt, setSectionValidationPrompt] =
     React.useState<ReportSectionValidationPromptState | null>(null);
 
-  const [snackbar, setSnackbar] = React.useState<{
-    open: boolean;
-    message: string;
-  }>({
+  const [toast, setToast] = React.useState<ActionToastState>({
     open: false,
     message: "",
+    severity: "info",
   });
 
-  const showMessage = React.useCallback((message: string) => {
-    setSnackbar({
+  const showMessage = React.useCallback((message: string, severity: ActionToastSeverity = "info") => {
+    setToast({
       open: true,
       message,
+      severity,
     });
   }, []);
+
+  React.useEffect(() => {
+    baselineWorkbookHashRef.current = storedWorkbookHashesByBlock;
+    baselineRowLabelHashRef.current = storedRowLabelHashesByBlock;
+  }, [storedRowLabelHashesByBlock, storedWorkbookHashesByBlock]);
 
   const reportSectionById = React.useMemo(
     () => Object.fromEntries(reportRuntimeSections.map((section) => [section.id, section])),
@@ -3417,6 +3597,77 @@ export default function WorkReportEditorPage(
       return (sectionId ? reportSectionById[sectionId] : null) ?? fallbackReportSection;
     },
     [fallbackReportSection, reportBlockSectionById, reportSectionById],
+  );
+  const markReportBlockDirty = React.useCallback((blockId?: string | null) => {
+    if (!blockId) return;
+    if (dirtyReportBlockIdsRef.current[blockId]) return;
+    dirtyReportBlockIdsRef.current = {
+      ...dirtyReportBlockIdsRef.current,
+      [blockId]: true,
+    };
+    setDirtyReportBlockIds(dirtyReportBlockIdsRef.current);
+  }, []);
+  const clearReportBlockDirty = React.useCallback((blockId?: string | null) => {
+    if (!blockId) return;
+    if (!dirtyReportBlockIdsRef.current[blockId]) return;
+    const next = { ...dirtyReportBlockIdsRef.current };
+    delete next[blockId];
+    dirtyReportBlockIdsRef.current = next;
+    setDirtyReportBlockIds(next);
+  }, []);
+  const clearAllReportBlockDirty = React.useCallback(() => {
+    dirtyReportBlockIdsRef.current = {};
+    setDirtyReportBlockIds({});
+  }, []);
+  const isWorkbookPayloadDirty = React.useCallback(
+    (block: ReportExcelBlockRuntime, payload: WorkbookSavePayload | null | undefined) => {
+      if (!detail || !payload?.values1D) return false;
+      const payloadHash = getWorkbookPayloadHash(block, payload);
+      const baselineHash =
+        baselineWorkbookHashRef.current[block.blockId] ??
+        hashWorkbookValues(
+          resolveStoredReportBlockValues(detail, block, topLevelBlockId),
+          getExpectedValueLength(block),
+        );
+      return payloadHash !== baselineHash;
+    },
+    [detail, topLevelBlockId],
+  );
+  const isReportBlockRowLabelsDirty = React.useCallback(
+    (blockId?: string | null) => {
+      if (!blockId) return false;
+      const currentHash = hashReportRowLabels(rowLabelsByBlock[blockId]);
+      const baselineHash = baselineRowLabelHashRef.current[blockId] ?? hashReportRowLabels([]);
+      return currentHash !== baselineHash;
+    },
+    [rowLabelsByBlock],
+  );
+  const discardReportBlockDraft = React.useCallback(
+    (blockId?: string | null) => {
+      if (!blockId) return;
+
+      const removeFromRecord = <T,>(record: Record<string, T>) => {
+        if (!record[blockId]) return record;
+        const next = { ...record };
+        delete next[blockId];
+        return next;
+      };
+
+      latestWorkbookPayloadRef.current = removeFromRecord(latestWorkbookPayloadRef.current);
+      latestWorkbookHashRef.current = removeFromRecord(latestWorkbookHashRef.current);
+      latestWorkbookIssuesRef.current = removeFromRecord(latestWorkbookIssuesRef.current);
+      latestWorkbookRawRef.current = removeFromRecord(latestWorkbookRawRef.current);
+      clearReportBlockDirty(blockId);
+
+      if (detail) {
+        const initialRowLabels = buildInitialRowLabelsByBlock(detail, reportBlocks);
+        setRowLabelsByBlock((prev) => ({
+          ...prev,
+          [blockId]: initialRowLabels[blockId] ?? [],
+        }));
+      }
+    },
+    [clearReportBlockDirty, detail, reportBlocks],
   );
   const invalidateReportSectionValidation = React.useCallback((sectionId?: string | null) => {
     if (!sectionId) return;
@@ -3532,6 +3783,7 @@ export default function WorkReportEditorPage(
         issues.length > 0
           ? `${section.title}: phát hiện ${issues.length} lỗi dữ liệu bảng.`
           : `${section.title}: chưa phát hiện lỗi dữ liệu bảng.`,
+        issues.length > 0 ? "error" : "success",
       );
       return issues;
     },
@@ -3553,10 +3805,69 @@ export default function WorkReportEditorPage(
       const firstIssue = issues[0];
       if (!firstIssue) return;
       showReportTableValidationDialog(issues, source, firstIssue.section);
-      showMessage(`Dữ liệu bảng chưa hợp lệ ở section ${firstIssue.section.title}.`);
+      showMessage(`Dữ liệu bảng chưa hợp lệ ở section ${firstIssue.section.title}.`, "error");
     },
     [showMessage, showReportTableValidationDialog],
   );
+  const saveDynamicFieldsDraftBeforeSectionChange = React.useCallback(async () => {
+    if (!detail || props.previewData || !fieldValuesDirtyRef.current) return true;
+    if (busy) {
+      showMessage("Đang có thao tác lưu/nộp báo cáo, vui lòng chờ hoàn tất.", "warning");
+      return false;
+    }
+
+    const fieldValuesJson = buildDynamicFieldValuesJson(
+      detail,
+      dynamicFormRuntime,
+      fieldValues,
+    );
+    const completedDatePayload = canEditCompletedDate ? dayKeyToApiDate(completedDate) : null;
+    const advancedSettings = buildReportAdvancedSettingsPayload(
+      detail,
+      dataOrigin,
+      cumulativeContributionMode,
+    );
+
+    try {
+      await saveDraftPatch({
+        id: detail.id,
+        data: {
+          values1DPatch: null,
+          tableBlockPatches: null,
+          fieldValuesJson,
+          ...advancedSettings,
+          completedDate: completedDatePayload,
+          lateReason: lateReason.trim() || null,
+          note: null,
+        },
+      }).unwrap();
+
+      fieldValuesDirtyRef.current = false;
+      await refetchReportSectionSummaries();
+      onSaved?.();
+      showMessage("Đã tự lưu nháp phần vừa chỉnh.", "success");
+      return true;
+    } catch (error) {
+      console.error(error);
+      showMessage(getApiErrorMessage(error) || "Không tự lưu được dữ liệu trước khi chuyển phần.", "error");
+      return false;
+    }
+  }, [
+    busy,
+    canEditCompletedDate,
+    completedDate,
+    cumulativeContributionMode,
+    dataOrigin,
+    detail,
+    dynamicFormRuntime,
+    fieldValues,
+    lateReason,
+    onSaved,
+    props.previewData,
+    refetchReportSectionSummaries,
+    saveDraftPatch,
+    showMessage,
+  ]);
   const handleOpenReportBlock = React.useCallback((block: ReportExcelBlockRuntime) => {
     setSelectedBlockKey(block.key);
     setTableDialogOpen(true);
@@ -3569,22 +3880,65 @@ export default function WorkReportEditorPage(
     [handleOpenReportBlock],
   );
   const handleRuntimeSectionChange = React.useCallback(
-    (section: DynamicFormSection) => {
-      if (!canEditReportData) return;
+    async (section: DynamicFormSection) => {
+      if (!canEditReportData) return true;
+      const saved = await saveDynamicFieldsDraftBeforeSectionChange();
+      if (!saved) return false;
       const blocks = reportBlocksBySectionId[section.id] ?? [];
-      if (blocks.length === 0) return;
-      if (sectionValidationState[section.id]) return;
+      if (blocks.length === 0) return true;
+      if (sectionValidationState[section.id]) return true;
       setSectionValidationPrompt({
         open: true,
         section,
         blockCount: blocks.length,
       });
+      return true;
     },
-    [canEditReportData, reportBlocksBySectionId, sectionValidationState],
+    [canEditReportData, reportBlocksBySectionId, saveDynamicFieldsDraftBeforeSectionChange, sectionValidationState],
   );
   const getReportSectionTableCount = React.useCallback(
     (section: DynamicFormSection) => reportBlocksBySectionId[section.id]?.length ?? 0,
     [reportBlocksBySectionId],
+  );
+  const getReportSectionEntryState = React.useCallback(
+    (section: DynamicFormSection) => {
+      if (!detail) return null;
+
+      const summary = reportSectionSummaryById.get(section.id);
+      const sectionFields = (dynamicFormRuntime?.fields ?? [])
+        .filter((field) => field.sectionId === section.id);
+      const blocks = reportBlocksBySectionId[section.id] ?? [];
+      const hasFieldInput = sectionFields.some((field) => hasEnteredRuntimeValue(fieldValues[field.id]));
+      const hasTableInput = blocks.some((block) =>
+        hasEnteredReportBlockValues(
+          detail,
+          block,
+          topLevelBlockId,
+          latestWorkbookPayloadRef.current,
+        ),
+      );
+      const status: "entered" | "empty" =
+        hasFieldInput || hasTableInput || summary?.hasData ? "entered" : "empty";
+
+      return {
+        status,
+        lastUpdatedAt: summary?.lastUpdatedAtUtc ??
+          resolveReportSectionLastUpdatedAt(
+            detail,
+            sectionFields.length > 0,
+            blocks.length > 0,
+          ),
+      };
+    },
+    [
+      detail,
+      dirtyReportBlockIds,
+      dynamicFormRuntime?.fields,
+      fieldValues,
+      reportSectionSummaryById,
+      reportBlocksBySectionId,
+      topLevelBlockId,
+    ],
   );
   function handleReportBlockRowLabelChange(
     block: ReportExcelBlockRuntime,
@@ -3593,6 +3947,7 @@ export default function WorkReportEditorPage(
   ) {
     const blockId = block.blockId;
     const normalized = normalizeLabelCodes(codes);
+    markReportBlockDirty(blockId);
     invalidateReportBlockSectionValidation(blockId);
 
     setRowLabelsByBlock((prev) => {
@@ -3652,8 +4007,12 @@ export default function WorkReportEditorPage(
 
   React.useEffect(() => {
     latestWorkbookPayloadRef.current = {};
+    latestWorkbookHashRef.current = {};
     latestWorkbookIssuesRef.current = {};
     latestWorkbookRawRef.current = {};
+    dirtyReportBlockIdsRef.current = {};
+    setDirtyReportBlockIds({});
+    setUnsavedTableClose(null);
   }, [detail?.id, detail?.tableValuesJson, detail?.updatedAtUtc]);
 
   React.useEffect(() => {
@@ -3688,10 +4047,13 @@ export default function WorkReportEditorPage(
   React.useEffect(() => {
     if (!detail) {
       setFieldValues({});
+      fieldValuesDirtyRef.current = false;
       return;
     }
 
+    if (fieldValuesDirtyRef.current) return;
     setFieldValues(parseDynamicFieldValues(detail.fieldValuesJson));
+    fieldValuesDirtyRef.current = false;
   }, [detail]);
 
   React.useEffect(() => {
@@ -3705,6 +4067,7 @@ export default function WorkReportEditorPage(
 
   const handleDynamicFieldChange = React.useCallback(
     (fieldId: string, value: DynamicFormRuntimeValue) => {
+      fieldValuesDirtyRef.current = true;
       setFieldValues((prev) => ({
         ...prev,
         [fieldId]: value,
@@ -3721,11 +4084,17 @@ export default function WorkReportEditorPage(
     [selectedReportBlock],
   );
 
-  async function handleSaveDraft(payload?: WorkbookSavePayload) {
-    if (!detail) return;
+  async function handleSaveDraft(payload?: WorkbookSavePayload): Promise<boolean> {
+    if (!detail) return false;
 
     const payloadBlockId = payload?.values1D
       ? normalizeBlockId(payload.blockId ?? topLevelBlockId)
+      : null;
+    const payloadBlock = payloadBlockId
+      ? reportBlocks.find((block) => normalizeBlockId(block.blockId) === payloadBlockId)
+      : null;
+    const payloadHash = payload?.values1D && payloadBlock
+      ? getWorkbookPayloadHash(payloadBlock, payload)
       : null;
 
     if (payload?.values1D && payloadBlockId) {
@@ -3733,6 +4102,12 @@ export default function WorkReportEditorPage(
         ...latestWorkbookPayloadRef.current,
         [payloadBlockId]: payload.values1D,
       };
+      if (payloadHash) {
+        latestWorkbookHashRef.current = {
+          ...latestWorkbookHashRef.current,
+          [payloadBlockId]: payloadHash,
+        };
+      }
       latestWorkbookIssuesRef.current = {
         ...latestWorkbookIssuesRef.current,
         [payloadBlockId]: payload.validationIssues ?? [],
@@ -3754,15 +4129,15 @@ export default function WorkReportEditorPage(
       markReportSectionsValidated(effectiveBlocksToValidate, tableIssues);
       if (tableIssues.length > 0) {
         showFirstReportTableIssue(tableIssues, "save");
-        return;
+        return false;
       }
     }
 
-    if (!reportDataLocked && dynamicFormRuntime) {
+    if (!payloadBlockId && !reportDataLocked && dynamicFormRuntime) {
       const invalidField = getInvalidDynamicField(dynamicFormRuntime.fields, fieldValues);
       if (invalidField) {
-        showMessage(getDynamicFieldValidationMessage(invalidField));
-        return;
+        showMessage(getDynamicFieldValidationMessage(invalidField), "warning");
+        return false;
       }
     }
 
@@ -3810,7 +4185,7 @@ export default function WorkReportEditorPage(
           data: {
             values1DLength: topLevelValues.length,
             values1DPatch: topLevelPatch.length > 0 ? topLevelPatch : null,
-            fieldValuesJson,
+            fieldValuesJson: null,
             tableBlockPatches: blockJson ? [{ blockId: payloadBlockId, blockJson }] : null,
             ...advancedSettings,
             completedDate: completedDatePayload,
@@ -3819,9 +4194,23 @@ export default function WorkReportEditorPage(
           },
         }).unwrap();
 
+        await refetchReportSectionSummaries();
         onSaved?.();
-        showMessage("ÄÃ£ lÆ°u nhÃ¡p.");
-        return;
+        if (payloadBlockId) {
+          if (payloadHash) {
+            baselineWorkbookHashRef.current = {
+              ...baselineWorkbookHashRef.current,
+              [payloadBlockId]: payloadHash,
+            };
+          }
+          baselineRowLabelHashRef.current = {
+            ...baselineRowLabelHashRef.current,
+            [payloadBlockId]: hashReportRowLabels(rowLabelsByBlock[payloadBlockId]),
+          };
+          clearReportBlockDirty(payloadBlockId);
+        }
+        showMessage("Đã lưu nháp.", "success");
+        return true;
       }
 
       const tableValuesJson = buildTableValuesJson(
@@ -3845,21 +4234,36 @@ export default function WorkReportEditorPage(
         },
       }).unwrap();
 
+      await refetchReportSectionSummaries();
       onSaved?.();
-      showMessage("Đã lưu nháp.");
+      fieldValuesDirtyRef.current = false;
+      baselineWorkbookHashRef.current = {
+        ...baselineWorkbookHashRef.current,
+        ...latestWorkbookHashRef.current,
+      };
+      const nextRowLabelHashes = { ...baselineRowLabelHashRef.current };
+      Object.keys(dirtyReportBlockIdsRef.current).forEach((blockId) => {
+        nextRowLabelHashes[blockId] = hashReportRowLabels(rowLabelsByBlock[blockId]);
+      });
+      baselineRowLabelHashRef.current = nextRowLabelHashes;
+      latestWorkbookHashRef.current = {};
+      clearAllReportBlockDirty();
+      showMessage("Đã lưu nháp.", "success");
+      return true;
     } catch (error) {
       console.error(error);
-      showMessage(getApiErrorMessage(error) || "Lưu nháp thất bại.");
+      showMessage(getApiErrorMessage(error) || "Lưu nháp thất bại.", "error");
+      return false;
     }
   }
 
-  const handleSaveSelectedWorkbookDraft = async () => {
-    if (!selectedReportBlock) return;
+  const handleSaveSelectedWorkbookDraft = async (): Promise<boolean> => {
+    if (!selectedReportBlock) return false;
 
     const payload = selectedWorkbookGridRef.current?.commitChanges();
     if (!payload) {
-      showMessage("Không lấy được dữ liệu bảng để lưu.");
-      return;
+      showMessage("Không lấy được dữ liệu bảng để lưu.", "error");
+      return false;
     }
 
     if (payload.validationIssues.length > 0) {
@@ -3875,43 +4279,123 @@ export default function WorkReportEditorPage(
         "save",
         section,
       );
-      showMessage(`${section.title}: phát hiện ${payload.validationIssues.length} lỗi dữ liệu bảng.`);
-      return;
+      showMessage(`${section.title}: phát hiện ${payload.validationIssues.length} lỗi dữ liệu bảng.`, "error");
+      return false;
     }
 
-    await handleSaveDraft({
+    return await handleSaveDraft({
       blockId: selectedReportBlock.blockId,
       values1D: payload.values1D,
+      valuesHash: payload.valuesHash,
       rawWorkbookData: payload.rawWorkbookData,
       validationIssues: payload.validationIssues,
     });
   };
 
+  function buildSelectedBlockFallbackPayload(block: ReportExcelBlockRuntime): WorkbookSavePayload {
+    const expectedLength = getExpectedValueLength(block);
+    const values1D = normalizeWorkbookValues(selectedBlockValues, expectedLength);
+    return {
+      blockId: block.blockId,
+      values1D,
+      valuesHash: latestWorkbookHashRef.current[block.blockId] ?? hashWorkbookValues(values1D, expectedLength),
+      rawWorkbookData: selectedWorkbookData,
+      validationIssues: latestWorkbookIssuesRef.current[block.blockId] ?? [],
+    };
+  }
+
+  function closeTableDialogNow() {
+    setUnsavedTableClose(null);
+    setTableDialogOpen(false);
+  }
+
+  function requestCloseTableDialog() {
+    if (busy) return;
+
+    if (!canEditReportData || !selectedReportBlock) {
+      closeTableDialogNow();
+      return;
+    }
+
+    const rowLabelsDirty = isReportBlockRowLabelsDirty(selectedReportBlock.blockId);
+    if (!selectedReportBlockDirty && !rowLabelsDirty) {
+      closeTableDialogNow();
+      return;
+    }
+
+    const committedPayload = selectedReportBlockDirty
+      ? selectedWorkbookGridRef.current?.commitChanges() ?? null
+      : null;
+    const payloadDirty = selectedReportBlockDirty
+      ? isWorkbookPayloadDirty(selectedReportBlock, committedPayload)
+      : false;
+    const hasUnsavedChanges = payloadDirty || rowLabelsDirty;
+
+    if (!hasUnsavedChanges) {
+      clearReportBlockDirty(selectedReportBlock.blockId);
+      closeTableDialogNow();
+      return;
+    }
+
+    setUnsavedTableClose({
+      open: true,
+      blockId: selectedReportBlock.blockId,
+      blockLabel: selectedReportBlock.label || "Bảng dữ liệu",
+      payload: committedPayload && payloadDirty
+        ? {
+            ...committedPayload,
+            blockId: selectedReportBlock.blockId,
+          }
+        : buildSelectedBlockFallbackPayload(selectedReportBlock),
+    });
+  }
+
+  async function handleSaveAndCloseUnsavedTable() {
+    const pending = unsavedTableClose;
+    const block = reportBlocks.find((item) => item.blockId === pending?.blockId) ?? selectedReportBlock;
+    if (!pending || !block) return;
+
+    const payload = pending.payload ?? buildSelectedBlockFallbackPayload(block);
+    const saved = await handleSaveDraft({
+      ...payload,
+      blockId: block.blockId,
+    });
+    if (!saved) return;
+
+    closeTableDialogNow();
+  }
+
+  function handleDiscardAndCloseUnsavedTable() {
+    const pending = unsavedTableClose;
+    if (pending?.blockId) discardReportBlockDraft(pending.blockId);
+    closeTableDialogNow();
+  }
+
   const handleSubmit = async () => {
     if (!detail) return;
 
     if (requiresLateReason && !lateReason.trim()) {
-      showMessage("Bắt buộc nhập lý do trễ hạn trước khi nộp.");
+      showMessage("Bắt buộc nhập lý do trễ hạn trước khi nộp.", "warning");
       return;
     }
 
     if (requiresCompletedDate && !completedDate) {
-      showMessage("Báo cáo này bắt buộc có ngày hoàn thành.");
+      showMessage("Trước khi nộp báo cáo quá khứ, bắt buộc nhập ngày hoàn thành.", "warning");
       return;
     }
 
     if (completedDate && completedDateMin && completedDate < completedDateMin) {
-      showMessage("Ngày hoàn thành nằm ngoài khoảng được phép của kỳ báo cáo.");
+      showMessage("Ngày hoàn thành nằm ngoài khoảng được phép của kỳ báo cáo.", "warning");
       return;
     }
 
     if (completedDate && completedDateMax && completedDate > completedDateMax) {
-      showMessage("Ngày hoàn thành nằm ngoài khoảng được phép của kỳ báo cáo.");
+      showMessage("Ngày hoàn thành nằm ngoài khoảng được phép của kỳ báo cáo.", "warning");
       return;
     }
 
     if (!reportDataLocked && dynamicFormTemplateId && !dynamicFormRuntime) {
-      showMessage("Chưa tải xong trường bổ sung.");
+      showMessage("Chưa tải xong trường bổ sung.", "warning");
       return;
     }
 
@@ -3928,7 +4412,7 @@ export default function WorkReportEditorPage(
       ? getInvalidDynamicField(dynamicFormRuntime.fields, fieldValues)
       : null;
     if (invalidDynamicField) {
-      showMessage(getDynamicFieldValidationMessage(invalidDynamicField));
+      showMessage(getDynamicFieldValidationMessage(invalidDynamicField), "warning");
       return;
     }
 
@@ -3941,6 +4425,7 @@ export default function WorkReportEditorPage(
           .slice(0, 3)
           .map((field) => getDynamicFormFieldDisplayName(field))
           .join(", ")}`,
+        "warning",
       );
       return;
     }
@@ -4002,11 +4487,13 @@ export default function WorkReportEditorPage(
       }).unwrap();
 
       await refetch();
+      await refetchReportSectionSummaries();
+      fieldValuesDirtyRef.current = false;
       onSubmitted?.();
-      showMessage("Đã nộp báo cáo.");
+      showMessage("Đã nộp báo cáo.", "success");
     } catch (error) {
       console.error(error);
-      showMessage(getApiErrorMessage(error) || "Nộp báo cáo thất bại.");
+      showMessage(getApiErrorMessage(error) || "Nộp báo cáo thất bại.", "error");
     }
   };
 
@@ -4014,7 +4501,7 @@ export default function WorkReportEditorPage(
     if (!detail) return;
 
     if (!withdrawReason.trim()) {
-      showMessage("Bắt buộc nhập lý do thu hồi.");
+      showMessage("Bắt buộc nhập lý do thu hồi.", "warning");
       return;
     }
 
@@ -4029,10 +4516,10 @@ export default function WorkReportEditorPage(
 
       setWithdrawOpen(false);
       await refetch();
-      showMessage("Đã thu hồi báo cáo.");
+      showMessage("Đã thu hồi báo cáo.", "success");
     } catch (error) {
       console.error(error);
-      showMessage("Trả lại báo cáo thất bại.");
+      showMessage("Trả lại báo cáo thất bại.", "error");
     }
   };
 
@@ -4128,6 +4615,7 @@ export default function WorkReportEditorPage(
             title="Dữ liệu biểu mẫu"
             getSectionExtraCount={getReportSectionTableCount}
             renderSectionExtra={renderReportSectionTables}
+            getSectionEntryState={getReportSectionEntryState}
             getSectionValidationState={(section) => {
               const state = sectionValidationState[section.id];
               return state
@@ -4222,6 +4710,7 @@ export default function WorkReportEditorPage(
                         onPreview={setAggregateMapPreview}
                         onApplied={async () => {
                           await refetch();
+                          await refetchReportSectionSummaries();
                           onSaved?.();
                         }}
                         onSelectTargetBlock={(blockId) => {
@@ -4271,7 +4760,7 @@ export default function WorkReportEditorPage(
       <Dialog
         data-testid="report-table-dialog"
         open={tableDialogOpen}
-        onClose={() => !busy && setTableDialogOpen(false)}
+        onClose={requestCloseTableDialog}
         fullScreen
       >
         <DialogTitle
@@ -4289,9 +4778,14 @@ export default function WorkReportEditorPage(
             justifyContent="space-between"
           >
             <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle1" fontWeight={800} noWrap>
-                {selectedReportBlock?.label ?? "Bảng dữ liệu"}
-              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography variant="subtitle1" fontWeight={800} noWrap>
+                  {selectedReportBlock?.label ?? "Bảng dữ liệu"}
+                </Typography>
+                {selectedReportBlockDirty && (
+                  <Chip size="small" color="warning" variant="outlined" label="Chưa lưu" />
+                )}
+              </Stack>
               {selectedReportBlock && (
                 <Typography variant="caption" color="text.secondary">
                   {getReportBlockButtonSummary(selectedReportBlock)}
@@ -4307,10 +4801,10 @@ export default function WorkReportEditorPage(
                   disabled={busy}
                   onClick={() => void handleSaveSelectedWorkbookDraft()}
                 >
-                  Lưu nháp
+                  Lưu nháp bảng này
                 </Button>
               )}
-              <Button onClick={() => setTableDialogOpen(false)} disabled={busy}>
+              <Button onClick={requestCloseTableDialog} disabled={busy}>
                 Đóng
               </Button>
             </Stack>
@@ -4352,9 +4846,10 @@ export default function WorkReportEditorPage(
                     showActions={false}
                     embeddedFullscreen
                     changeCommitMode="manual"
-                    saveLabel="Lưu nháp"
+                    saveLabel="Lưu nháp bảng này"
                     backLabel="Đóng"
-                    onBack={() => setTableDialogOpen(false)}
+                    onBack={requestCloseTableDialog}
+                    onDirty={() => markReportBlockDirty(selectedReportBlock.blockId)}
                     onChangeRaw={(rawWorkbookData, payload) => {
                       invalidateReportBlockSectionValidation(selectedReportBlock.blockId);
                       latestWorkbookPayloadRef.current = {
@@ -4364,6 +4859,12 @@ export default function WorkReportEditorPage(
                           latestWorkbookPayloadRef.current[selectedReportBlock.blockId] ??
                           selectedBlockValues,
                       };
+                      if (payload?.valuesHash) {
+                        latestWorkbookHashRef.current = {
+                          ...latestWorkbookHashRef.current,
+                          [selectedReportBlock.blockId]: payload.valuesHash,
+                        };
+                      }
                       latestWorkbookIssuesRef.current = {
                         ...latestWorkbookIssuesRef.current,
                         [selectedReportBlock.blockId]: payload?.validationIssues ?? [],
@@ -4374,21 +4875,10 @@ export default function WorkReportEditorPage(
                       };
                     }}
                     onSave={(payload) => {
-                      latestWorkbookPayloadRef.current = {
-                        ...latestWorkbookPayloadRef.current,
-                        [selectedReportBlock.blockId]: payload.values1D,
-                      };
-                      latestWorkbookIssuesRef.current = {
-                        ...latestWorkbookIssuesRef.current,
-                        [selectedReportBlock.blockId]: payload.validationIssues,
-                      };
-                      latestWorkbookRawRef.current = {
-                        ...latestWorkbookRawRef.current,
-                        [selectedReportBlock.blockId]: payload.rawWorkbookData,
-                      };
                       void handleSaveDraft({
                         blockId: selectedReportBlock.blockId,
                         values1D: payload.values1D,
+                        valuesHash: payload.valuesHash,
                         rawWorkbookData: payload.rawWorkbookData,
                         validationIssues: payload.validationIssues,
                       });
@@ -4414,6 +4904,29 @@ export default function WorkReportEditorPage(
           )}
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesDialog
+        open={Boolean(unsavedTableClose?.open)}
+        title="Bảng dữ liệu chưa lưu"
+        message={
+          <Stack spacing={1}>
+            <Typography variant="body2">
+              Bảng <b>{unsavedTableClose?.blockLabel ?? "dữ liệu"}</b> đang có thay đổi chưa lưu.
+              Nếu đóng ngay, dữ liệu vừa nhập trong fullscreen sẽ bị bỏ.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Chọn <b>Lưu nháp bảng này</b> để chỉ kiểm tra và lưu bảng đang mở. Nút <b>Lưu nháp</b> ngoài màn hình báo cáo vẫn kiểm tra toàn bộ section/bảng trước khi lưu.
+            </Typography>
+          </Stack>
+        }
+        saveText="Lưu nháp bảng này"
+        discardText="Đóng không lưu"
+        cancelText="Tiếp tục chỉnh sửa"
+        saving={busy}
+        onSave={() => void handleSaveAndCloseUnsavedTable()}
+        onDiscard={handleDiscardAndCloseUnsavedTable}
+        onCancel={() => setUnsavedTableClose(null)}
+      />
 
       <Dialog
         open={Boolean(sectionValidationPrompt?.open)}
@@ -4617,11 +5130,11 @@ export default function WorkReportEditorPage(
         isError={isLogsError}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={2500}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        message={snackbar.message}
+      <ActionToast
+        open={toast.open}
+        message={toast.message}
+        severity={toast.severity}
+        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
       />
     </>
   );

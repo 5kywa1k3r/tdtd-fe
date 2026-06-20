@@ -16,11 +16,14 @@ export type DynamicFormSectionSelectItem = {
   section: DynamicFormSection;
   fieldCount?: number;
   blockCount?: number;
+  entryStatus?: DynamicFormSectionEntryStatus;
+  lastUpdatedAt?: string | null;
   validationStatus?: DynamicFormSectionValidationStatus;
   validationIssueCount?: number;
 };
 
 export type DynamicFormSectionValidationStatus = "valid" | "invalid";
+export type DynamicFormSectionEntryStatus = "entered" | "empty";
 
 type DynamicFormSectionSelectProps = {
   items: DynamicFormSectionSelectItem[];
@@ -121,7 +124,9 @@ export default function DynamicFormSectionSelect({
                 </Typography>
               ) : null}
               <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+                {renderEntryStatusChip(item)}
                 {renderCountChips(item)}
+                {renderLastUpdatedChip(item)}
                 {renderValidationChip(item)}
               </Stack>
             </Stack>
@@ -148,6 +153,9 @@ function getSectionSearchText(item: DynamicFormSectionSelectItem) {
   return [
     item.section.title,
     item.section.description,
+    item.entryStatus === "entered" ? "da nhap đã nhập" : null,
+    item.entryStatus === "empty" ? "chua nhap chưa nhập" : null,
+    formatSectionDateTime(item.lastUpdatedAt),
     ...(item.section.tagCodes ?? []),
     item.section.id,
   ].filter(Boolean).join(" ");
@@ -171,6 +179,48 @@ function renderCountChips(item: DynamicFormSectionSelectItem) {
   ].filter(Boolean);
 
   return chips.length > 0 ? chips : <Chip size="small" variant="outlined" label="Chưa có nội dung" />;
+}
+
+function renderEntryStatusChip(item: DynamicFormSectionSelectItem) {
+  if (item.entryStatus === "entered") {
+    return (
+      <Chip
+        size="small"
+        color="success"
+        variant="outlined"
+        label="Đã nhập"
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  if (item.entryStatus === "empty") {
+    return (
+      <Chip
+        size="small"
+        color="warning"
+        variant="outlined"
+        label="Chưa nhập"
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  return null;
+}
+
+function renderLastUpdatedChip(item: DynamicFormSectionSelectItem) {
+  const label = formatSectionDateTime(item.lastUpdatedAt);
+  if (!label) return null;
+
+  return (
+    <Chip
+      size="small"
+      variant="outlined"
+      label={`Cập nhật: ${label}`}
+      sx={{ flexShrink: 0 }}
+    />
+  );
 }
 
 function renderValidationChip(item: DynamicFormSectionSelectItem) {
@@ -200,4 +250,17 @@ function renderValidationChip(item: DynamicFormSectionSelectItem) {
   }
 
   return null;
+}
+
+function formatSectionDateTime(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear()).padStart(4, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }

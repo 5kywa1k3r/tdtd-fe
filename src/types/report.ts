@@ -248,6 +248,30 @@ export interface WorkAssignmentReportResponse {
   updatedAtUtc: string;
 }
 
+export interface WorkAssignmentReportSectionSummaryRow {
+  sectionId: string;
+  sectionTitle: string;
+  sectionOrder: number;
+  fieldCount: number;
+  blockCount: number;
+  hasData: boolean;
+  lastUpdatedAtUtc?: string | null;
+  lastUpdatedByUserId?: string | null;
+  sourcePayloadUpdatedAtUtc?: string | null;
+}
+
+export interface WorkAssignmentReportSectionDetailResponse
+  extends WorkAssignmentReportSectionSummaryRow {
+  reportId: string;
+  dynamicFormTemplateId?: string | null;
+  dynamicFormTemplateCode?: string | null;
+  dynamicFormTemplateName?: string | null;
+  fieldsJson: string;
+  blocksJson: string;
+  fieldValuesJson?: string | null;
+  tableValuesJson?: string | null;
+}
+
 /* =========================
  * Search sâu / quản trị / history
  * ========================= */

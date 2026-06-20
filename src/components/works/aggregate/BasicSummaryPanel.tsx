@@ -53,6 +53,9 @@ import type {
   WorkAssignmentBasicSummaryTableValuesDto,
   WorkAssignmentBasicSummaryValuesDto,
 } from "../../../types/reportAggregate";
+import type { PeriodScopeMode } from "../../../types/aggregateTypes";
+import AggregatePeriodPicker from "./AggregatePeriodPicker";
+import { AggregateUnitSelector, type AggregateUnitOption } from "./AggregateDataControls";
 
 export type BasicSummaryMethod =
   | "SUM"
@@ -108,9 +111,20 @@ type Props = {
   rangeMethodRows: BasicSummaryRangeMethodRow[];
   sourceView: BasicSummarySourceViewState;
   periodScopeLabel?: string | null;
+  periodScopeMode: PeriodScopeMode;
+  periodDate: string;
+  periodDateFrom: string;
+  periodDateTo: string;
+  selectedUnitIds: string[];
+  unitOptions: AggregateUnitOption[];
   onDefaultMethodsChange: (methods: WorkAssignmentBasicSummaryDefaultMethodsDto) => void;
   onFieldMethodChange: (fieldId: string, method: BasicSummaryMethod) => void;
   onRangeMethodChange: (rowId: string, method: BasicSummaryMethod) => void;
+  onPeriodScopeModeChange: (value: PeriodScopeMode) => void;
+  onPeriodDateChange: (value: string) => void;
+  onPeriodDateFromChange: (value: string) => void;
+  onPeriodDateToChange: (value: string) => void;
+  onSelectedUnitIdsChange: (value: string[]) => void;
   onSaveConfig: () => void;
   onLoad: (forceRefresh: boolean) => void;
   onSourceViewChange: (view: BasicSummarySourceViewState) => void;
@@ -172,9 +186,20 @@ const BasicSummaryPanel: React.FC<Props> = ({
   rangeMethodRows,
   sourceView,
   periodScopeLabel,
+  periodScopeMode,
+  periodDate,
+  periodDateFrom,
+  periodDateTo,
+  selectedUnitIds,
+  unitOptions,
   onDefaultMethodsChange,
   onFieldMethodChange,
   onRangeMethodChange,
+  onPeriodScopeModeChange,
+  onPeriodDateChange,
+  onPeriodDateFromChange,
+  onPeriodDateToChange,
+  onSelectedUnitIdsChange,
   onSaveConfig,
   onLoad,
   onSourceViewChange,
@@ -211,52 +236,102 @@ const BasicSummaryPanel: React.FC<Props> = ({
       )}
 
       <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={1.25}
-          alignItems={{ xs: "stretch", md: "center" }}
-        >
-          <Box sx={{ flex: 1, minWidth: 240 }}>
-            <TextField
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+              Phạm vi thống kê
+            </Typography>
+            {periodScopeLabel && (
+              <Chip size="small" variant="outlined" label={periodScopeLabel} />
+            )}
+            <Chip
               size="small"
-              fullWidth
-              label="Phạm vi thống kê"
-              value={periodScopeLabel || "Tất cả báo cáo đã duyệt cùng loại biểu mẫu động"}
-              InputProps={{ readOnly: true }}
+              variant="outlined"
+              label={`Đơn vị: ${selectedUnitIds.length ? `${selectedUnitIds.length} đã chọn` : "tất cả"}`}
+            />
+          </Stack>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", lg: "1.4fr 1fr" },
+              gap: 1.5,
+              alignItems: "start",
+            }}
+          >
+            {isPeriodic ? (
+              <AggregatePeriodPicker
+                periodScopeMode={periodScopeMode}
+                periodDate={periodDate}
+                periodDateFrom={periodDateFrom}
+                periodDateTo={periodDateTo}
+                allowedModes={["SINGLE_PERIOD", "PERIOD_RANGE"]}
+                disabled={!canLoad || loading}
+                onPeriodScopeModeChange={onPeriodScopeModeChange}
+                onPeriodDateChange={onPeriodDateChange}
+                onPeriodDateFromChange={onPeriodDateFromChange}
+                onPeriodDateToChange={onPeriodDateToChange}
+              />
+            ) : (
+              <TextField
+                size="small"
+                fullWidth
+                label="Kỳ thống kê"
+                value={periodScopeLabel || "Tất cả báo cáo đã duyệt"}
+                InputProps={{ readOnly: true }}
+              />
+            )}
+
+            <AggregateUnitSelector
+              selectedUnitIds={selectedUnitIds}
+              onSelectedUnitIdsChange={onSelectedUnitIdsChange}
+              unitOptions={unitOptions}
+              disabled={!canLoad || loading}
+              label="Đơn vị thống kê"
+              helperText="Để trống để lấy tất cả đơn vị trong phạm vi."
+              emptyHelperText="Chưa có đơn vị nguồn phù hợp."
             />
           </Box>
-          <Button
-            data-testid="basic-summary-load-button"
-            variant="contained"
-            startIcon={
-              loading ? (
-                <CircularProgress size={16} color="inherit" />
-              ) : (
-                <CalculateOutlinedIcon fontSize="small" />
-              )
-            }
-            onClick={() => onLoad(false)}
-            disabled={!canLoad || loading}
+
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1}
+            justifyContent="flex-end"
+            alignItems={{ xs: "stretch", sm: "center" }}
           >
-            Tải thống kê
-          </Button>
-          <Button
-            data-testid="basic-summary-refresh-button"
-            variant="outlined"
-            startIcon={<RefreshOutlinedIcon fontSize="small" />}
-            onClick={() => onLoad(true)}
-            disabled={!canLoad || loading}
-          >
-            Tính lại
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<FileDownloadOutlinedIcon fontSize="small" />}
-            onClick={() => result && downloadBasicSummaryCsv(result)}
-            disabled={!result || loading}
-          >
-            Xuất CSV
-          </Button>
+            <Button
+              data-testid="basic-summary-load-button"
+              variant="contained"
+              startIcon={
+                loading ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <CalculateOutlinedIcon fontSize="small" />
+                )
+              }
+              onClick={() => onLoad(false)}
+              disabled={!canLoad || loading}
+            >
+              Tải thống kê
+            </Button>
+            <Button
+              data-testid="basic-summary-refresh-button"
+              variant="outlined"
+              startIcon={<RefreshOutlinedIcon fontSize="small" />}
+              onClick={() => onLoad(true)}
+              disabled={!canLoad || loading}
+            >
+              Tính lại
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<FileDownloadOutlinedIcon fontSize="small" />}
+              onClick={() => result && downloadBasicSummaryCsv(result)}
+              disabled={!result || loading}
+            >
+              Xuất CSV
+            </Button>
+          </Stack>
         </Stack>
       </Paper>
 

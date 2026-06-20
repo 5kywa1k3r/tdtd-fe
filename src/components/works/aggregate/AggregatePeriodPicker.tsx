@@ -43,6 +43,8 @@ export type AggregatePeriodPickerProps = {
   periodDate: string;
   periodDateFrom: string;
   periodDateTo: string;
+  allowedModes?: PeriodScopeMode[];
+  disabled?: boolean;
   onPeriodScopeModeChange: (value: PeriodScopeMode) => void;
   onPeriodDateChange: (value: string) => void;
   onPeriodDateFromChange: (value: string) => void;
@@ -54,6 +56,8 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
   periodDate,
   periodDateFrom,
   periodDateTo,
+  allowedModes,
+  disabled = false,
   onPeriodScopeModeChange,
   onPeriodDateChange,
   onPeriodDateFromChange,
@@ -74,7 +78,11 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
 
     onPeriodDateToChange(nextTo);
   };
-  const periodScopeGuide = PERIOD_SCOPE_GUIDES[periodScopeMode];
+  const visibleModes = allowedModes?.length
+    ? allowedModes
+    : (Object.keys(PERIOD_SCOPE_GUIDES) as PeriodScopeMode[]);
+  const selectedMode = visibleModes.includes(periodScopeMode) ? periodScopeMode : visibleModes[0];
+  const periodScopeGuide = PERIOD_SCOPE_GUIDES[selectedMode];
   const periodDateDayKey = isoDateToDayKey(periodDate);
   const periodDateFromDayKey = isoDateToDayKey(periodDateFrom);
   const periodDateToDayKey = isoDateToDayKey(periodDateTo);
@@ -91,11 +99,14 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
               <Typography variant="caption" sx={{ fontWeight: 700 }}>
                 Chọn kỳ để xác định báo cáo nguồn nào được đưa vào tổng hợp
               </Typography>
-              {Object.entries(PERIOD_SCOPE_GUIDES).map(([mode, guide]) => (
-                <Typography key={mode} variant="caption" component="div">
-                  <b>{formatPeriodScopeGuideLabel(mode as PeriodScopeMode)}:</b> {guide.tooltip} {guide.example}
-                </Typography>
-              ))}
+              {visibleModes.map((mode) => {
+                const guide = PERIOD_SCOPE_GUIDES[mode];
+                return (
+                  <Typography key={mode} variant="caption" component="div">
+                    <b>{formatPeriodScopeGuideLabel(mode)}:</b> {guide.tooltip} {guide.example}
+                  </Typography>
+                );
+              })}
             </Stack>
           }
         >
@@ -107,28 +118,38 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
         select
         label={uiText(UITextKey.TextPhamViKy)}
         size="small"
-        value={periodScopeMode}
+        value={selectedMode}
+        disabled={disabled}
         onChange={(e) => onPeriodScopeModeChange(e.target.value as PeriodScopeMode)}
         sx={{ minWidth: 190 }}
         helperText={`${periodScopeGuide.helper} ${periodScopeGuide.example}`}
       >
-        <MenuItem value="SINGLE_PERIOD">{uiText(UITextKey.TextMotNgayKy)}</MenuItem>
-        <MenuItem value="PERIOD_RANGE">{uiText(UITextKey.TextTuNgayDenNgay2)}</MenuItem>
-        <MenuItem value="CUMULATIVE_TO_PERIOD">{uiText(UITextKey.TextLuyKeDenNgayKy)}</MenuItem>
-        <MenuItem value="ALL_PERIODS">{uiText(UITextKey.TextToanBoKy)}</MenuItem>
+        {visibleModes.includes("SINGLE_PERIOD") && (
+          <MenuItem value="SINGLE_PERIOD">{uiText(UITextKey.TextMotNgayKy)}</MenuItem>
+        )}
+        {visibleModes.includes("PERIOD_RANGE") && (
+          <MenuItem value="PERIOD_RANGE">{uiText(UITextKey.TextTuNgayDenNgay2)}</MenuItem>
+        )}
+        {visibleModes.includes("CUMULATIVE_TO_PERIOD") && (
+          <MenuItem value="CUMULATIVE_TO_PERIOD">{uiText(UITextKey.TextLuyKeDenNgayKy)}</MenuItem>
+        )}
+        {visibleModes.includes("ALL_PERIODS") && (
+          <MenuItem value="ALL_PERIODS">{uiText(UITextKey.TextToanBoKy)}</MenuItem>
+        )}
       </TextField>
 
-      {periodScopeMode === "SINGLE_PERIOD" && (
+      {selectedMode === "SINGLE_PERIOD" && (
         <SingleDayKeyField
           label={uiText(UITextKey.TextNgayKy)}
           value={periodDateDayKey}
           onChange={(next) => onPeriodDateChange(dayKeyToIsoDate(next))}
           helperText="Ngày/kỳ này phải khớp kỳ báo cáo nguồn cần tổng hợp."
+          disabled={disabled}
           fullWidth
         />
       )}
 
-      {periodScopeMode === "PERIOD_RANGE" && (
+      {selectedMode === "PERIOD_RANGE" && (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
           <SingleDayKeyField
             label={uiText(UITextKey.TextTuNgay2)}
@@ -136,6 +157,7 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
             onChange={(next) => handlePeriodDateFromChange(dayKeyToIsoDate(next))}
             maxDayKey={periodDateToDayKey || undefined}
             helperText="Ngày đầu của khoảng kỳ cần tổng hợp."
+            disabled={disabled}
             fullWidth
           />
           <SingleDayKeyField
@@ -144,17 +166,19 @@ const AggregatePeriodPicker: React.FC<AggregatePeriodPickerProps> = ({
             onChange={(next) => handlePeriodDateToChange(dayKeyToIsoDate(next))}
             minDayKey={periodDateFromDayKey || undefined}
             helperText="Ngày cuối của khoảng kỳ cần tổng hợp."
+            disabled={disabled}
             fullWidth
           />
         </Stack>
       )}
 
-      {periodScopeMode === "CUMULATIVE_TO_PERIOD" && (
+      {selectedMode === "CUMULATIVE_TO_PERIOD" && (
         <SingleDayKeyField
           label={uiText(UITextKey.TextLuyKeDenNgayKy)}
           value={periodDateToDayKey}
           onChange={(next) => onPeriodDateToChange(dayKeyToIsoDate(next))}
           helperText="Hệ thống lấy các báo cáo từ đầu phạm vi đến hết kỳ này."
+          disabled={disabled}
           fullWidth
         />
       )}

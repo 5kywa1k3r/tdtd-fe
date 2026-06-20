@@ -29,6 +29,10 @@ export type WorkbookValueValidationIssue = {
   message: string;
 };
 
+export type ExtractTypedValuesOptions = {
+  excludedDataColumns?: number[];
+};
+
 function parseNumberFromCell(cell: any): number | null {
   if (!cell || typeof cell !== "object") return null;
 
@@ -73,8 +77,10 @@ export function extractTypedValues1D(
   sheet: any,
   dataRect: Rect,
   spec: HeaderSpec | null | undefined,
+  options?: ExtractTypedValuesOptions,
 ): {
   values1D: WorkbookCellValue[];
+  valuesHash: string;
   issues: WorkbookValueValidationIssue[];
   cellRefs: DynamicExcelInputCellRef[];
 } {
@@ -82,6 +88,8 @@ export function extractTypedValues1D(
   const values1D: WorkbookCellValue[] = [];
   const issues: WorkbookValueValidationIssue[] = [];
   const cellRefs = buildInputCellRefs(dataRect, spec);
+  const excluded = buildExcludedColumnSet(options?.excludedDataColumns ?? []);
+  let hash = WORKBOOK_VALUES_HASH_SEED;
 
   for (const ref of cellRefs) {
     const row = grid[ref.r] ?? [];
@@ -93,8 +101,11 @@ export function extractTypedValues1D(
       ? getCellValueSource(spec, dataRect, ref.r, ref.c)
       : null;
     const parsed = parseTypedCellValue(row[ref.c], dataType, options, isSystemValueSource(valueSource));
-    values1D.push(parsed.value);
-    if (parsed.issue) {
+    const excludedColumn = excluded.has(ref.c);
+    const value = excludedColumn ? null : normalizeWorkbookCellValue(parsed.value);
+    values1D.push(value);
+    hash = appendWorkbookCellValueHash(hash, value);
+    if (parsed.issue && !excludedColumn) {
       const cellRef = toExcelRef(ref.r, ref.c);
       issues.push({
         r: ref.r,
@@ -107,7 +118,69 @@ export function extractTypedValues1D(
     }
   }
 
-  return { values1D, issues, cellRefs };
+  return { values1D, valuesHash: finishWorkbookValuesHash(hash, values1D.length), issues, cellRefs };
+}
+
+const WORKBOOK_VALUES_HASH_SEED = 2166136261;
+
+function appendWorkbookHashText(hash: number, text: string) {
+  let next = hash;
+  for (let i = 0; i < text.length; i += 1) {
+    next ^= text.charCodeAt(i);
+    next = Math.imul(next, 16777619);
+  }
+  return next >>> 0;
+}
+
+function finishWorkbookValuesHash(hash: number, length: number) {
+  return appendWorkbookHashText(hash, `len:${length}|`).toString(36);
+}
+
+function appendWorkbookCellValueHash(hash: number, value: WorkbookCellValue | undefined) {
+  const normalized = normalizeWorkbookCellValue(value);
+  if (normalized === null) return appendWorkbookHashText(hash, "n|");
+  if (typeof normalized === "number") return appendWorkbookHashText(hash, `d:${normalized}|`);
+  if (typeof normalized === "boolean") return appendWorkbookHashText(hash, normalized ? "b:1|" : "b:0|");
+  if (Array.isArray(normalized)) {
+    let next = appendWorkbookHashText(hash, `a:${normalized.length}|`);
+    for (const item of normalized) {
+      next = appendWorkbookHashText(next, `${item.length}:${item}|`);
+    }
+    return next;
+  }
+  return appendWorkbookHashText(hash, `s:${normalized.length}:${normalized}|`);
+}
+
+export function normalizeWorkbookCellValue(value: WorkbookCellValue | undefined): WorkbookCellValue {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => typeof item === "string" ? item.trim() : "")
+      .filter(Boolean);
+    return items.length > 0 ? items : null;
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  return null;
+}
+
+export function hashWorkbookValues(
+  values: WorkbookCellValue[] | null | undefined,
+  expectedLength?: number,
+) {
+  const source = Array.isArray(values) ? values : [];
+  const length =
+    typeof expectedLength === "number" && expectedLength >= 0
+      ? Math.floor(expectedLength)
+      : source.length;
+
+  let hash = WORKBOOK_VALUES_HASH_SEED;
+  for (let i = 0; i < length; i += 1) {
+    hash = appendWorkbookCellValueHash(hash, source[i]);
+  }
+  return finishWorkbookValuesHash(hash, length);
 }
 
 /**
@@ -357,6 +430,14 @@ function splitMultiSelectRaw(raw: string) {
     .split(/[;\n]+/g)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function buildExcludedColumnSet(excludedDataColumns: number[]) {
+  return new Set(
+    excludedDataColumns
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0),
+  );
 }
 
 function resolveEnumOption(

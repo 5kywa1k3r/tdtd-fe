@@ -99,6 +99,7 @@ import { DESIGNER_LIMITS } from "../../../components/excel/fortune/validate";
 import type {
   AggregateFilterState,
   AggregateMetricOption,
+  PeriodScopeMode,
 } from "../../../types/aggregateTypes";
 import {
   buildEditorValue,
@@ -3033,6 +3034,15 @@ const WorkAggregationTab: React.FC<Props> = ({
     });
   }, [aggregateUnitOptions]);
 
+  React.useEffect(() => {
+    if (summaryMode !== "BASIC") return;
+    if (selectedScopeOption?.assignmentType !== "PERIODIC_REPORT") return;
+    if (filter.periodScopeMode === "SINGLE_PERIOD" || filter.periodScopeMode === "PERIOD_RANGE") return;
+
+    setFilter((prev) => ({ ...prev, periodScopeMode: "PERIOD_RANGE" }));
+    setBasicSummaryResult(null);
+  }, [filter.periodScopeMode, selectedScopeOption?.assignmentType, summaryMode]);
+
   const shouldLoadTemplateWorkbook = summaryMode === "ADVANCED" && Boolean(filter.dynamicExcelId);
   const templateQuery = useGetDynamicExcelQuery(
     { id: filter.dynamicExcelId },
@@ -3111,6 +3121,25 @@ const WorkAggregationTab: React.FC<Props> = ({
     setBasicSummaryDefaultMethods({ ...DEFAULT_BASIC_SUMMARY_METHODS, ...methods });
     setBasicSummaryResult(null);
   }, []);
+  const updateBasicSummaryFilter = React.useCallback((patch: Partial<AggregateFilterState>) => {
+    setFilter((prev) => ({ ...prev, ...patch }));
+    setBasicSummaryResult(null);
+  }, []);
+  const handleBasicSummaryPeriodScopeModeChange = React.useCallback((periodScopeMode: PeriodScopeMode) => {
+    updateBasicSummaryFilter({ periodScopeMode });
+  }, [updateBasicSummaryFilter]);
+  const handleBasicSummaryPeriodDateChange = React.useCallback((periodDate: string) => {
+    updateBasicSummaryFilter({ periodDate });
+  }, [updateBasicSummaryFilter]);
+  const handleBasicSummaryPeriodDateFromChange = React.useCallback((periodDateFrom: string) => {
+    updateBasicSummaryFilter({ periodDateFrom });
+  }, [updateBasicSummaryFilter]);
+  const handleBasicSummaryPeriodDateToChange = React.useCallback((periodDateTo: string) => {
+    updateBasicSummaryFilter({ periodDateTo });
+  }, [updateBasicSummaryFilter]);
+  const handleBasicSummarySelectedUnitIdsChange = React.useCallback((selectedUnitIds: string[]) => {
+    updateBasicSummaryFilter({ selectedUnitIds });
+  }, [updateBasicSummaryFilter]);
 
   React.useEffect(() => {
     const config = basicSummaryConfigQuery.data;
@@ -3951,9 +3980,20 @@ const WorkAggregationTab: React.FC<Props> = ({
               rangeMethodRows={templateDataTypeMethodRows}
               sourceView={basicSummarySourceView}
               periodScopeLabel={basicSummaryPeriodScopeLabel}
+              periodScopeMode={filter.periodScopeMode}
+              periodDate={filter.periodDate}
+              periodDateFrom={filter.periodDateFrom}
+              periodDateTo={filter.periodDateTo}
+              selectedUnitIds={filter.selectedUnitIds}
+              unitOptions={aggregateUnitOptions}
               onDefaultMethodsChange={handleBasicSummaryDefaultMethodsChange}
               onFieldMethodChange={handleBasicSummaryFieldMethodChange}
               onRangeMethodChange={handleTemplateSummaryMethodChange}
+              onPeriodScopeModeChange={handleBasicSummaryPeriodScopeModeChange}
+              onPeriodDateChange={handleBasicSummaryPeriodDateChange}
+              onPeriodDateFromChange={handleBasicSummaryPeriodDateFromChange}
+              onPeriodDateToChange={handleBasicSummaryPeriodDateToChange}
+              onSelectedUnitIdsChange={handleBasicSummarySelectedUnitIdsChange}
               onSaveConfig={() => void handleSaveBasicSummaryConfig()}
               onLoad={(forceRefresh) => void handleRunBasicSummary(forceRefresh)}
               onSourceViewChange={setBasicSummarySourceView}

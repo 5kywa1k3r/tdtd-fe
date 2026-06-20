@@ -13,8 +13,13 @@ const NULL_RUN_COMPRESSION_KIND = "NULL_RUNS";
 export const VALUES1D_COMPRESSION_MIN_LENGTH = 251;
 const MIN_NULL_RUN_LENGTH = 8;
 
-function isCompressibleBlank(value: Values1DCellValue | undefined): boolean {
-  return value == null;
+type CompressibleBlankKind = "null" | "zero-number" | "zero-string";
+
+function getCompressibleBlankKind(value: Values1DCellValue | undefined): CompressibleBlankKind | null {
+  if (value == null) return "null";
+  if (typeof value === "number" && value === 0) return "zero-number";
+  if (typeof value === "string" && value.trim() === "0") return "zero-string";
+  return null;
 }
 
 type CompressionRun = {
@@ -121,7 +126,7 @@ function buildReader(values: Values1DCellValue[], length: number, runs: Compress
   const get = (index: number): Values1DCellValue => {
     if (!Number.isInteger(index) || index < 0 || index >= safeLength) return null;
     const mapped = mapIndex(index);
-    if (mapped.inCompressedRun) return null;
+    if (mapped.inCompressedRun) return values[mapped.compressedIndex] ?? null;
     return values[mapped.compressedIndex] ?? null;
   };
 
@@ -166,21 +171,22 @@ function buildCompressedPayload(values: Values1DCellValue[]): CompressedValues1D
   const counts: number[] = [];
 
   for (let index = 0; index < values.length;) {
-    if (!isCompressibleBlank(values[index])) {
+    const runKind = getCompressibleBlankKind(values[index]);
+    if (!runKind) {
       compressed.push(values[index]);
       index += 1;
       continue;
     }
 
     let end = index + 1;
-    while (end < values.length && isCompressibleBlank(values[end])) end += 1;
+    while (end < values.length && getCompressibleBlankKind(values[end]) === runKind) end += 1;
     const runLength = end - index;
     if (runLength >= MIN_NULL_RUN_LENGTH) {
       indexes.push(index);
       counts.push(runLength);
-      compressed.push(null);
+      compressed.push(values[index] ?? null);
     } else {
-      for (let cursor = index; cursor < end; cursor += 1) compressed.push(null);
+      for (let cursor = index; cursor < end; cursor += 1) compressed.push(values[cursor] ?? null);
     }
     index = end;
   }

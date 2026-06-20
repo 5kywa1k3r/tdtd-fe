@@ -75,6 +75,7 @@ export type WorkbookDataGridChangeCommitMode = "immediate" | "manual";
 export interface WorkbookDataGridSavePayload {
   rawWorkbookData: Sheet[];
   values1D: WorkbookCellValue[];
+  valuesHash: string;
   cellRefs?: DynamicExcelInputCellRef[];
   validationIssues: WorkbookValueValidationIssue[];
 }
@@ -110,6 +111,7 @@ export interface WorkbookDataGridProps {
 
   onBack?: () => void;
   onChangeRaw?: (workbookData: Sheet[], payload?: WorkbookDataGridSavePayload) => void;
+  onDirty?: () => void;
   onSave?: (payload: WorkbookDataGridSavePayload) => void;
 }
 
@@ -158,6 +160,7 @@ function WorkbookDataGrid(
 
     onBack,
     onChangeRaw,
+    onDirty,
     onSave,
   } = props;
 
@@ -328,7 +331,7 @@ function WorkbookDataGrid(
         if (isView) return;
         if (Array.isArray(data)) {
           if (changeCommitMode === "manual") {
-            workbookRef.current = stripWorkbookZoom(data as Sheet[]);
+            onDirty?.();
             return;
           }
           const baseWorkbookData = cloneDeepJson(stripWorkbookZoom(data as Sheet[]));
@@ -361,6 +364,7 @@ function WorkbookDataGrid(
     initialSpec,
     isView,
     onChangeRaw,
+    onDirty,
     previewHighlights,
     renderWorkbookForState,
     workbookZoomRatio,
@@ -404,6 +408,8 @@ function WorkbookDataGrid(
         const payload = buildWorkbookSavePayload(next, dataRect, excludedDataColumns, initialSpec);
         if (changeCommitMode === "immediate") {
           onChangeRaw?.(next, payload ?? undefined);
+        } else {
+          onDirty?.();
         }
         return renderWorkbookForState(next);
       });
@@ -416,6 +422,7 @@ function WorkbookDataGrid(
       excludedDataColumns,
       initialSpec,
       onChangeRaw,
+      onDirty,
       previewHighlights,
       renderWorkbookForState,
       valueSourceOptions,
@@ -1441,20 +1448,15 @@ function buildWorkbookSavePayload(
   const normalized = normalizeRuntimeWorkbookForGrid(workbookData, dataRect, spec);
   const sheet = normalized?.[0];
   if (!sheet) return null;
-  const extracted = extractTypedValues1D(sheet, dataRect, spec);
-  const excluded = buildExcludedColumnSet(excludedDataColumns);
+  const extracted = extractTypedValues1D(sheet, dataRect, spec, { excludedDataColumns });
   stripEmptyNumberInputCellMetadata(normalized, dataRect, spec);
 
   return {
     rawWorkbookData: normalized,
-    values1D: applyExcludedDataColumns(
-      extracted.values1D,
-      dataRect,
-      excludedDataColumns,
-      extracted.cellRefs,
-    ),
+    values1D: extracted.values1D,
+    valuesHash: extracted.valuesHash,
     cellRefs: extracted.cellRefs,
-    validationIssues: extracted.issues.filter((issue) => !excluded.has(issue.c)),
+    validationIssues: extracted.issues,
   };
 }
 
@@ -1573,38 +1575,6 @@ function setWorkbookCell(sheet: any, r: number, c: number, cell: unknown) {
   if (!Array.isArray(sheet.data[r])) sheet.data[r] = [];
   sheet.data[r][c] = cell ?? null;
   sheet.celldata = upsertCelldataCell(sheet.celldata, r, c, cell ?? null);
-}
-
-function applyExcludedDataColumns(
-  values1D: WorkbookCellValue[],
-  dataRect: ReportRect,
-  excludedDataColumns: number[],
-  cellRefs?: DynamicExcelInputCellRef[],
-) {
-  if (!excludedDataColumns.length || values1D.length === 0) return values1D;
-
-  const excluded = buildExcludedColumnSet(excludedDataColumns);
-  if (excluded.size === 0) return values1D;
-
-  if (cellRefs?.length === values1D.length) {
-    return values1D.map((value, index) => excluded.has(cellRefs[index].c) ? null : value);
-  }
-
-  const width = dataRect.c1 - dataRect.c0 + 1;
-  const height = dataRect.r1 - dataRect.r0 + 1;
-  if (width <= 0 || height <= 0) return values1D;
-
-  const next = values1D.slice();
-  for (let rr = 0; rr < height; rr++) {
-    for (let cc = 0; cc < width; cc++) {
-      const absoluteCol = dataRect.c0 + cc;
-      if (excluded.has(absoluteCol)) {
-        next[rr * width + cc] = null;
-      }
-    }
-  }
-
-  return next;
 }
 
 function buildExcludedColumnSet(excludedDataColumns: number[]) {
