@@ -102,10 +102,14 @@ export type JobRunSearchReq = {
   action?: string;
   operation?: string;
   result?: string;
+  grain?: string;
   workId?: string;
   workAssignmentId?: string;
   workReportPeriodId?: string;
   dynamicFormTemplateId?: string;
+  sectionId?: string;
+  configId?: string;
+  configHash?: string;
   userId?: string;
   q?: string;
   includeInactive?: boolean;
@@ -237,6 +241,111 @@ export type BasicSummaryJobResetResponse = {
   jobId: string;
   correlationId: string;
   queuedAtUtc: string;
+};
+
+export type AdvancedSummaryNodeRow = {
+  id: string;
+  grain: string;
+  grainKey: string;
+  workId: string;
+  assignmentId: string;
+  dynamicFormTemplateId: string;
+  sectionId: string;
+  configId: string;
+  configVersionNo: number;
+  configHash: string;
+  status: string;
+  isDirty: boolean;
+  dirtyReason?: string | null;
+  sourceSignatureHash?: string | null;
+  sourceReportCount: number;
+  valueHash?: string | null;
+  builtAtUtc?: string | null;
+  buildJobId?: string | null;
+  buildCorrelationId?: string | null;
+  buildError?: string | null;
+  windowStartUtc: string;
+  windowEndExclusiveUtc: string;
+  isDeleted: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
+export type AdvancedSummaryNodeResetResponse = {
+  ok: boolean;
+  grain: string;
+  nodeId: string;
+  configId: string;
+  grainKey: string;
+  jobId: string;
+  correlationId: string;
+  queuedAtUtc: string;
+  node?: AdvancedSummaryNodeRow | null;
+};
+
+export type AdvancedSummaryNodeCleanupRequest = {
+  grain?: string;
+  status?: string;
+  workId?: string;
+  workAssignmentId?: string;
+  dynamicFormTemplateId?: string;
+  sectionId?: string;
+  configId?: string;
+  configVersionNo?: number;
+  configHash?: string;
+  sourceSignatureHash?: string;
+  updatedBeforeUtc?: string;
+  builtBeforeUtc?: string;
+  dryRun?: boolean;
+  limit?: number;
+};
+
+export type AdvancedSummaryNodeCleanupResponse = {
+  ok: boolean;
+  dryRun: boolean;
+  limit: number;
+  matchedCount: number;
+  selectedCount: number;
+  softDeletedCount: number;
+  hasMore: boolean;
+  sampleRows: AdvancedSummaryNodeRow[];
+};
+
+export type AdvancedSummaryDayDiagnosticsRequest = {
+  configId: string;
+  dayKey: string;
+  includeValueJson?: boolean;
+};
+
+export type AdvancedSummaryDayDiagnosticSnapshot = {
+  nodeId?: string | null;
+  status: string;
+  isDirty: boolean;
+  sourceReportCount: number;
+  sourceSignatureHash?: string | null;
+  valueHash?: string | null;
+  comparableValueHash?: string | null;
+  comparableValueError?: string | null;
+  builtAtUtc?: string | null;
+  buildJobId?: string | null;
+  buildCorrelationId?: string | null;
+  buildError?: string | null;
+  windowStartUtc: string;
+  windowEndExclusiveUtc: string;
+  valueJson?: string | null;
+};
+
+export type AdvancedSummaryDayDiagnosticsResponse = {
+  configId: string;
+  configHash: string;
+  dayKey: string;
+  status: string;
+  matches: boolean;
+  diagnosticActorUserId: string;
+  checkedAtUtc: string;
+  differences: string[];
+  cache?: AdvancedSummaryDayDiagnosticSnapshot | null;
+  direct: AdvancedSummaryDayDiagnosticSnapshot;
 };
 
 export type ProcessJobRunResponse = {
@@ -443,6 +552,52 @@ export const operationsApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: "JobRun" as const, id: "BASIC_SUMMARY" }],
     }),
 
+    searchAdvancedSummaryNodes: build.query<PagedResult<AdvancedSummaryNodeRow>, JobRunSearchReq>({
+      query: (req) => ({
+        url: "admin/operations/job-runs/advanced-summary-nodes",
+        method: "GET",
+        params: cleanParams(req),
+      }),
+      providesTags: [{ type: "JobRun" as const, id: "ADVANCED_SUMMARY" }],
+    }),
+
+    resetAdvancedSummaryNode: build.mutation<
+      AdvancedSummaryNodeResetResponse,
+      { grain: string; nodeId: string }
+    >({
+      query: ({ grain, nodeId }) => ({
+        url: `admin/operations/job-runs/advanced-summary-nodes/${grain}/${nodeId}/reset`,
+        method: "POST",
+      }),
+      invalidatesTags: [{ type: "JobRun" as const, id: "ADVANCED_SUMMARY" }],
+    }),
+
+    cleanupAdvancedSummaryNodes: build.mutation<
+      AdvancedSummaryNodeCleanupResponse,
+      AdvancedSummaryNodeCleanupRequest
+    >({
+      query: (req) => ({
+        url: "admin/operations/job-runs/advanced-summary-nodes/cleanup",
+        method: "POST",
+        data: cleanParams(req),
+      }),
+      invalidatesTags: [
+        { type: "JobRun" as const, id: "ADVANCED_SUMMARY" },
+        { type: "JobRun" as const, id: "OPERATION_LOGS" },
+      ],
+    }),
+
+    diagnoseAdvancedSummaryDayNode: build.mutation<
+      AdvancedSummaryDayDiagnosticsResponse,
+      AdvancedSummaryDayDiagnosticsRequest
+    >({
+      query: (req) => ({
+        url: "admin/operations/job-runs/advanced-summary-nodes/diagnostics/day",
+        method: "POST",
+        data: cleanParams(req),
+      }),
+    }),
+
     checkReportPayloadDiagnostics: build.query<ReportPayloadDiagnosticsResult, ReportPayloadDiagnosticsRequest>({
       query: (req) => ({
         url: "admin/operations/report-payloads/diagnostics",
@@ -483,6 +638,10 @@ export const {
   useProcessStatisticRebuildJobsMutation,
   useSearchBasicSummaryJobsQuery,
   useResetBasicSummaryJobMutation,
+  useSearchAdvancedSummaryNodesQuery,
+  useResetAdvancedSummaryNodeMutation,
+  useCleanupAdvancedSummaryNodesMutation,
+  useDiagnoseAdvancedSummaryDayNodeMutation,
   useCheckReportPayloadDiagnosticsQuery,
   useRepairReportPayloadDiagnosticsMutation,
 } = operationsApi;

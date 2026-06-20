@@ -31,8 +31,12 @@ import {
   useResetBasicSummaryJobMutation,
   useCheckReportPayloadDiagnosticsQuery,
   useRepairReportPayloadDiagnosticsMutation,
+  useCleanupAdvancedSummaryNodesMutation,
+  useDiagnoseAdvancedSummaryDayNodeMutation,
+  useResetAdvancedSummaryNodeMutation,
   useSearchActionLogRetryJobsQuery,
   useSearchActionLogsQuery,
+  useSearchAdvancedSummaryNodesQuery,
   useSearchBasicSummaryJobsQuery,
   useSearchJobOperationLogsQuery,
   useSearchMaterializeJobsQuery,
@@ -40,6 +44,9 @@ import {
   useSearchStatisticRebuildJobsQuery,
 } from "../../api/operationsApi";
 import type {
+  AdvancedSummaryDayDiagnosticsResponse,
+  AdvancedSummaryNodeCleanupRequest,
+  AdvancedSummaryNodeRow,
   BasicSummaryJobRow,
   JobRunSearchReq,
   MaterializeJobRow,
@@ -66,7 +73,8 @@ type JobRunTab =
   | "projectionRetry"
   | "actionLogRetry"
   | "statisticRebuild"
-  | "basicSummary";
+  | "basicSummary"
+  | "advancedSummary";
 type ChipColor = "default" | "success" | "error" | "warning" | "info";
 
 type HistoryFilters = {
@@ -82,10 +90,17 @@ type JobRunFilters = {
   q: string;
   status: string;
   action: string;
+  grain: string;
   workId: string;
   workAssignmentId: string;
+  dynamicFormTemplateId: string;
+  sectionId: string;
+  configId: string;
+  configHash: string;
+  sourceSignatureHash: string;
   userId: string;
   includeInactive: boolean;
+  cleanupLimit: number;
   pageSize: number;
 };
 
@@ -122,10 +137,17 @@ const jobRunDefaultFilters: JobRunFilters = {
   q: "",
   status: "",
   action: "",
+  grain: "",
   workId: "",
   workAssignmentId: "",
+  dynamicFormTemplateId: "",
+  sectionId: "",
+  configId: "",
+  configHash: "",
+  sourceSignatureHash: "",
   userId: "",
   includeInactive: false,
+  cleanupLimit: 100,
   pageSize: 25,
 };
 
@@ -191,6 +213,8 @@ const jobRunTabs = [
   ["basicSummary", "Tổng hợp cơ bản"],
 ] as const;
 
+const advancedSummaryJobRunTab = ["advancedSummary", "Advanced summary"] as const;
+
 const operationResultOptions = [
   ["", "Tất cả trạng thái"],
   ["SUCCESS", "Đã chạy"],
@@ -223,6 +247,21 @@ const basicSummaryStatusOptions = [
   ["RUNNING", "Đang chạy"],
   ["DONE", "Đã chạy"],
   ["FAILED", "Lỗi"],
+] as const;
+
+const advancedSummaryStatusOptions = [
+  ["", "All statuses"],
+  ["CLEAN", "Clean"],
+  ["DIRTY", "Dirty"],
+  ["BUILDING", "Building"],
+  ["FAILED", "Failed"],
+] as const;
+
+const advancedSummaryGrainOptions = [
+  ["", "All grains"],
+  ["DAY", "Day"],
+  ["MONTH", "Month"],
+  ["YEAR", "Year"],
 ] as const;
 
 const formatDateTime = (value?: string | null) => {
@@ -431,6 +470,23 @@ const toPayloadDiagnosticsRequest = (filters: PayloadDiagnosticsFilters): Report
   workReportPeriodId: filters.workReportPeriodId.trim() || undefined,
   workAssignmentReportId: filters.workAssignmentReportId.trim() || undefined,
   limit: Math.max(1, Math.min(500, filters.limit || 100)),
+});
+
+const toAdvancedSummaryCleanupRequest = (
+  filters: JobRunFilters,
+  dryRun: boolean,
+): AdvancedSummaryNodeCleanupRequest => ({
+  grain: filters.grain || undefined,
+  status: filters.status.trim() || undefined,
+  workId: filters.workId.trim() || undefined,
+  workAssignmentId: filters.workAssignmentId.trim() || undefined,
+  dynamicFormTemplateId: filters.dynamicFormTemplateId.trim() || undefined,
+  sectionId: filters.sectionId.trim() || undefined,
+  configId: filters.configId.trim() || undefined,
+  configHash: filters.configHash.trim() || undefined,
+  sourceSignatureHash: filters.sourceSignatureHash.trim() || undefined,
+  dryRun,
+  limit: Math.max(1, Math.min(1000, filters.cleanupLimit || 100)),
 });
 
 function PagedTable<T>({
@@ -845,11 +901,16 @@ function JobRunsPanel() {
   const [processActionLog, actionLogProcessState] = useProcessActionLogRetryJobsMutation();
   const [processStatisticRebuild, statisticRebuildProcessState] = useProcessStatisticRebuildJobsMutation();
   const [resetBasicSummary, resetBasicSummaryState] = useResetBasicSummaryJobMutation();
+  const [resetAdvancedSummaryNode, resetAdvancedSummaryNodeState] = useResetAdvancedSummaryNodeMutation();
+  const [cleanupAdvancedSummaryNodes, cleanupAdvancedSummaryState] = useCleanupAdvancedSummaryNodesMutation();
+  const [diagnoseAdvancedSummaryDayNode, diagnoseAdvancedSummaryDayState] = useDiagnoseAdvancedSummaryDayNodeMutation();
+  const [advancedDiagnostics, setAdvancedDiagnostics] = useState<AdvancedSummaryDayDiagnosticsResponse | null>(null);
 
   const statusOptions = useMemo(() => {
     if (jobTab === "operationLogs") return operationResultOptions;
     if (jobTab === "statisticRebuild") return statisticRebuildStatusOptions;
     if (jobTab === "basicSummary") return basicSummaryStatusOptions;
+    if (jobTab === "advancedSummary") return advancedSummaryStatusOptions;
     return queueStatusOptions;
   }, [jobTab]);
 
@@ -860,8 +921,13 @@ function JobRunsPanel() {
       action: applied.action.trim() || undefined,
       operation: applied.action.trim() || undefined,
       result: applied.status.trim() || undefined,
+      grain: applied.grain || undefined,
       workId: applied.workId.trim() || undefined,
       workAssignmentId: applied.workAssignmentId.trim() || undefined,
+      dynamicFormTemplateId: applied.dynamicFormTemplateId.trim() || undefined,
+      sectionId: applied.sectionId.trim() || undefined,
+      configId: applied.configId.trim() || undefined,
+      configHash: applied.configHash.trim() || undefined,
       userId: applied.userId.trim() || undefined,
       includeInactive: applied.includeInactive,
       page,
@@ -888,6 +954,9 @@ function JobRunsPanel() {
   const basicSummaryQuery = useSearchBasicSummaryJobsQuery(queryArgs, {
     skip: jobTab !== "basicSummary",
   });
+  const advancedSummaryQuery = useSearchAdvancedSummaryNodesQuery(queryArgs, {
+    skip: jobTab !== "advancedSummary",
+  });
 
   const resetBasicSummaryJob = async (snapshotId: string) => {
     setNotice(null);
@@ -898,6 +967,60 @@ function JobRunsPanel() {
       );
     } catch {
       setNotice("Không reset được job tổng hợp cơ bản.");
+    }
+  };
+
+  const resetAdvancedNode = async (row: AdvancedSummaryNodeRow) => {
+    setNotice(null);
+    try {
+      const result = await resetAdvancedSummaryNode({ grain: row.grain, nodeId: row.id }).unwrap();
+      setNotice(
+        `Advanced summary node ${row.grain}:${row.grainKey} queued. Job: ${compactId(result.jobId)}. Correlation: ${compactId(result.correlationId)}.`,
+      );
+    } catch {
+      setNotice("Khong reset duoc advanced summary node.");
+    }
+  };
+
+  const diagnoseAdvancedDayNode = async (row: AdvancedSummaryNodeRow) => {
+    setNotice(null);
+    setAdvancedDiagnostics(null);
+    try {
+      const result = await diagnoseAdvancedSummaryDayNode({
+        configId: row.configId,
+        dayKey: row.grainKey,
+        includeValueJson: false,
+      }).unwrap();
+      setAdvancedDiagnostics(result);
+      setNotice(
+        result.matches
+          ? `Diagnostics ${row.grainKey}: cache matches direct source.`
+          : `Diagnostics ${row.grainKey}: ${result.status} (${result.differences.join(", ") || "difference detected"}).`,
+      );
+    } catch {
+      setNotice("Khong chay duoc diagnostics advanced summary day node.");
+    }
+  };
+
+  const runAdvancedSummaryCleanup = async (dryRun: boolean) => {
+    if (!dryRun && !window.confirm("Soft-delete advanced summary cache nodes theo filter hien tai. Tiep tuc?")) {
+      return;
+    }
+
+    setNotice(null);
+    setApplied(draft);
+    setPage(0);
+    try {
+      const result = await cleanupAdvancedSummaryNodes(
+        toAdvancedSummaryCleanupRequest(draft, dryRun),
+      ).unwrap();
+      setNotice(
+        dryRun
+          ? `Dry-run cleanup: matched ${result.matchedCount}, selected ${result.selectedCount}, limit ${result.limit}${result.hasMore ? ", con tiep" : ""}.`
+          : `Cleanup done: soft-deleted ${result.softDeletedCount}/${result.selectedCount}, matched ${result.matchedCount}${result.hasMore ? ", con tiep" : ""}.`,
+      );
+    } catch {
+      setNotice("Khong chay duoc cleanup advanced summary cache. Kiem tra lai scope filter.");
     }
   };
 
@@ -1068,6 +1191,68 @@ function JobRunsPanel() {
     [resetBasicSummaryState.isLoading],
   );
 
+  const advancedSummaryColumns = useMemo<AppTableColumn<AdvancedSummaryNodeRow>[]>(
+    () => [
+      { field: "updatedAtUtc", header: "Updated", width: 170, render: (row) => formatDateTime(row.updatedAtUtc) },
+      {
+        field: "status",
+        header: "Status",
+        width: 140,
+        render: (row) => (
+          <Chip size="small" color={resultColor(row.status)} label={`${statusLabel(row.status)}${row.isDirty ? " / dirty" : ""}`} />
+        ),
+      },
+      { field: "grain", header: "Grain", width: 90, render: (row) => <Chip size="small" label={row.grain} /> },
+      { field: "grainKey", header: "Key", width: 130, render: (row) => row.grainKey },
+      { field: "configId", header: "Config", width: 160, render: (row) => compactId(row.configId) },
+      { field: "sectionId", header: "Section", width: 160, render: (row) => renderLimitedText(row.sectionId, 160) },
+      { field: "assignmentId", header: "Assignment", width: 150, render: (row) => compactId(row.assignmentId) },
+      { field: "dynamicFormTemplateId", header: "Template", width: 150, render: (row) => compactId(row.dynamicFormTemplateId) },
+      {
+        field: "sourceReportCount",
+        header: "Source",
+        width: 100,
+        align: "right",
+        render: (row) => row.sourceReportCount,
+      },
+      { field: "sourceSignatureHash", header: "Source hash", width: 160, render: (row) => compactId(row.sourceSignatureHash) },
+      { field: "builtAtUtc", header: "Built", width: 170, render: (row) => formatDateTime(row.builtAtUtc) },
+      { field: "buildError", header: "Error", render: (row) => renderLimitedText(row.buildError || row.dirtyReason, 360) },
+      {
+        field: "actions",
+        header: "",
+        width: 220,
+        align: "center",
+        render: (row) => {
+          const busy = row.status === "BUILDING";
+          return (
+            <Stack direction="row" spacing={1} justifyContent="center">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ReplayIcon />}
+                disabled={busy || resetAdvancedSummaryNodeState.isLoading}
+                onClick={() => resetAdvancedNode(row)}
+              >
+                Reset
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FactCheckIcon />}
+                disabled={row.grain !== "DAY" || diagnoseAdvancedSummaryDayState.isLoading}
+                onClick={() => diagnoseAdvancedDayNode(row)}
+              >
+                Check
+              </Button>
+            </Stack>
+          );
+        },
+      },
+    ],
+    [diagnoseAdvancedSummaryDayState.isLoading, resetAdvancedSummaryNodeState.isLoading],
+  );
+
   const applyFilters = () => {
     setPage(0);
     setApplied(draft);
@@ -1083,6 +1268,7 @@ function JobRunsPanel() {
     setJobTab(value);
     setPage(0);
     setNotice(null);
+    setAdvancedDiagnostics(null);
     setDraft((current) => ({ ...current, status: "" }));
     setApplied((current) => ({ ...current, status: "" }));
   };
@@ -1145,13 +1331,30 @@ function JobRunsPanel() {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            size="small"
-            label={uiText(UITextKey.TextActionOperation)}
-            value={draft.action}
-            onChange={(event) => setDraft((current) => ({ ...current, action: event.target.value }))}
-            sx={operationsFilterFieldSx}
-          />
+          {jobTab === "advancedSummary" ? (
+            <TextField
+              select
+              size="small"
+              label="Grain"
+              value={draft.grain}
+              onChange={(event) => setDraft((current) => ({ ...current, grain: event.target.value }))}
+              sx={operationsFilterFieldSx}
+            >
+              {advancedSummaryGrainOptions.map(([value, label]) => (
+                <MenuItem key={value} value={value}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <TextField
+              size="small"
+              label={uiText(UITextKey.TextActionOperation)}
+              value={draft.action}
+              onChange={(event) => setDraft((current) => ({ ...current, action: event.target.value }))}
+              sx={operationsFilterFieldSx}
+            />
+          )}
           <TextField
             size="small"
             label="Mã đầu việc"
@@ -1166,13 +1369,68 @@ function JobRunsPanel() {
             onChange={(event) => setDraft((current) => ({ ...current, workAssignmentId: event.target.value }))}
             sx={operationsFilterFieldSx}
           />
-          <TextField
-            size="small"
-            label={uiText(UITextKey.TextUserID)}
-            value={draft.userId}
-            onChange={(event) => setDraft((current) => ({ ...current, userId: event.target.value }))}
-            sx={{ ...operationsFilterFieldSx, flexGrow: 0.9 }}
-          />
+          {jobTab === "advancedSummary" ? (
+            <>
+              <TextField
+                size="small"
+                label="Template ID"
+                value={draft.dynamicFormTemplateId}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, dynamicFormTemplateId: event.target.value }))
+                }
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                label="Section"
+                value={draft.sectionId}
+                onChange={(event) => setDraft((current) => ({ ...current, sectionId: event.target.value }))}
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                label="Config ID"
+                value={draft.configId}
+                onChange={(event) => setDraft((current) => ({ ...current, configId: event.target.value }))}
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                label="Config hash"
+                value={draft.configHash}
+                onChange={(event) => setDraft((current) => ({ ...current, configHash: event.target.value }))}
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                label="Source hash"
+                value={draft.sourceSignatureHash}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, sourceSignatureHash: event.target.value }))
+                }
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                type="number"
+                label="Cleanup limit"
+                value={draft.cleanupLimit}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, cleanupLimit: Number(event.target.value) || 100 }))
+                }
+                sx={{ ...operationsFilterFieldSx, flexGrow: 0.5 }}
+                inputProps={{ min: 1, max: 1000 }}
+              />
+            </>
+          ) : (
+            <TextField
+              size="small"
+              label={uiText(UITextKey.TextUserID)}
+              value={draft.userId}
+              onChange={(event) => setDraft((current) => ({ ...current, userId: event.target.value }))}
+              sx={{ ...operationsFilterFieldSx, flexGrow: 0.9 }}
+            />
+          )}
           <FormControlLabel
             control={
               <Switch
@@ -1194,7 +1452,7 @@ function JobRunsPanel() {
       <Paper variant="outlined">
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={1}>
           <Tabs value={jobTab} onChange={handleJobTabChange} variant="scrollable" scrollButtons="auto">
-            {jobRunTabs.map(([value, label]) => (
+            {[...jobRunTabs, advancedSummaryJobRunTab].map(([value, label]) => (
               <Tab key={value} value={value} label={label} />
             ))}
           </Tabs>
@@ -1236,12 +1494,65 @@ function JobRunsPanel() {
                 Chạy 3
               </Button>
             )}
+            {jobTab === "advancedSummary" && (
+              <>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<FactCheckIcon />}
+                  disabled={cleanupAdvancedSummaryState.isLoading}
+                  onClick={() => runAdvancedSummaryCleanup(true)}
+                >
+                  Dry-run cleanup
+                </Button>
+                <Button
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  startIcon={<ReplayIcon />}
+                  disabled={cleanupAdvancedSummaryState.isLoading}
+                  onClick={() => runAdvancedSummaryCleanup(false)}
+                >
+                  Soft-delete
+                </Button>
+              </>
+            )}
           </Stack>
         </Stack>
         <Divider />
         {notice && (
           <Alert severity="info" sx={{ borderRadius: 0 }}>
             {notice}
+          </Alert>
+        )}
+        {jobTab === "advancedSummary" && advancedDiagnostics && (
+          <Alert
+            severity={advancedDiagnostics.matches ? "success" : "warning"}
+            sx={{ borderRadius: 0 }}
+          >
+            <Stack spacing={1}>
+              <Typography variant="body2" fontWeight={600}>
+                Diagnostics {advancedDiagnostics.dayKey}: {advancedDiagnostics.status}
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Chip size="small" label={`Direct reports: ${advancedDiagnostics.direct.sourceReportCount}`} />
+                <Chip
+                  size="small"
+                  label={`Cache reports: ${advancedDiagnostics.cache?.sourceReportCount ?? "-"}`}
+                />
+                <Chip size="small" label={`Actor: ${compactId(advancedDiagnostics.diagnosticActorUserId)}`} />
+                {(advancedDiagnostics.differences.length > 0 ? advancedDiagnostics.differences : ["MATCH"]).map(
+                  (item) => (
+                    <Chip
+                      key={item}
+                      size="small"
+                      color={item === "MATCH" ? "success" : "warning"}
+                      label={item}
+                    />
+                  ),
+                )}
+              </Stack>
+            </Stack>
           </Alert>
         )}
       </Paper>
@@ -1317,6 +1628,19 @@ function JobRunsPanel() {
           isFetching={basicSummaryQuery.isFetching}
           isError={basicSummaryQuery.isError}
           columns={basicSummaryColumns}
+          rowKey={(row) => row.id}
+          page={page}
+          pageSize={applied.pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      )}
+      {jobTab === "advancedSummary" && (
+        <PagedTable
+          data={advancedSummaryQuery.data}
+          isFetching={advancedSummaryQuery.isFetching}
+          isError={advancedSummaryQuery.isError}
+          columns={advancedSummaryColumns}
           rowKey={(row) => row.id}
           page={page}
           pageSize={applied.pageSize}
