@@ -86,7 +86,6 @@ import { MARK_COLORS } from "../../../components/excel/fortune/designerMarking";
 import {
   dataTypeLabel,
   getCellDataType,
-  getMatrixDataTypeRanges,
   normalizeSpecDataTypeMetadata,
 } from "../../../components/excel/fortune/dataTypes";
 import { buildInputCellRefs } from "../../../components/excel/fortune/specialRanges";
@@ -278,19 +277,6 @@ type SummaryMethodOption = {
   label: string;
 };
 
-type TemplateDataTypeMethodRow = {
-  id: string;
-  rect: ReportRect;
-  rectLabel: string;
-  inputIndexes: number[];
-  dataType: DynamicExcelDataType;
-  dataTypeLabel: string;
-  cellCount: number;
-  defaultMethod: SummaryMethod;
-  selectedMethod: SummaryMethod;
-  methodOptions: SummaryMethodOption[];
-};
-
 const SUMMARY_METHOD_LABELS: Record<SummaryMethod, string> = {
   SUM: "Tổng",
   COUNT: "Đếm có dữ liệu",
@@ -335,93 +321,6 @@ const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
   page: 0,
   pageSize: 10,
 };
-
-function methodOptionsForDataType(dataType: DynamicExcelDataType): SummaryMethodOption[] {
-  switch (dataType) {
-    case "NUMBER":
-      return pickSummaryMethodOptions(["SUM", "COUNT", "MEAN", "MIN", "MAX"]);
-    case "DATE":
-    case "FULL_DATE":
-      return pickSummaryMethodOptions(["MAX_DATE", "MIN_DATE", "COUNT"]);
-    case "BOOLEAN":
-      return pickSummaryMethodOptions(["TRUE_COUNT", "FALSE_COUNT", "COUNT"]);
-    case "MULTI_SELECT":
-      return pickSummaryMethodOptions(["BUCKET_COUNT", "COUNT"]);
-    case "SHORT_TEXT":
-    default:
-      return pickSummaryMethodOptions(["COUNT", "JOIN"]);
-  }
-}
-
-function defaultSummaryMethodForDataType(
-  dataType: DynamicExcelDataType,
-  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto = DEFAULT_BASIC_SUMMARY_METHODS,
-): SummaryMethod {
-  switch (dataType) {
-    case "NUMBER":
-      return normalizeSummaryMethod(defaultMethods.number, "SUM");
-    case "DATE":
-    case "FULL_DATE":
-      return normalizeSummaryMethod(defaultMethods.date, "MAX_DATE");
-    case "BOOLEAN":
-      return normalizeSummaryMethod(defaultMethods.boolean, "TRUE_COUNT");
-    case "MULTI_SELECT":
-      return normalizeSummaryMethod(defaultMethods.selection, "BUCKET_COUNT");
-    case "SHORT_TEXT":
-    default:
-      return normalizeSummaryMethod(defaultMethods.text, "COUNT");
-  }
-}
-
-function formatRectLabel(rect: ReportRect) {
-  const start = formatExcelCellRef(rect.r0, rect.c0);
-  const end = formatExcelCellRef(rect.r1, rect.c1);
-  return start === end ? start : `${start}:${end}`;
-}
-
-function buildTemplateDataTypeMethodRows(
-  block: DynamicFormExcelBlockResolution | null | undefined,
-  templateRect: ReportRect,
-  templateSpec: DynamicExcelSpecLike,
-  selectedMethods: Record<string, SummaryMethod>,
-  defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto,
-): TemplateDataTypeMethodRow[] {
-  if (!block || block.tableMode !== "MATRIX") return [];
-
-  const normalizedSpec = normalizeSpecDataTypeMetadata(templateSpec as unknown as FortuneHeaderSpec);
-  if (normalizedSpec.kind !== "MATRIX") return [];
-  const inputRefs = buildInputCellRefs(templateRect, normalizedSpec);
-
-  return getMatrixDataTypeRanges(normalizedSpec, templateRect)
-    .filter((range) => range.dataType !== "IGNORE")
-    .map((range, index) => {
-      const id = range.id || `range_${index + 1}`;
-      const inputIndexes = inputRefs.flatMap((ref, inputIndex) =>
-        containsRect(range, { r0: ref.r, c0: ref.c, r1: ref.r, c1: ref.c }) ? [inputIndex] : [],
-      );
-      const defaultMethod = defaultSummaryMethodForDataType(range.dataType, defaultMethods);
-      const methodOptions = methodOptionsForDataType(range.dataType);
-      const configuredMethod = selectedMethods[id];
-      const selectedMethod = configuredMethod && methodOptions.some((option) => option.value === configuredMethod)
-        ? configuredMethod
-        : defaultMethod;
-
-      return {
-        id,
-        rect: range,
-        rectLabel: formatRectLabel(range),
-        inputIndexes,
-        dataType: range.dataType,
-        dataTypeLabel: dataTypeLabel(range.dataType),
-        cellCount: inputIndexes.length,
-        defaultMethod,
-        selectedMethod,
-        methodOptions,
-      };
-    })
-    .filter((row) => row.cellCount > 0)
-    .sort((a, b) => a.rectLabel.localeCompare(b.rectLabel, "vi"));
-}
 
 function normalizeSummaryMethod(value: unknown, fallback: SummaryMethod): SummaryMethod {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
@@ -1458,64 +1357,6 @@ function resolveMetricPreviewRect(
   return { r0: r, c0: c, r1: r, c1: c };
 }
 
-function buildBasicSummaryRulesFromTemplateMethods(
-  block: DynamicFormExcelBlockResolution | null | undefined,
-  rows: TemplateDataTypeMethodRow[],
-): WorkAssignmentBasicSummaryRuleDto[] {
-  if (!block || block.tableMode !== "MATRIX" || rows.length === 0) return [];
-
-  const rules: WorkAssignmentBasicSummaryRuleDto[] = [];
-  const seen = new Set<string>();
-
-  for (const row of rows) {
-    if (row.selectedMethod === row.defaultMethod) continue;
-
-    for (const inputIndex of row.inputIndexes) {
-      const targetKey = `table:${block.blockId}:index:${inputIndex}`;
-      const ruleKey = `${targetKey}:${row.selectedMethod}`;
-      if (seen.has(ruleKey)) continue;
-      seen.add(ruleKey);
-
-      rules.push({
-        targetKind: "TABLE",
-        targetKey,
-        operation: row.selectedMethod,
-      });
-    }
-  }
-
-  return rules;
-}
-
-function buildTemplateSummaryMethodsFromRules(
-  block: DynamicFormExcelBlockResolution | null | undefined,
-  rows: TemplateDataTypeMethodRow[],
-  rules: WorkAssignmentBasicSummaryRuleDto[] | null | undefined,
-): Record<string, SummaryMethod> {
-  if (!block || block.tableMode !== "MATRIX" || rows.length === 0 || !rules?.length) return {};
-
-  const ruleByTargetKey = new Map(
-    rules
-      .filter((rule) => String(rule.targetKind).toUpperCase() === "TABLE")
-      .map((rule) => [rule.targetKey, normalizeSummaryMethod(rule.operation, "COUNT")] as const),
-  );
-  const methods: Record<string, SummaryMethod> = {};
-
-  for (const row of rows) {
-    const method = row.inputIndexes
-      .map((inputIndex) =>
-        ruleByTargetKey.get(`table:${block.blockId}:index:${inputIndex}`) ??
-        ruleByTargetKey.get(`index:${inputIndex}`),
-      )
-      .find(Boolean);
-    if (!method || !row.methodOptions.some((option) => option.value === method)) continue;
-
-    methods[row.id] = method;
-  }
-
-  return methods;
-}
-
 function buildFieldSummaryMethodsFromRules(
   rows: ReturnType<typeof buildBasicSummaryFieldMethodRows>,
   rules: WorkAssignmentBasicSummaryRuleDto[] | null | undefined,
@@ -1537,15 +1378,6 @@ function buildFieldSummaryMethodsFromRules(
   }
 
   return methods;
-}
-
-function containsRect(container: ReportRect, rect: ReportRect) {
-  return (
-    rect.r0 >= container.r0 &&
-    rect.r1 <= container.r1 &&
-    rect.c0 >= container.c0 &&
-    rect.c1 <= container.c1
-  );
 }
 
 function resolveOrdinalIndex(value: string | null | undefined, prefix: string, fallback: unknown) {
@@ -2913,8 +2745,6 @@ const WorkAggregationTab: React.FC<Props> = ({
     React.useState<WorkAssignmentBasicSummaryDefaultMethodsDto>(DEFAULT_BASIC_SUMMARY_METHODS);
   const [basicSummaryFieldMethods, setBasicSummaryFieldMethods] =
     React.useState<Record<string, SummaryMethod>>({});
-  const [templateSummaryMethods, setTemplateSummaryMethods] =
-    React.useState<Record<string, SummaryMethod>>({});
   const [basicSummarySourceView, setBasicSummarySourceView] =
     React.useState(DEFAULT_BASIC_SUMMARY_SOURCE_VIEW);
   const [stackIdentityPreviewOpen, setStackIdentityPreviewOpen] = React.useState(false);
@@ -3047,7 +2877,6 @@ const WorkAggregationTab: React.FC<Props> = ({
     setBasicSummaryResult(null);
     setBasicSummaryDefaultMethods(DEFAULT_BASIC_SUMMARY_METHODS);
     setBasicSummaryFieldMethods({});
-    setTemplateSummaryMethods({});
     setBasicSummarySourceView(DEFAULT_BASIC_SUMMARY_SOURCE_VIEW);
     setFieldStatisticResult(null);
     setFieldTextConcatResult(null);
@@ -3061,7 +2890,6 @@ const WorkAggregationTab: React.FC<Props> = ({
   ]);
 
   React.useEffect(() => {
-    setTemplateSummaryMethods({});
     setBasicSummaryFieldMethods({});
   }, [selectedDynamicFormBlockId, effectiveDynamicExcelId, seedDynamicFormTemplateId]);
 
@@ -3151,45 +2979,10 @@ const WorkAggregationTab: React.FC<Props> = ({
       ),
     [basicSummaryDefaultMethods, basicSummaryFieldMethods, dynamicFormQuery.data],
   );
-  const templateDataTypeMethodRows = React.useMemo(
-    () =>
-      buildTemplateDataTypeMethodRows(
-        resolvedSupportedDynamicFormExcelBlock,
-        templateRect,
-        templateSpec,
-        templateSummaryMethods,
-        basicSummaryDefaultMethods,
-      ),
-    [
-      basicSummaryDefaultMethods,
-      resolvedSupportedDynamicFormExcelBlock,
-      templateRect,
-      templateSpec,
-      templateSummaryMethods,
-    ],
-  );
   const basicSummaryRules = React.useMemo(
-    () => [
-      ...buildBasicSummaryFieldRules(basicSummaryFieldMethodRows),
-      ...buildBasicSummaryRulesFromTemplateMethods(
-        resolvedSupportedDynamicFormExcelBlock,
-        templateDataTypeMethodRows,
-      ),
-    ],
-    [
-      basicSummaryFieldMethodRows,
-      resolvedSupportedDynamicFormExcelBlock,
-      templateDataTypeMethodRows,
-    ],
+    () => buildBasicSummaryFieldRules(basicSummaryFieldMethodRows),
+    [basicSummaryFieldMethodRows],
   );
-  const handleTemplateSummaryMethodChange = React.useCallback((rowId: string, method: SummaryMethod) => {
-    setTemplateSummaryMethods((prev) => ({
-      ...prev,
-      [rowId]: method,
-    }));
-    setBasicSummaryResult(null);
-    setDynamicFormResult(null);
-  }, []);
   const handleBasicSummaryFieldMethodChange = React.useCallback((fieldId: string, method: SummaryMethod) => {
     setBasicSummaryFieldMethods((prev) => ({
       ...prev,
@@ -3238,19 +3031,10 @@ const WorkAggregationTab: React.FC<Props> = ({
       nextDefaultMethods,
     );
     setBasicSummaryFieldMethods(buildFieldSummaryMethodsFromRules(fieldRowsForConfig, config.rules));
-    setTemplateSummaryMethods(
-      buildTemplateSummaryMethodsFromRules(
-        resolvedSupportedDynamicFormExcelBlock,
-        templateDataTypeMethodRows,
-        config.rules,
-      ),
-    );
     setBasicSummaryResult(null);
   }, [
     basicSummaryConfigQuery.data,
     dynamicFormQuery.data,
-    resolvedSupportedDynamicFormExcelBlock,
-    templateDataTypeMethodRows,
   ]);
   const selectedAggregateMetricOptions = React.useMemo(() => {
     if (!resolvedSupportedDynamicFormExcelBlock) return [];
@@ -4057,7 +3841,6 @@ const WorkAggregationTab: React.FC<Props> = ({
               configSaving={saveBasicSummaryConfigState.isLoading}
               defaultMethods={basicSummaryDefaultMethods}
               fieldMethodRows={basicSummaryFieldMethodRows}
-              rangeMethodRows={templateDataTypeMethodRows}
               sourceView={basicSummarySourceView}
               periodScopeLabel={basicSummaryPeriodScopeLabel}
               periodScopeMode={filter.periodScopeMode}
@@ -4068,7 +3851,6 @@ const WorkAggregationTab: React.FC<Props> = ({
               unitOptions={aggregateUnitOptions}
               onDefaultMethodsChange={handleBasicSummaryDefaultMethodsChange}
               onFieldMethodChange={handleBasicSummaryFieldMethodChange}
-              onRangeMethodChange={handleTemplateSummaryMethodChange}
               onPeriodScopeModeChange={handleBasicSummaryPeriodScopeModeChange}
               onPeriodDateChange={handleBasicSummaryPeriodDateChange}
               onPeriodDateFromChange={handleBasicSummaryPeriodDateFromChange}

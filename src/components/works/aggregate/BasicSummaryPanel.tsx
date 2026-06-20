@@ -84,16 +84,6 @@ export type BasicSummaryFieldMethodRow = {
   methodOptions: BasicSummaryMethodOption[];
 };
 
-export type BasicSummaryRangeMethodRow = {
-  id: string;
-  rectLabel: string;
-  dataTypeLabel: string;
-  cellCount: number;
-  defaultMethod: BasicSummaryMethod;
-  selectedMethod: BasicSummaryMethod;
-  methodOptions: BasicSummaryMethodOption[];
-};
-
 export type BasicSummarySourceViewState = {
   q: string;
   periodKey: string;
@@ -114,7 +104,6 @@ type Props = {
   configSaving?: boolean;
   defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto;
   fieldMethodRows: BasicSummaryFieldMethodRow[];
-  rangeMethodRows: BasicSummaryRangeMethodRow[];
   sourceView: BasicSummarySourceViewState;
   periodScopeLabel?: string | null;
   periodScopeMode: PeriodScopeMode;
@@ -125,7 +114,6 @@ type Props = {
   unitOptions: AggregateUnitOption[];
   onDefaultMethodsChange: (methods: WorkAssignmentBasicSummaryDefaultMethodsDto) => void;
   onFieldMethodChange: (fieldId: string, method: BasicSummaryMethod) => void;
-  onRangeMethodChange: (rowId: string, method: BasicSummaryMethod) => void;
   onPeriodScopeModeChange: (value: PeriodScopeMode) => void;
   onPeriodDateChange: (value: string) => void;
   onPeriodDateFromChange: (value: string) => void;
@@ -201,7 +189,6 @@ const BasicSummaryPanel: React.FC<Props> = ({
   configSaving = false,
   defaultMethods,
   fieldMethodRows,
-  rangeMethodRows,
   sourceView,
   periodScopeLabel,
   periodScopeMode,
@@ -212,7 +199,6 @@ const BasicSummaryPanel: React.FC<Props> = ({
   unitOptions,
   onDefaultMethodsChange,
   onFieldMethodChange,
-  onRangeMethodChange,
   onPeriodScopeModeChange,
   onPeriodDateChange,
   onPeriodDateFromChange,
@@ -239,10 +225,8 @@ const BasicSummaryPanel: React.FC<Props> = ({
           saving={configSaving}
           defaultMethods={defaultMethods}
           fieldRows={fieldMethodRows}
-          rangeRows={rangeMethodRows}
           onDefaultMethodsChange={onDefaultMethodsChange}
           onFieldMethodChange={onFieldMethodChange}
-          onRangeMethodChange={onRangeMethodChange}
           onSaveConfig={onSaveConfig}
           onHide={() => setConfigVisible(false)}
         />
@@ -417,10 +401,8 @@ function ConfigurationPanel({
   saving,
   defaultMethods,
   fieldRows,
-  rangeRows,
   onDefaultMethodsChange,
   onFieldMethodChange,
-  onRangeMethodChange,
   onSaveConfig,
   onHide,
 }: {
@@ -428,10 +410,8 @@ function ConfigurationPanel({
   saving: boolean;
   defaultMethods: WorkAssignmentBasicSummaryDefaultMethodsDto;
   fieldRows: BasicSummaryFieldMethodRow[];
-  rangeRows: BasicSummaryRangeMethodRow[];
   onDefaultMethodsChange: (methods: WorkAssignmentBasicSummaryDefaultMethodsDto) => void;
   onFieldMethodChange: (fieldId: string, method: BasicSummaryMethod) => void;
-  onRangeMethodChange: (rowId: string, method: BasicSummaryMethod) => void;
   onSaveConfig: () => void;
   onHide: () => void;
 }) {
@@ -495,16 +475,14 @@ function ConfigurationPanel({
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
               <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                Tùy chọn theo trường và vùng bảng
+                Tùy chọn theo trường
               </Typography>
               <Chip size="small" variant="outlined" label={`${fieldRows.length} trường`} />
-              <Chip size="small" variant="outlined" label={`${rangeRows.length} vùng bảng`} />
             </Stack>
           </AccordionSummary>
           <AccordionDetails>
             <Stack spacing={1.5}>
               <FieldMethodTable rows={fieldRows} loading={loading} onMethodChange={onFieldMethodChange} />
-              <RangeMethodTable rows={rangeRows} loading={loading} onMethodChange={onRangeMethodChange} />
             </Stack>
           </AccordionDetails>
         </Accordion>
@@ -601,75 +579,6 @@ function FieldMethodTable({
     <Stack spacing={0.75}>
       <Typography variant="body2" sx={{ fontWeight: 800 }}>
         Field dữ liệu
-      </Typography>
-      <AppTable
-        rows={rows}
-        columns={columns}
-        rowKey={(row) => row.id}
-        enablePagination
-        initialPageSize={5}
-        rowsPerPageOptions={[5, 10, 25]}
-      />
-    </Stack>
-  );
-}
-
-function RangeMethodTable({
-  rows,
-  loading,
-  onMethodChange,
-}: {
-  rows: BasicSummaryRangeMethodRow[];
-  loading: boolean;
-  onMethodChange: (rowId: string, method: BasicSummaryMethod) => void;
-}) {
-  const columns = React.useMemo<AppTableColumn<BasicSummaryRangeMethodRow>[]>(
-    () => [
-      { field: "rectLabel", header: "Range", sortable: true, render: (row) => <strong>{row.rectLabel}</strong> },
-      { field: "dataTypeLabel", header: "Kiểu", sortable: true },
-      { field: "cellCount", header: "Ô input", align: "right", sortable: true },
-      {
-        field: "selectedMethod",
-        header: "Method",
-        width: 220,
-        render: (row) => (
-          <TextField
-            select
-            size="small"
-            fullWidth
-            value={row.selectedMethod}
-            onChange={(event) => onMethodChange(row.id, event.target.value as BasicSummaryMethod)}
-            disabled={loading}
-          >
-            {row.methodOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>
-        ),
-      },
-      {
-        field: "defaultMethod",
-        header: "Mặc định",
-        render: (row) => BASIC_SUMMARY_METHOD_LABELS[row.defaultMethod],
-      },
-    ],
-    [loading, onMethodChange],
-  );
-
-  if (!rows.length) {
-    return (
-      <Alert severity="info">
-        Biểu mẫu hiện chưa có vùng ma trận đọc được để cấu hình riêng theo vùng.
-      </Alert>
-    );
-  }
-
-  return (
-    <Stack spacing={0.75}>
-      <Typography variant="body2" sx={{ fontWeight: 800 }}>
-        Vùng bảng trên sheet
       </Typography>
       <AppTable
         rows={rows}
