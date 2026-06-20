@@ -22,8 +22,11 @@ import type {
   AggregateTableResponse,
   DynamicFormAggregateRequest,
   DynamicFormAggregateResponse,
+  LockWorkAssignmentAdvancedSummaryConfigRequest,
   SaveWorkAssignmentAggregateConfigRequest,
+  SaveWorkAssignmentAdvancedSummaryDraftRequest,
   SaveWorkAssignmentBasicSummaryConfigRequest,
+  WorkAssignmentAdvancedSummaryConfigDto,
   WorkAssignmentBasicSummaryRequest,
   WorkAssignmentBasicSummaryConfigDto,
   WorkAssignmentBasicSummaryResponse,
@@ -390,6 +393,56 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
+    listWorkAssignmentAdvancedSummaryConfigs: build.query<
+      WorkAssignmentAdvancedSummaryConfigDto[],
+      { assignmentId: string; dynamicFormTemplateId: string; sectionId: string }
+    >({
+      query: ({ assignmentId, dynamicFormTemplateId, sectionId }) => ({
+        url: `work-assignment-advanced-summary/assignments/${assignmentId}/templates/${dynamicFormTemplateId}/sections/${encodeURIComponent(sectionId)}/configs`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, arg) => [
+        {
+          type: "AdvancedSummaryConfig" as const,
+          id: `${arg.assignmentId}:${arg.dynamicFormTemplateId}:${arg.sectionId}`,
+        },
+      ],
+    }),
+
+    saveWorkAssignmentAdvancedSummaryDraft: build.mutation<
+      WorkAssignmentAdvancedSummaryConfigDto,
+      {
+        assignmentId: string;
+        dynamicFormTemplateId: string;
+        sectionId: string;
+        data: SaveWorkAssignmentAdvancedSummaryDraftRequest;
+      }
+    >({
+      query: ({ assignmentId, dynamicFormTemplateId, sectionId, data }) => ({
+        url: `work-assignment-advanced-summary/assignments/${assignmentId}/templates/${dynamicFormTemplateId}/sections/${encodeURIComponent(sectionId)}/draft`,
+        method: "PUT",
+        data,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        {
+          type: "AdvancedSummaryConfig" as const,
+          id: `${arg.assignmentId}:${arg.dynamicFormTemplateId}:${arg.sectionId}`,
+        },
+      ],
+    }),
+
+    lockWorkAssignmentAdvancedSummaryConfig: build.mutation<
+      WorkAssignmentAdvancedSummaryConfigDto,
+      { configId: string; data?: LockWorkAssignmentAdvancedSummaryConfigRequest }
+    >({
+      query: ({ configId, data }) => ({
+        url: `work-assignment-advanced-summary/configs/${configId}/lock`,
+        method: "POST",
+        data: data ?? {},
+      }),
+      invalidatesTags: [{ type: "AdvancedSummaryConfig" as const }],
+    }),
+
     evaluateAssignment: build.mutation<
       void,
       { assignmentId: string; data: EvaluateAssignmentRequest }
@@ -462,6 +515,9 @@ export const {
   useGetWorkAssignmentAggregateConfigQuery,
   useGetWorkAssignmentBasicSummaryConfigQuery,
   useGetWorkAssignmentBasicSummaryMutation,
+  useListWorkAssignmentAdvancedSummaryConfigsQuery,
+  useLockWorkAssignmentAdvancedSummaryConfigMutation,
+  useSaveWorkAssignmentAdvancedSummaryDraftMutation,
   useSaveWorkAssignmentBasicSummaryConfigMutation,
   useSaveWorkAssignmentAggregateConfigMutation,
 

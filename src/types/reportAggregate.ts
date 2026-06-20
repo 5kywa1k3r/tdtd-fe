@@ -279,6 +279,44 @@ export interface SaveWorkAssignmentBasicSummaryConfigRequest {
   rules?: WorkAssignmentBasicSummaryRuleDto[] | null;
 }
 
+export interface WorkAssignmentAdvancedSummaryConfigDto {
+  id: string;
+  workId: string;
+  assignmentId: string;
+  dynamicFormTemplateId: string;
+  sectionId: string;
+  sectionTitle?: string | null;
+  status: "DRAFT" | "LOCKED" | "ARCHIVED" | string;
+  versionNo: number;
+  draftRevision: number;
+  configJson: string;
+  configHash: string;
+  previewStatus: "NOT_REQUESTED" | "QUEUED" | "RUNNING" | "DONE" | "FAILED" | string;
+  previewJobId?: string | null;
+  previewCorrelationId?: string | null;
+  previewPeriodKeys: string[];
+  previewResultJson?: string | null;
+  previewError?: string | null;
+  previewRequestedAtUtc?: string | null;
+  previewFinishedAtUtc?: string | null;
+  lockedAtUtc?: string | null;
+  lockedByUserId?: string | null;
+  lockTokenId?: string | null;
+  requiresPreviewToLock: boolean;
+  requiresTokenToLock: boolean;
+  canLock: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface SaveWorkAssignmentAdvancedSummaryDraftRequest {
+  configJson: string;
+}
+
+export interface LockWorkAssignmentAdvancedSummaryConfigRequest {
+  tokenId?: string | null;
+}
+
 export interface WorkAssignmentBasicSummaryMetaDto {
   summaryType?: "BASIC" | string;
   contractVersion?: string | null;
