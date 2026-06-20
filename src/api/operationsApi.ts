@@ -317,11 +317,25 @@ export type AdvancedSummaryDayDiagnosticsRequest = {
   includeValueJson?: boolean;
 };
 
+export type AdvancedSummaryMonthDiagnosticsRequest = {
+  configId: string;
+  monthKey: string;
+  includeValueJson?: boolean;
+};
+
+export type AdvancedSummaryYearDiagnosticsRequest = {
+  configId: string;
+  yearKey: string;
+  includeValueJson?: boolean;
+};
+
 export type AdvancedSummaryDayDiagnosticSnapshot = {
   nodeId?: string | null;
   status: string;
   isDirty: boolean;
   sourceReportCount: number;
+  sourceReportIds?: string[];
+  inputNodeKeys?: string[];
   sourceSignatureHash?: string | null;
   valueHash?: string | null;
   comparableValueHash?: string | null;
@@ -339,6 +353,32 @@ export type AdvancedSummaryDayDiagnosticsResponse = {
   configId: string;
   configHash: string;
   dayKey: string;
+  status: string;
+  matches: boolean;
+  diagnosticActorUserId: string;
+  checkedAtUtc: string;
+  differences: string[];
+  cache?: AdvancedSummaryDayDiagnosticSnapshot | null;
+  direct: AdvancedSummaryDayDiagnosticSnapshot;
+};
+
+export type AdvancedSummaryMonthDiagnosticsResponse = {
+  configId: string;
+  configHash: string;
+  monthKey: string;
+  status: string;
+  matches: boolean;
+  diagnosticActorUserId: string;
+  checkedAtUtc: string;
+  differences: string[];
+  cache?: AdvancedSummaryDayDiagnosticSnapshot | null;
+  direct: AdvancedSummaryDayDiagnosticSnapshot;
+};
+
+export type AdvancedSummaryYearDiagnosticsResponse = {
+  configId: string;
+  configHash: string;
+  yearKey: string;
   status: string;
   matches: boolean;
   diagnosticActorUserId: string;
@@ -677,6 +717,28 @@ export const operationsApi = baseApi.injectEndpoints({
       }),
     }),
 
+    diagnoseAdvancedSummaryMonthNode: build.mutation<
+      AdvancedSummaryMonthDiagnosticsResponse,
+      AdvancedSummaryMonthDiagnosticsRequest
+    >({
+      query: (req) => ({
+        url: "admin/operations/job-runs/advanced-summary-nodes/diagnostics/month",
+        method: "POST",
+        data: cleanParams(req),
+      }),
+    }),
+
+    diagnoseAdvancedSummaryYearNode: build.mutation<
+      AdvancedSummaryYearDiagnosticsResponse,
+      AdvancedSummaryYearDiagnosticsRequest
+    >({
+      query: (req) => ({
+        url: "admin/operations/job-runs/advanced-summary-nodes/diagnostics/year",
+        method: "POST",
+        data: cleanParams(req),
+      }),
+    }),
+
     getWorkSummaryTokenQuota: build.query<WorkSummaryTokenQuotaResponse, WorkSummaryTokenQuotaQuery>({
       query: (req) => ({
         url: "work-summary-tokens/quota",
@@ -763,6 +825,8 @@ export const {
   useResetAdvancedSummaryNodeMutation,
   useCleanupAdvancedSummaryNodesMutation,
   useDiagnoseAdvancedSummaryDayNodeMutation,
+  useDiagnoseAdvancedSummaryMonthNodeMutation,
+  useDiagnoseAdvancedSummaryYearNodeMutation,
   useGetWorkSummaryTokenQuotaQuery,
   useSearchWorkSummaryTokenLedgerQuery,
   useGrantWorkSummaryTokenQuotaMutation,

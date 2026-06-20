@@ -33,6 +33,8 @@ import {
   useRepairReportPayloadDiagnosticsMutation,
   useCleanupAdvancedSummaryNodesMutation,
   useDiagnoseAdvancedSummaryDayNodeMutation,
+  useDiagnoseAdvancedSummaryMonthNodeMutation,
+  useDiagnoseAdvancedSummaryYearNodeMutation,
   useGetWorkSummaryTokenQuotaQuery,
   useGrantWorkSummaryTokenQuotaMutation,
   useResetAdvancedSummaryNodeMutation,
@@ -48,8 +50,10 @@ import {
 } from "../../api/operationsApi";
 import type {
   AdvancedSummaryDayDiagnosticsResponse,
+  AdvancedSummaryMonthDiagnosticsResponse,
   AdvancedSummaryNodeCleanupRequest,
   AdvancedSummaryNodeRow,
+  AdvancedSummaryYearDiagnosticsResponse,
   BasicSummaryJobRow,
   JobRunSearchReq,
   MaterializeJobRow,
@@ -139,6 +143,23 @@ type SummaryTokenGrantDraft = {
   periodMonthKey: string;
   units: number;
   reason: string;
+};
+
+type AdvancedSummaryDiagnosticsResult = {
+  grain: string;
+  key: string;
+  status: string;
+  matches: boolean;
+  diagnosticActorUserId: string;
+  differences: string[];
+  cache?: {
+    sourceReportCount: number;
+    inputNodeKeys?: string[];
+  } | null;
+  direct: {
+    sourceReportCount: number;
+    inputNodeKeys?: string[];
+  };
 };
 
 type PagedTableProps<T> = {
@@ -600,6 +621,32 @@ const toSummaryTokenGrantRequest = (
   periodMonthKey: draft.periodMonthKey.trim() || currentMonthKey(),
   units: Math.max(1, Math.min(1000, draft.units || 1)),
   reason: draft.reason.trim() || undefined,
+});
+
+const toAdvancedSummaryDiagnosticsResult = (
+  grain: string,
+  key: string,
+  result:
+    | AdvancedSummaryDayDiagnosticsResponse
+    | AdvancedSummaryMonthDiagnosticsResponse
+    | AdvancedSummaryYearDiagnosticsResponse,
+): AdvancedSummaryDiagnosticsResult => ({
+  grain,
+  key,
+  status: result.status,
+  matches: result.matches,
+  diagnosticActorUserId: result.diagnosticActorUserId,
+  differences: result.differences,
+  cache: result.cache
+    ? {
+        sourceReportCount: result.cache.sourceReportCount,
+        inputNodeKeys: result.cache.inputNodeKeys,
+      }
+    : null,
+  direct: {
+    sourceReportCount: result.direct.sourceReportCount,
+    inputNodeKeys: result.direct.inputNodeKeys,
+  },
 });
 
 function PagedTable<T>({
@@ -1451,7 +1498,13 @@ function JobRunsPanel() {
   const [resetAdvancedSummaryNode, resetAdvancedSummaryNodeState] = useResetAdvancedSummaryNodeMutation();
   const [cleanupAdvancedSummaryNodes, cleanupAdvancedSummaryState] = useCleanupAdvancedSummaryNodesMutation();
   const [diagnoseAdvancedSummaryDayNode, diagnoseAdvancedSummaryDayState] = useDiagnoseAdvancedSummaryDayNodeMutation();
-  const [advancedDiagnostics, setAdvancedDiagnostics] = useState<AdvancedSummaryDayDiagnosticsResponse | null>(null);
+  const [diagnoseAdvancedSummaryMonthNode, diagnoseAdvancedSummaryMonthState] = useDiagnoseAdvancedSummaryMonthNodeMutation();
+  const [diagnoseAdvancedSummaryYearNode, diagnoseAdvancedSummaryYearState] = useDiagnoseAdvancedSummaryYearNodeMutation();
+  const [advancedDiagnostics, setAdvancedDiagnostics] = useState<AdvancedSummaryDiagnosticsResult | null>(null);
+  const advancedDiagnosticsLoading =
+    diagnoseAdvancedSummaryDayState.isLoading ||
+    diagnoseAdvancedSummaryMonthState.isLoading ||
+    diagnoseAdvancedSummaryYearState.isLoading;
 
   const statusOptions = useMemo(() => {
     if (jobTab === "operationLogs") return operationResultOptions;
@@ -1529,23 +1582,38 @@ function JobRunsPanel() {
     }
   };
 
-  const diagnoseAdvancedDayNode = async (row: AdvancedSummaryNodeRow) => {
+  const diagnoseAdvancedNode = async (row: AdvancedSummaryNodeRow) => {
     setNotice(null);
     setAdvancedDiagnostics(null);
     try {
-      const result = await diagnoseAdvancedSummaryDayNode({
-        configId: row.configId,
-        dayKey: row.grainKey,
-        includeValueJson: false,
-      }).unwrap();
-      setAdvancedDiagnostics(result);
+      const grain = row.grain.toUpperCase();
+      const result =
+        grain === "MONTH"
+          ? await diagnoseAdvancedSummaryMonthNode({
+              configId: row.configId,
+              monthKey: row.grainKey,
+              includeValueJson: false,
+            }).unwrap()
+          : grain === "YEAR"
+            ? await diagnoseAdvancedSummaryYearNode({
+                configId: row.configId,
+                yearKey: row.grainKey,
+                includeValueJson: false,
+              }).unwrap()
+            : await diagnoseAdvancedSummaryDayNode({
+                configId: row.configId,
+                dayKey: row.grainKey,
+                includeValueJson: false,
+              }).unwrap();
+      const diagnostics = toAdvancedSummaryDiagnosticsResult(grain, row.grainKey, result);
+      setAdvancedDiagnostics(diagnostics);
       setNotice(
-        result.matches
-          ? `Diagnostics ${row.grainKey}: cache matches direct source.`
-          : `Diagnostics ${row.grainKey}: ${result.status} (${result.differences.join(", ") || "difference detected"}).`,
+        diagnostics.matches
+          ? `Diagnostics ${grain}:${row.grainKey}: cache matches direct source.`
+          : `Diagnostics ${grain}:${row.grainKey}: ${diagnostics.status} (${diagnostics.differences.join(", ") || "difference detected"}).`,
       );
     } catch {
-      setNotice("Khong chay duoc diagnostics advanced summary day node.");
+      setNotice("Khong chay duoc diagnostics advanced summary node. Kiem tra child nodes neu grain la MONTH/YEAR.");
     }
   };
 
@@ -1787,8 +1855,8 @@ function JobRunsPanel() {
                 size="small"
                 variant="outlined"
                 startIcon={<FactCheckIcon />}
-                disabled={row.grain !== "DAY" || diagnoseAdvancedSummaryDayState.isLoading}
-                onClick={() => diagnoseAdvancedDayNode(row)}
+                disabled={advancedDiagnosticsLoading}
+                onClick={() => diagnoseAdvancedNode(row)}
               >
                 Check
               </Button>
@@ -1797,7 +1865,7 @@ function JobRunsPanel() {
         },
       },
     ],
-    [diagnoseAdvancedSummaryDayState.isLoading, resetAdvancedSummaryNodeState.isLoading],
+    [advancedDiagnosticsLoading, resetAdvancedSummaryNodeState.isLoading],
   );
 
   const applyFilters = () => {
@@ -2079,13 +2147,21 @@ function JobRunsPanel() {
           >
             <Stack spacing={1}>
               <Typography variant="body2" fontWeight={600}>
-                Diagnostics {advancedDiagnostics.dayKey}: {advancedDiagnostics.status}
+                Diagnostics {advancedDiagnostics.grain}:{advancedDiagnostics.key}: {advancedDiagnostics.status}
               </Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 <Chip size="small" label={`Direct reports: ${advancedDiagnostics.direct.sourceReportCount}`} />
                 <Chip
                   size="small"
                   label={`Cache reports: ${advancedDiagnostics.cache?.sourceReportCount ?? "-"}`}
+                />
+                <Chip
+                  size="small"
+                  label={`Direct inputs: ${advancedDiagnostics.direct.inputNodeKeys?.length ?? 0}`}
+                />
+                <Chip
+                  size="small"
+                  label={`Cache inputs: ${advancedDiagnostics.cache?.inputNodeKeys?.length ?? 0}`}
                 />
                 <Chip size="small" label={`Actor: ${compactId(advancedDiagnostics.diagnosticActorUserId)}`} />
                 {(advancedDiagnostics.differences.length > 0 ? advancedDiagnostics.differences : ["MATCH"]).map(
