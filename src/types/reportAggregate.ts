@@ -305,6 +305,13 @@ export interface WorkAssignmentAdvancedSummaryConfigDto {
   requiresPreviewToLock: boolean;
   requiresTokenToLock: boolean;
   canLock: boolean;
+  canPreview: boolean;
+  fieldGateStatus: string;
+  fieldGateReason?: string | null;
+  isCumulative: boolean;
+  sectionFieldCount: number;
+  targetFieldCount: number;
+  fieldLimit: number;
   createdAtUtc: string;
   updatedAtUtc: string;
 }
