@@ -147,6 +147,37 @@ export type WorkReportDataOrigin =
 
 export type WorkReportCumulativeContributionMode = "INCLUDE" | "EXCLUDE";
 
+export interface DynamicFlowFieldPermission {
+  targetKey: string;
+  fieldId?: string | null;
+  fieldKey?: string | null;
+  read?: boolean | null;
+  write?: boolean | null;
+  required?: boolean | null;
+  hidden?: boolean | null;
+  locked?: boolean | null;
+  lockedAfterSubmit?: boolean | null;
+  sourcePolicyId?: string | null;
+}
+
+export interface DynamicFlowTableColumnPermission {
+  targetKey: string;
+  blockId: string;
+  columnKey: string;
+  read?: boolean | null;
+  write?: boolean | null;
+  required?: boolean | null;
+  hidden?: boolean | null;
+  locked?: boolean | null;
+  lockedAfterSubmit?: boolean | null;
+  sourcePolicyId?: string | null;
+}
+
+export interface DynamicFlowPolicyEvaluationResult {
+  fields?: Record<string, DynamicFlowFieldPermission> | null;
+  tableColumns?: Record<string, DynamicFlowTableColumnPermission> | null;
+}
+
 export interface WorkAssignmentReportResponse {
   id: string;
   workId: string;
@@ -201,6 +232,7 @@ export interface WorkAssignmentReportResponse {
   values1DJson?: string | null;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
+  dynamicFlowPermissions?: DynamicFlowPolicyEvaluationResult | null;
   dataOrigin?: WorkReportDataOrigin | string | null;
   cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
   cumulativeContributionPolicyJson?: string | null;

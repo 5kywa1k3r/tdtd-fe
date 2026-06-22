@@ -109,6 +109,9 @@ import {
   WorkAssignmentReportStatus,
 } from "../../../types/reportStatus";
 import type {
+  DynamicFlowFieldPermission,
+  DynamicFlowPolicyEvaluationResult,
+  DynamicFlowTableColumnPermission,
   WorkAssignmentReportLogRow,
   WorkAssignmentReportResponse,
   WorkAssignmentReportSectionSummaryRow,
@@ -141,6 +144,7 @@ import type {
   DynamicFormTableMode,
 } from "../../../features/dynamicForms/dynamicForm.types";
 import DynamicFormRuntimeFields, {
+  type DynamicFormRuntimeFieldState,
   type DynamicFormRuntimeValue,
   type DynamicFormRuntimeValues,
 } from "../../../features/dynamicForms/runtime/DynamicFormRuntimeFields";
@@ -1532,6 +1536,135 @@ function hasEnteredRuntimeValue(value: DynamicFormRuntimeValue | undefined) {
   if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.some((item) => String(item).trim().length > 0);
   return false;
+}
+
+function applyDynamicFlowFieldPermissions(
+  fields: DynamicFormField[],
+  permissions?: DynamicFlowPolicyEvaluationResult | null,
+) {
+  return fields
+    .filter((field) => {
+      const permission = findDynamicFlowFieldPermission(permissions, field);
+      return !permission || !isDynamicFlowFieldHidden(permission);
+    })
+    .map((field) => {
+      const permission = findDynamicFlowFieldPermission(permissions, field);
+      if (!permission?.required || field.required) return field;
+      return { ...field, required: true };
+    });
+}
+
+function getDynamicFlowFieldState(
+  permissions: DynamicFlowPolicyEvaluationResult | null | undefined,
+  field: DynamicFormField,
+): DynamicFormRuntimeFieldState | null {
+  const permission = findDynamicFlowFieldPermission(permissions, field);
+  if (!permission) return null;
+  return {
+    readOnly: isDynamicFlowWriteDenied(permission),
+  };
+}
+
+function findDynamicFlowFieldPermission(
+  permissions: DynamicFlowPolicyEvaluationResult | null | undefined,
+  field: DynamicFormField,
+) {
+  const fields = permissions?.fields;
+  if (!fields) return null;
+
+  const keys = [field.id, field.key, field.name]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  for (const key of keys) {
+    const exact = fields[key];
+    if (exact) return exact;
+  }
+
+  const lowered = new Set(keys.map((key) => key.toLowerCase()));
+  return Object.values(fields).find((permission) => {
+    const permissionKeys = [permission.targetKey, permission.fieldId, permission.fieldKey]
+      .map((value) => String(value ?? "").trim().toLowerCase())
+      .filter(Boolean);
+    return permissionKeys.some((key) => lowered.has(key));
+  }) ?? null;
+}
+
+function isDynamicFlowFieldHidden(permission: DynamicFlowFieldPermission) {
+  return permission.hidden === true || permission.read === false;
+}
+
+function isDynamicFlowWriteDenied(permission: {
+  read?: boolean | null;
+  write?: boolean | null;
+  hidden?: boolean | null;
+  locked?: boolean | null;
+}) {
+  return permission.hidden === true ||
+    permission.read === false ||
+    permission.locked === true ||
+    permission.write === false;
+}
+
+function buildDynamicFlowLockedCellKeys(
+  permissions: DynamicFlowPolicyEvaluationResult | null | undefined,
+  block: ReportExcelBlockRuntime | null | undefined,
+) {
+  const deniedColumns = getDynamicFlowDeniedColumnKeys(permissions, block?.blockId);
+  if (!block || deniedColumns.size === 0) return [];
+
+  const keys = new Set<string>();
+  const inputCellRefs = buildInputCellRefs(block.dataRect, block.spec);
+  const addRef = (ref?: DynamicExcelInputCellRef | null) => {
+    if (!ref) return;
+    keys.add(`${ref.r}:${ref.c}`);
+  };
+
+  inputCellRefs.forEach((ref) => {
+    if (deniedColumns.has(normalizeDynamicFlowPermissionKey(ref.columnKey))) {
+      addRef(ref);
+    }
+  });
+
+  if (block.excelBlock) {
+    const tableMode = normalizeTableMode(block.excelBlock.tableMode);
+    const dataRect = getExcelBlockDataRect(block.excelBlock) ?? block.dataRect;
+    const indexMap = getExcelBlockIndexMap(block.excelBlock, block.blockId, tableMode);
+    buildTableMetricDefinitions(
+      block.blockId,
+      tableMode,
+      block.excelBlock,
+      dataRect,
+      indexMap,
+      inputCellRefs,
+    ).forEach((metric) => {
+      if (!deniedColumns.has(normalizeDynamicFlowPermissionKey(metric.columnKey))) return;
+      addRef(inputCellRefs.find((ref) => ref.index === metric.index) ?? findMetricInputRef(metric, tableMode, inputCellRefs));
+    });
+  }
+
+  return Array.from(keys);
+}
+
+function getDynamicFlowDeniedColumnKeys(
+  permissions: DynamicFlowPolicyEvaluationResult | null | undefined,
+  blockId?: string | null,
+) {
+  const targetBlockId = normalizeDynamicFlowPermissionKey(blockId);
+  const result = new Set<string>();
+  if (!targetBlockId) return result;
+
+  Object.values(permissions?.tableColumns ?? {}).forEach((permission: DynamicFlowTableColumnPermission) => {
+    if (normalizeDynamicFlowPermissionKey(permission.blockId) !== targetBlockId) return;
+    if (!isDynamicFlowWriteDenied(permission)) return;
+    const key = normalizeDynamicFlowPermissionKey(permission.columnKey);
+    if (key) result.add(key);
+  });
+
+  return result;
+}
+
+function normalizeDynamicFlowPermissionKey(value?: string | null) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function hasEnteredReportBlockValues(
@@ -3389,6 +3522,15 @@ export default function WorkReportEditorPage(
     () => (dynamicFormDetail ? buildEditorValue(dynamicFormDetail) : null),
     [dynamicFormDetail],
   );
+  const dynamicFlowPermissions = detail?.dynamicFlowPermissions ?? null;
+  const dynamicFormRuntimeFields = React.useMemo(
+    () => applyDynamicFlowFieldPermissions(dynamicFormRuntime?.fields ?? [], dynamicFlowPermissions),
+    [dynamicFlowPermissions, dynamicFormRuntime?.fields],
+  );
+  const getDynamicFormRuntimeFieldState = React.useCallback(
+    (field: DynamicFormField) => getDynamicFlowFieldState(dynamicFlowPermissions, field),
+    [dynamicFlowPermissions],
+  );
   const latestWorkbookPayloadRef = React.useRef<WorkbookValueMap>({});
   const latestWorkbookHashRef = React.useRef<WorkbookHashMap>({});
   const latestWorkbookIssuesRef = React.useRef<WorkbookValidationIssueMap>({});
@@ -3500,6 +3642,10 @@ export default function WorkReportEditorPage(
   );
   const selectedReportBlockDirty = Boolean(
     selectedReportBlock && dirtyReportBlockIds[selectedReportBlock.blockId],
+  );
+  const selectedBlockLockedCellKeys = React.useMemo(
+    () => buildDynamicFlowLockedCellKeys(dynamicFlowPermissions, selectedReportBlock),
+    [dynamicFlowPermissions, selectedReportBlock],
   );
 
   const canEdit = detail ? !props.forceReadOnly && isEditableReportStatus(detail.status) : false;
@@ -3905,7 +4051,7 @@ export default function WorkReportEditorPage(
       if (!detail) return null;
 
       const summary = reportSectionSummaryById.get(section.id);
-      const sectionFields = (dynamicFormRuntime?.fields ?? [])
+      const sectionFields = dynamicFormRuntimeFields
         .filter((field) => field.sectionId === section.id);
       const blocks = reportBlocksBySectionId[section.id] ?? [];
       const hasFieldInput = sectionFields.some((field) => hasEnteredRuntimeValue(fieldValues[field.id]));
@@ -3933,7 +4079,7 @@ export default function WorkReportEditorPage(
     [
       detail,
       dirtyReportBlockIds,
-      dynamicFormRuntime?.fields,
+      dynamicFormRuntimeFields,
       fieldValues,
       reportSectionSummaryById,
       reportBlocksBySectionId,
@@ -4134,7 +4280,7 @@ export default function WorkReportEditorPage(
     }
 
     if (!payloadBlockId && !reportDataLocked && dynamicFormRuntime) {
-      const invalidField = getInvalidDynamicField(dynamicFormRuntime.fields, fieldValues);
+      const invalidField = getInvalidDynamicField(dynamicFormRuntimeFields, fieldValues);
       if (invalidField) {
         showMessage(getDynamicFieldValidationMessage(invalidField), "warning");
         return false;
@@ -4409,7 +4555,7 @@ export default function WorkReportEditorPage(
     }
 
     const invalidDynamicField = !reportDataLocked && dynamicFormRuntime
-      ? getInvalidDynamicField(dynamicFormRuntime.fields, fieldValues)
+      ? getInvalidDynamicField(dynamicFormRuntimeFields, fieldValues)
       : null;
     if (invalidDynamicField) {
       showMessage(getDynamicFieldValidationMessage(invalidDynamicField), "warning");
@@ -4417,7 +4563,7 @@ export default function WorkReportEditorPage(
     }
 
     const missingRequiredFields = !reportDataLocked && dynamicFormRuntime
-      ? getMissingRequiredFields(dynamicFormRuntime.fields, fieldValues)
+      ? getMissingRequiredFields(dynamicFormRuntimeFields, fieldValues)
       : [];
     if (missingRequiredFields.length > 0) {
       showMessage(
@@ -4607,7 +4753,8 @@ export default function WorkReportEditorPage(
         {reportRuntimeSections.length > 0 && (
           <DynamicFormRuntimeFields
             sections={reportRuntimeSections}
-            fields={dynamicFormRuntime?.fields ?? []}
+            fields={dynamicFormRuntimeFields}
+            getFieldState={getDynamicFormRuntimeFieldState}
             values={fieldValues}
             readOnly={!canEditReportData}
             disabled={busy}
@@ -4840,6 +4987,7 @@ export default function WorkReportEditorPage(
                     }
                     dataRect={selectedReportBlock.dataRect ?? detail.dataRect}
                     excludedDataColumns={excludedDataColumns}
+                    lockedCellKeys={selectedBlockLockedCellKeys}
                     mode={canEditReportData ? "edit" : "view"}
                     readOnly={!canEditReportData}
                     saving={busy || isFetchingSelectedDynamicExcel}

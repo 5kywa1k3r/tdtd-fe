@@ -51,6 +51,10 @@ export type DynamicFormRuntimeValue =
 
 export type DynamicFormRuntimeValues = Record<string, DynamicFormRuntimeValue>;
 
+export type DynamicFormRuntimeFieldState = {
+  readOnly?: boolean;
+};
+
 export type DynamicFormRuntimeFieldsProps = {
   sections: DynamicFormSection[];
   fields: DynamicFormField[];
@@ -58,6 +62,7 @@ export type DynamicFormRuntimeFieldsProps = {
   readOnly?: boolean;
   disabled?: boolean;
   onChange: (fieldId: string, value: DynamicFormRuntimeValue) => void;
+  getFieldState?: (field: DynamicFormField) => DynamicFormRuntimeFieldState | null | undefined;
   title?: ReactNode;
   layout?: "card" | "workspace";
   renderSectionExtra?: (section: DynamicFormSection) => ReactNode;
@@ -652,6 +657,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
     readOnly = false,
     disabled = false,
     onChange,
+    getFieldState,
     title = "Trường bổ sung",
     layout = "card",
     renderSectionExtra,
@@ -784,7 +790,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                 }}
               >
                 <Stack spacing={0.5}>
-                  {renderField(field, values[field.id], locked, (value) =>
+                  {renderField(field, values[field.id], locked || Boolean(getFieldState?.(field)?.readOnly), (value) =>
                     onChange(field.id, value),
                   )}
                   {field.isStatistic && field.type !== "boolean" && (
@@ -1025,7 +1031,7 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                           }}
                         >
                           <Stack spacing={0.5}>
-                            {renderField(field, values[field.id], locked, (value) =>
+                            {renderField(field, values[field.id], locked || Boolean(getFieldState?.(field)?.readOnly), (value) =>
                               onChange(field.id, value),
                             )}
                             {field.isStatistic && field.type !== "boolean" && (

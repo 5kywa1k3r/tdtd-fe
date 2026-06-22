@@ -108,6 +108,7 @@ export interface WorkbookDataGridProps {
   backLabel?: string;
   surfaceVariant?: "card" | "flat";
   excludedDataColumns?: number[];
+  lockedCellKeys?: string[];
 
   onBack?: () => void;
   onChangeRaw?: (workbookData: Sheet[], payload?: WorkbookDataGridSavePayload) => void;
@@ -157,6 +158,7 @@ function WorkbookDataGrid(
     surfaceVariant = "card",
 
     excludedDataColumns = [],
+    lockedCellKeys = [],
 
     onBack,
     onChangeRaw,
@@ -180,6 +182,10 @@ function WorkbookDataGrid(
   const fortuneWorkbookRef = React.useRef<any>(null);
   const baselineWorkbookRef = React.useRef<Sheet[]>([]);
   const previewBackupRef = React.useRef<Map<string, Backup>>(EMPTY_PREVIEW_BACKUP);
+  const lockedCellKeySet = React.useMemo(
+    () => buildCellKeySet(lockedCellKeys),
+    [lockedCellKeys],
+  );
   const [workbookData, setWorkbookData] = React.useState<Sheet[]>(() => {
     const raw = normalizeWorkbookForGridMode(initialWorkbookData, dataRect, initialSpec, shouldUseRuntimeWorkbook);
     workbookRef.current = raw;
@@ -190,7 +196,7 @@ function WorkbookDataGrid(
       initialSpec,
       effectivePreviewOverlayEnabled,
       previewHighlights,
-      { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook },
+      { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook, lockedCellKeySet },
     );
     previewBackupRef.current = rendered.previewBackup;
     return rendered.workbookData;
@@ -212,12 +218,12 @@ function WorkbookDataGrid(
         initialSpec,
         effectivePreviewOverlayEnabled,
         previewHighlights,
-        { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook },
+        { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook, lockedCellKeySet },
       );
       previewBackupRef.current = rendered.previewBackup;
       return rendered.workbookData;
     },
-    [dataRect, effectivePreviewOverlayEnabled, initialSpec, previewHighlights, shouldUseRuntimeWorkbook],
+    [dataRect, effectivePreviewOverlayEnabled, initialSpec, lockedCellKeySet, previewHighlights, shouldUseRuntimeWorkbook],
   );
 
   const getLiveWorkbookData = React.useCallback(() => {
@@ -245,10 +251,11 @@ function WorkbookDataGrid(
       initialSpec,
       previewBackupRef.current,
       previewHighlights,
+      lockedCellKeySet,
     );
     workbookRef.current = sanitized;
     return buildWorkbookSavePayload(sanitized, dataRect, excludedDataColumns, initialSpec);
-  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, previewHighlights]);
+  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, lockedCellKeySet, previewHighlights]);
 
   const commitChanges = React.useCallback(() => {
     const payload = buildCurrentSavePayload();
@@ -268,18 +275,18 @@ function WorkbookDataGrid(
       initialSpec,
       effectivePreviewOverlayEnabled,
       previewHighlights,
-      { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook },
+      { assumeNormalized: true, useRuntimeWorkbook: shouldUseRuntimeWorkbook, lockedCellKeySet },
     );
     previewBackupRef.current = rendered.previewBackup;
     setWorkbookData(rendered.workbookData);
     setWorkbookKey((x) => x + 1);
     setError(null);
-  }, [dataRect, initialSpec, initialWorkbookData, shouldUseRuntimeWorkbook]);
+  }, [dataRect, initialSpec, initialWorkbookData, lockedCellKeySet, shouldUseRuntimeWorkbook]);
 
   React.useEffect(() => {
     setWorkbookData(renderWorkbookForState(workbookRef.current));
     setWorkbookKey((x) => x + 1);
-  }, [effectivePreviewOverlayEnabled, previewHighlights]);
+  }, [effectivePreviewOverlayEnabled, lockedCellKeySet, previewHighlights, renderWorkbookForState]);
 
   React.useEffect(() => {
     if (!fullscreenOpen && !embeddedFullscreen) return undefined;
@@ -343,6 +350,7 @@ function WorkbookDataGrid(
             initialSpec,
             previewBackupRef.current,
             previewHighlights,
+            lockedCellKeySet,
           );
           workbookRef.current = nextWorkbookData;
           setWorkbookData(renderWorkbookForState(nextWorkbookData));
@@ -363,6 +371,7 @@ function WorkbookDataGrid(
     excludedDataColumns,
     initialSpec,
     isView,
+    lockedCellKeySet,
     onChangeRaw,
     onDirty,
     previewHighlights,
@@ -371,15 +380,18 @@ function WorkbookDataGrid(
   ]);
 
   const enumCells = React.useMemo(
-    () => (isView ? [] : buildEnumCellOptions(workbookData, dataRect, excludedDataColumns, initialSpec)),
-    [workbookData, dataRect, excludedDataColumns, initialSpec, isView],
+    () => isView
+      ? []
+      : buildEnumCellOptions(workbookData, dataRect, excludedDataColumns, initialSpec)
+          .filter((cell) => !lockedCellKeySet.has(workbookCellKey(cell.r, cell.c))),
+    [workbookData, dataRect, excludedDataColumns, initialSpec, isView, lockedCellKeySet],
   );
   const valueSourceOptions = useWorkbookValueSourceOptions(enumCells);
   const enumEditorDisabled = isView || (inlineReadOnly && !fullscreenOpen && !embeddedFullscreen);
 
   const handleEnumCellChange = React.useCallback(
     (cell: EnumCellOption, nextValue: unknown) => {
-      if (enumEditorDisabled) return;
+      if (enumEditorDisabled || lockedCellKeySet.has(workbookCellKey(cell.r, cell.c))) return;
 
       setError(null);
       setWorkbookData((prev) => {
@@ -403,6 +415,7 @@ function WorkbookDataGrid(
           initialSpec,
           previewBackupRef.current,
           previewHighlights,
+          lockedCellKeySet,
         );
         workbookRef.current = next;
         const payload = buildWorkbookSavePayload(next, dataRect, excludedDataColumns, initialSpec);
@@ -421,6 +434,7 @@ function WorkbookDataGrid(
       enumEditorDisabled,
       excludedDataColumns,
       initialSpec,
+      lockedCellKeySet,
       onChangeRaw,
       onDirty,
       previewHighlights,
@@ -464,12 +478,13 @@ function WorkbookDataGrid(
       initialSpec,
       previewBackupRef.current,
       previewHighlights,
+      lockedCellKeySet,
     );
     workbookRef.current = latest;
     setWorkbookData(renderWorkbookForState(latest));
     setFullscreenOpen(true);
     setWorkbookKey((x) => x + 1);
-  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, previewHighlights, renderWorkbookForState]);
+  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, lockedCellKeySet, previewHighlights, renderWorkbookForState]);
 
   const handleCloseFullscreen = React.useCallback(() => {
     if (isView) {
@@ -485,12 +500,13 @@ function WorkbookDataGrid(
       initialSpec,
       previewBackupRef.current,
       previewHighlights,
+      lockedCellKeySet,
     );
     workbookRef.current = latest;
     setWorkbookData(renderWorkbookForState(latest));
     setFullscreenOpen(false);
     setWorkbookKey((x) => x + 1);
-  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, previewHighlights, renderWorkbookForState]);
+  }, [dataRect, excludedDataColumns, getLiveWorkbookData, initialSpec, isView, lockedCellKeySet, previewHighlights, renderWorkbookForState]);
 
   const renderWorkbookSurface = React.useCallback((fullscreen = false) => {
     return (
@@ -1468,13 +1484,14 @@ function sanitizeRuntimeWorkbookData(
   spec: HeaderSpec | null | undefined,
   previewBackup: Map<string, Backup>,
   previewHighlights: WorkbookPreviewHighlight[],
+  lockedCellKeySet?: ReadonlySet<string>,
 ) {
   const normalized = normalizeRuntimeWorkbookForGrid(editedWorkbookData, dataRect, spec);
   const sheet = normalized[0] as any;
   if (!sheet) return normalized;
 
   stripMarksForSave(sheet, previewBackup, buildPreviewMarkedBackgrounds(previewHighlights));
-  return restoreNonInputCells(normalized, baselineWorkbookData, dataRect, excludedDataColumns, spec);
+  return restoreNonInputCells(normalized, baselineWorkbookData, dataRect, excludedDataColumns, spec, lockedCellKeySet);
 }
 
 function restoreNonInputCells(
@@ -1483,6 +1500,7 @@ function restoreNonInputCells(
   dataRect: ReportRect,
   excludedDataColumns: number[],
   spec: HeaderSpec | null | undefined,
+  lockedCellKeySet?: ReadonlySet<string>,
 ) {
   const edited = normalizeRuntimeWorkbookForGrid(editedWorkbookData, dataRect, spec);
   const baseline = normalizeRuntimeWorkbookForGrid(baselineWorkbookData, dataRect, spec);
@@ -1505,6 +1523,7 @@ function restoreNonInputCells(
         c >= dataRect.c0 &&
         c <= dataRect.c1 &&
         !excluded.has(c) &&
+        !lockedCellKeySet?.has(workbookCellKey(r, c)) &&
         (!isInputCell || isInputCell(r, c));
 
       if (isEditableCell) continue;
@@ -1575,6 +1594,43 @@ function setWorkbookCell(sheet: any, r: number, c: number, cell: unknown) {
   if (!Array.isArray(sheet.data[r])) sheet.data[r] = [];
   sheet.data[r][c] = cell ?? null;
   sheet.celldata = upsertCelldataCell(sheet.celldata, r, c, cell ?? null);
+}
+
+function workbookCellKey(r: number, c: number) {
+  return `${r}:${c}`;
+}
+
+function buildCellKeySet(values: string[]) {
+  return new Set(
+    values
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean),
+  );
+}
+
+function applyLockedCellKeys(
+  workbookData: Sheet[],
+  lockedCellKeySet?: ReadonlySet<string>,
+) {
+  if (!lockedCellKeySet?.size) return workbookData;
+
+  const cloned = cloneDeepJson(workbookData) as Sheet[];
+  const sheet = cloned[0] as any;
+  if (!sheet) return cloned;
+
+  for (const key of lockedCellKeySet) {
+    const [rawR, rawC] = key.split(":");
+    const r = Number(rawR);
+    const c = Number(rawC);
+    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) continue;
+    const current = getWorkbookCell(sheet, r, c);
+    const next = current && typeof current === "object"
+      ? { ...current, locked: true }
+      : { v: current ?? "", locked: true };
+    setWorkbookCell(sheet, r, c, next);
+  }
+
+  return cloned;
 }
 
 function buildExcludedColumnSet(excludedDataColumns: number[]) {
@@ -1677,6 +1733,7 @@ function buildGridWorkbook(
   options?: {
     assumeNormalized?: boolean;
     useRuntimeWorkbook?: boolean;
+    lockedCellKeySet?: ReadonlySet<string>;
   },
 ) {
   const normalized =
@@ -1688,10 +1745,11 @@ function buildGridWorkbook(
           isHeaderSpec(spec) ? spec : null,
           options?.useRuntimeWorkbook ?? true,
         );
+  const displayWorkbookData = applyLockedCellKeys(normalized, options?.lockedCellKeySet);
   if (!markPreview) {
-    return { workbookData: normalized, previewBackup: new Map<string, Backup>() };
+    return { workbookData: displayWorkbookData, previewBackup: new Map<string, Backup>() };
   }
-  return markPreviewRegions(normalized, spec, dataRect, previewHighlights);
+  return markPreviewRegions(displayWorkbookData, spec, dataRect, previewHighlights);
 }
 
 function markPreviewRegions(
