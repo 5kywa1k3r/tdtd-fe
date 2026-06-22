@@ -4,6 +4,8 @@ export type AssignmentType = "ONCE" | "PERIODIC_REPORT";
 export type AggregationType = "MATRIX" | "UNIT_ROW_COL";
 export type ReportCycleType = "DAILY" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMI_ANNUAL";
 export type ComputationType = "SUM" | "MEAN" | "MAX" | "MIN";
+export type WorkAssignmentFlowEffectiveStatus = "EFFECTIVE" | "INVALIDATED" | "TERMINATED";
+export type WorkAssignmentFlowRole = "ISSUER" | "ASSIGNEE" | "COORDINATOR" | "REVIEWER" | "FINALIZER";
 export type DynamicFormDataSourceRuleType =
   | "MANUAL"
   | "AGGREGATE_CHILDREN"
@@ -93,7 +95,26 @@ export type WorkAssignmentStatusFields = {
   worstOverdueReasonLabel?: string | null;
 };
 
-export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
+export type WorkAssignmentFlowMetadataFields = {
+  flowTemplateId?: string | null;
+  flowTemplateVersionNo?: number | null;
+  flowInstanceId?: string | null;
+  flowStepId?: string | null;
+  flowStepCode?: string | null;
+  flowStepOrder?: number | null;
+  flowBranchId?: string | null;
+  parentFlowBranchId?: string | null;
+  flowAttemptNo?: number | null;
+  flowRole?: WorkAssignmentFlowRole | string | null;
+  flowEffectiveStatus?: WorkAssignmentFlowEffectiveStatus | string | null;
+  issuedByUnitId?: string | null;
+  targetUnitIds?: string[] | null;
+  allowSubFlow?: boolean | null;
+  isFlowFinalNode?: boolean | null;
+  invalidatedByFlowEventId?: string | null;
+};
+
+export type WorkAssignmentListResponse = WorkAssignmentStatusFields & WorkAssignmentFlowMetadataFields & {
   id: string;
   workId: string;
   name?: string | null;
@@ -137,7 +158,7 @@ export type WorkAssignmentListResponse = WorkAssignmentStatusFields & {
   evaluationTemplateLabel?: string | null;
 };
 
-export type WorkAssignmentResponse = WorkAssignmentStatusFields & {
+export type WorkAssignmentResponse = WorkAssignmentStatusFields & WorkAssignmentFlowMetadataFields & {
   id: string;
   workId: string;
   name?: string | null;
