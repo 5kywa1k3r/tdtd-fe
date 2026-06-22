@@ -107,6 +107,9 @@ export type JobRunSearchReq = {
   workAssignmentId?: string;
   workReportPeriodId?: string;
   dynamicFormTemplateId?: string;
+  flowInstanceId?: string;
+  flowEffectiveStatus?: string;
+  periodInstanceKey?: string;
   sectionId?: string;
   configId?: string;
   configHash?: string;
@@ -187,6 +190,12 @@ export type StatisticRebuildJobRow = {
   dynamicFormTemplateId: string;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  scopeKind: string;
+  workId?: string | null;
+  workAssignmentId?: string | null;
+  flowInstanceId?: string | null;
+  flowEffectiveStatus?: string | null;
+  periodInstanceKey?: string | null;
   status: string;
   requestedByUserId: string;
   priority: string;
@@ -205,6 +214,59 @@ export type StatisticRebuildJobRow = {
   isActive: boolean;
   createdAtUtc: string;
   updatedAtUtc: string;
+};
+
+export type StatisticRebuildJobResetResponse = {
+  ok: boolean;
+  jobId: string;
+  queuedAtUtc: string;
+  job?: StatisticRebuildJobRow | null;
+};
+
+export type FlowStatisticProjectionDiagnosticsRequest = {
+  workId?: string;
+  flowInstanceId?: string;
+  dynamicFormTemplateId?: string;
+  flowEffectiveStatus?: string;
+  periodInstanceKey?: string;
+  limit?: number;
+};
+
+export type FlowStatisticProjectionDiagnosticRow = {
+  workAssignmentReportId: string;
+  workAssignmentId: string;
+  periodKey: string;
+  periodInstanceKey: string;
+  reportStatus: number;
+  payloadRevision: number;
+  payloadHash?: string | null;
+  fieldProjectionRows: number;
+  tableProjectionRows: number;
+  fieldProjectionFresh: boolean;
+  tableProjectionFresh: boolean;
+  flowMetadataMatches: boolean;
+  issueTypes: string[];
+};
+
+export type FlowStatisticProjectionDiagnosticsResponse = {
+  checkedAtUtc: string;
+  workId: string;
+  flowInstanceId: string;
+  dynamicFormTemplateId?: string | null;
+  flowEffectiveStatus?: string | null;
+  periodInstanceKey?: string | null;
+  limit: number;
+  assignmentCount: number;
+  matchingReportCount: number;
+  scannedReportCount: number;
+  fieldProjectionRowCount: number;
+  tableProjectionRowCount: number;
+  noProjectionReportCount: number;
+  staleProjectionReportCount: number;
+  flowMetadataMismatchReportCount: number;
+  truncated: boolean;
+  rows: FlowStatisticProjectionDiagnosticRow[];
+  issueCountsByType: Record<string, number>;
 };
 
 export type BasicSummaryJobRow = {
@@ -654,6 +716,28 @@ export const operationsApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: "JobRun" as const, id: "STATISTIC_REBUILD" }],
     }),
 
+    resetStatisticRebuildJob: build.mutation<StatisticRebuildJobResetResponse, string>({
+      query: (jobId) => ({
+        url: `admin/operations/job-runs/statistic-rebuild-jobs/${jobId}/reset`,
+        method: "POST",
+      }),
+      invalidatesTags: [
+        { type: "JobRun" as const, id: "STATISTIC_REBUILD" },
+        { type: "JobRun" as const, id: "OPERATION_LOGS" },
+      ],
+    }),
+
+    diagnoseFlowStatisticProjections: build.query<
+      FlowStatisticProjectionDiagnosticsResponse,
+      FlowStatisticProjectionDiagnosticsRequest
+    >({
+      query: (req) => ({
+        url: "admin/operations/job-runs/flow-statistics/diagnostics",
+        method: "GET",
+        params: cleanParams(req),
+      }),
+    }),
+
     searchBasicSummaryJobs: build.query<PagedResult<BasicSummaryJobRow>, JobRunSearchReq>({
       query: (req) => ({
         url: "admin/operations/job-runs/basic-summary-jobs",
@@ -819,6 +903,8 @@ export const {
   useProcessActionLogRetryJobsMutation,
   useSearchStatisticRebuildJobsQuery,
   useProcessStatisticRebuildJobsMutation,
+  useResetStatisticRebuildJobMutation,
+  useLazyDiagnoseFlowStatisticProjectionsQuery,
   useSearchBasicSummaryJobsQuery,
   useResetBasicSummaryJobMutation,
   useSearchAdvancedSummaryNodesQuery,

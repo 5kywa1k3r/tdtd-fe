@@ -28,6 +28,8 @@ import {
   useProcessActionLogRetryJobsMutation,
   useProcessProjectionRetryJobsMutation,
   useProcessStatisticRebuildJobsMutation,
+  useLazyDiagnoseFlowStatisticProjectionsQuery,
+  useResetStatisticRebuildJobMutation,
   useResetBasicSummaryJobMutation,
   useCheckReportPayloadDiagnosticsQuery,
   useRepairReportPayloadDiagnosticsMutation,
@@ -55,6 +57,8 @@ import type {
   AdvancedSummaryNodeRow,
   AdvancedSummaryYearDiagnosticsResponse,
   BasicSummaryJobRow,
+  FlowStatisticProjectionDiagnosticRow,
+  FlowStatisticProjectionDiagnosticsResponse,
   JobRunSearchReq,
   MaterializeJobRow,
   ReportPayloadDiagnosticIssue,
@@ -104,6 +108,9 @@ type JobRunFilters = {
   workId: string;
   workAssignmentId: string;
   dynamicFormTemplateId: string;
+  flowInstanceId: string;
+  flowEffectiveStatus: string;
+  periodInstanceKey: string;
   sectionId: string;
   configId: string;
   configHash: string;
@@ -111,6 +118,7 @@ type JobRunFilters = {
   userId: string;
   includeInactive: boolean;
   cleanupLimit: number;
+  diagnosticsLimit: number;
   pageSize: number;
 };
 
@@ -191,6 +199,9 @@ const jobRunDefaultFilters: JobRunFilters = {
   workId: "",
   workAssignmentId: "",
   dynamicFormTemplateId: "",
+  flowInstanceId: "",
+  flowEffectiveStatus: "",
+  periodInstanceKey: "",
   sectionId: "",
   configId: "",
   configHash: "",
@@ -198,6 +209,7 @@ const jobRunDefaultFilters: JobRunFilters = {
   userId: "",
   includeInactive: false,
   cleanupLimit: 100,
+  diagnosticsLimit: 100,
   pageSize: 25,
 };
 
@@ -339,6 +351,13 @@ const advancedSummaryGrainOptions = [
   ["DAY", "Day"],
   ["MONTH", "Month"],
   ["YEAR", "Year"],
+] as const;
+
+const flowEffectiveStatusOptions = [
+  ["", "All flow statuses"],
+  ["EFFECTIVE", "Effective"],
+  ["INVALIDATED", "Invalidated"],
+  ["TERMINATED", "Terminated"],
 ] as const;
 
 const summaryTokenKindOptions = [
@@ -1494,6 +1513,8 @@ function JobRunsPanel() {
   const [processProjection, projectionProcessState] = useProcessProjectionRetryJobsMutation();
   const [processActionLog, actionLogProcessState] = useProcessActionLogRetryJobsMutation();
   const [processStatisticRebuild, statisticRebuildProcessState] = useProcessStatisticRebuildJobsMutation();
+  const [resetStatisticRebuild, resetStatisticRebuildState] = useResetStatisticRebuildJobMutation();
+  const [diagnoseFlowStatistics, flowDiagnosticsQuery] = useLazyDiagnoseFlowStatisticProjectionsQuery();
   const [resetBasicSummary, resetBasicSummaryState] = useResetBasicSummaryJobMutation();
   const [resetAdvancedSummaryNode, resetAdvancedSummaryNodeState] = useResetAdvancedSummaryNodeMutation();
   const [cleanupAdvancedSummaryNodes, cleanupAdvancedSummaryState] = useCleanupAdvancedSummaryNodesMutation();
@@ -1501,6 +1522,7 @@ function JobRunsPanel() {
   const [diagnoseAdvancedSummaryMonthNode, diagnoseAdvancedSummaryMonthState] = useDiagnoseAdvancedSummaryMonthNodeMutation();
   const [diagnoseAdvancedSummaryYearNode, diagnoseAdvancedSummaryYearState] = useDiagnoseAdvancedSummaryYearNodeMutation();
   const [advancedDiagnostics, setAdvancedDiagnostics] = useState<AdvancedSummaryDiagnosticsResult | null>(null);
+  const [flowDiagnostics, setFlowDiagnostics] = useState<FlowStatisticProjectionDiagnosticsResponse | null>(null);
   const advancedDiagnosticsLoading =
     diagnoseAdvancedSummaryDayState.isLoading ||
     diagnoseAdvancedSummaryMonthState.isLoading ||
@@ -1525,6 +1547,9 @@ function JobRunsPanel() {
       workId: applied.workId.trim() || undefined,
       workAssignmentId: applied.workAssignmentId.trim() || undefined,
       dynamicFormTemplateId: applied.dynamicFormTemplateId.trim() || undefined,
+      flowInstanceId: applied.flowInstanceId.trim() || undefined,
+      flowEffectiveStatus: applied.flowEffectiveStatus || undefined,
+      periodInstanceKey: applied.periodInstanceKey.trim() || undefined,
       sectionId: applied.sectionId.trim() || undefined,
       configId: applied.configId.trim() || undefined,
       configHash: applied.configHash.trim() || undefined,
@@ -1557,6 +1582,48 @@ function JobRunsPanel() {
   const advancedSummaryQuery = useSearchAdvancedSummaryNodesQuery(queryArgs, {
     skip: jobTab !== "advancedSummary",
   });
+
+  const resetStatisticRebuildJob = async (row: StatisticRebuildJobRow) => {
+    setNotice(null);
+    try {
+      const result = await resetStatisticRebuild(row.id).unwrap();
+      setNotice(`Statistic rebuild job reset: ${compactId(result.jobId)} queued.`);
+    } catch {
+      setNotice("Cannot reset statistic rebuild job.");
+    }
+  };
+
+  const runFlowStatisticDiagnostics = async () => {
+    const workId = draft.workId.trim();
+    const flowInstanceId = draft.flowInstanceId.trim();
+    if (!workId || !flowInstanceId) {
+      setNotice("Flow diagnostics requires Work ID and Flow Instance ID.");
+      return;
+    }
+
+    setNotice(null);
+    setFlowDiagnostics(null);
+    setAdvancedDiagnostics(null);
+    setApplied(draft);
+    setPage(0);
+    try {
+      const result = await diagnoseFlowStatistics({
+        workId,
+        flowInstanceId,
+        dynamicFormTemplateId: draft.dynamicFormTemplateId.trim() || undefined,
+        flowEffectiveStatus: draft.flowEffectiveStatus || undefined,
+        periodInstanceKey: draft.periodInstanceKey.trim() || undefined,
+        limit: Math.max(1, Math.min(500, draft.diagnosticsLimit || 100)),
+      }).unwrap();
+      setFlowDiagnostics(result);
+      const issueCount = Object.values(result.issueCountsByType ?? {}).reduce((sum, count) => sum + count, 0);
+      setNotice(
+        `Flow statistic diagnostics scanned ${result.scannedReportCount}/${result.matchingReportCount} reports, issues: ${issueCount}.`,
+      );
+    } catch {
+      setNotice("Cannot run flow statistic diagnostics.");
+    }
+  };
 
   const resetBasicSummaryJob = async (snapshotId: string) => {
     setNotice(null);
@@ -1713,6 +1780,53 @@ function JobRunsPanel() {
         render: (row) => renderLimitedText(row.dynamicFormTemplateCode || row.dynamicFormTemplateName || compactId(row.dynamicFormTemplateId), 260),
       },
       {
+        field: "scopeKind",
+        header: "Scope",
+        width: 190,
+        render: (row) => (
+          <Stack spacing={0.25}>
+            <Chip size="small" label={row.scopeKind || "-"} />
+            <Typography variant="caption" color="text.secondary">
+              {compactId(row.workId)} / {compactId(row.workAssignmentId)}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "flowInstanceId",
+        header: "Flow",
+        width: 190,
+        render: (row) => (
+          <Stack spacing={0.25}>
+            <Typography variant="body2">{compactId(row.flowInstanceId)}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {row.flowEffectiveStatus || "-"}
+            </Typography>
+          </Stack>
+        ),
+      },
+      { field: "periodInstanceKey", header: "Period", width: 130, render: (row) => row.periodInstanceKey || "-" },
+      {
+        field: "actions",
+        header: "",
+        width: 120,
+        align: "center",
+        render: (row) => {
+          const busy = ["PENDING", "RUNNING"].includes((row.status ?? "").toUpperCase());
+          return (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ReplayIcon />}
+              disabled={busy || resetStatisticRebuildState.isLoading}
+              onClick={() => resetStatisticRebuildJob(row)}
+            >
+              Reset
+            </Button>
+          );
+        },
+      },
+      {
         field: "processedReportCount",
         header: "Tiến độ",
         width: 140,
@@ -1724,6 +1838,55 @@ function JobRunsPanel() {
       { field: "completedAtUtc", header: "Hoàn tất", width: 170, render: (row) => formatDateTime(row.completedAtUtc) },
       { field: "nextRetryAtUtc", header: "Lần chạy lại tiếp theo", width: 190, render: (row) => formatDateTime(row.nextRetryAtUtc) },
       { field: "lastError", header: "Lỗi gần nhất", render: (row) => renderLimitedText(row.lastError, 420) },
+    ],
+    [resetStatisticRebuildState.isLoading],
+  );
+
+  const flowDiagnosticColumns = useMemo<AppTableColumn<FlowStatisticProjectionDiagnosticRow>[]>(
+    () => [
+      { field: "periodInstanceKey", header: "Period", width: 130, render: (row) => row.periodInstanceKey || row.periodKey || "-" },
+      { field: "workAssignmentReportId", header: "Report", width: 160, render: (row) => compactId(row.workAssignmentReportId) },
+      { field: "workAssignmentId", header: "Assignment", width: 160, render: (row) => compactId(row.workAssignmentId) },
+      { field: "reportStatus", header: "Status", width: 90, align: "right" },
+      {
+        field: "fieldProjectionRows",
+        header: "Projection",
+        width: 120,
+        render: (row) => `${row.fieldProjectionRows}/${row.tableProjectionRows}`,
+      },
+      {
+        field: "fieldProjectionFresh",
+        header: "Fresh",
+        width: 130,
+        render: (row) => (
+          <Stack direction="row" spacing={0.5}>
+            <Chip size="small" color={row.fieldProjectionFresh ? "success" : "warning"} label="Field" />
+            <Chip size="small" color={row.tableProjectionFresh ? "success" : "warning"} label="Table" />
+          </Stack>
+        ),
+      },
+      {
+        field: "flowMetadataMatches",
+        header: "Flow meta",
+        width: 110,
+        render: (row) => (
+          <Chip size="small" color={row.flowMetadataMatches ? "success" : "warning"} label={row.flowMetadataMatches ? "OK" : "Mismatch"} />
+        ),
+      },
+      {
+        field: "issueTypes",
+        header: "Issues",
+        render: (row) =>
+          row.issueTypes.length === 0 ? (
+            <Chip size="small" color="success" label="OK" />
+          ) : (
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+              {row.issueTypes.map((issue) => (
+                <Chip key={issue} size="small" color="warning" label={issue} />
+              ))}
+            </Stack>
+          ),
+      },
     ],
     [],
   );
@@ -1884,6 +2047,7 @@ function JobRunsPanel() {
     setPage(0);
     setNotice(null);
     setAdvancedDiagnostics(null);
+    setFlowDiagnostics(null);
     setDraft((current) => ({ ...current, status: "" }));
     setApplied((current) => ({ ...current, status: "" }));
   };
@@ -1984,6 +2148,62 @@ function JobRunsPanel() {
             onChange={(event) => setDraft((current) => ({ ...current, workAssignmentId: event.target.value }))}
             sx={operationsFilterFieldSx}
           />
+          {jobTab === "statisticRebuild" && (
+            <>
+              <TextField
+                size="small"
+                label="Template ID"
+                value={draft.dynamicFormTemplateId}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, dynamicFormTemplateId: event.target.value }))
+                }
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                label="Flow Instance"
+                value={draft.flowInstanceId}
+                onChange={(event) => setDraft((current) => ({ ...current, flowInstanceId: event.target.value }))}
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                select
+                size="small"
+                label="Flow status"
+                value={draft.flowEffectiveStatus}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, flowEffectiveStatus: event.target.value }))
+                }
+                sx={operationsFilterFieldSx}
+              >
+                {flowEffectiveStatusOptions.map(([value, label]) => (
+                  <MenuItem key={value} value={value}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                size="small"
+                label="Period key"
+                value={draft.periodInstanceKey}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, periodInstanceKey: event.target.value }))
+                }
+                sx={operationsFilterFieldSx}
+              />
+              <TextField
+                size="small"
+                type="number"
+                label="Diagnostics limit"
+                value={draft.diagnosticsLimit}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, diagnosticsLimit: Number(event.target.value) || 100 }))
+                }
+                sx={{ ...operationsFilterFieldSx, flexGrow: 0.55 }}
+                inputProps={{ min: 1, max: 500 }}
+              />
+            </>
+          )}
           {jobTab === "advancedSummary" ? (
             <>
               <TextField
@@ -2109,6 +2329,17 @@ function JobRunsPanel() {
                 Chạy 3
               </Button>
             )}
+            {jobTab === "statisticRebuild" && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FactCheckIcon />}
+                disabled={flowDiagnosticsQuery.isFetching || !draft.workId.trim() || !draft.flowInstanceId.trim()}
+                onClick={runFlowStatisticDiagnostics}
+              >
+                Check flow
+              </Button>
+            )}
             {jobTab === "advancedSummary" && (
               <>
                 <Button
@@ -2138,6 +2369,37 @@ function JobRunsPanel() {
         {notice && (
           <Alert severity="info" sx={{ borderRadius: 0 }}>
             {notice}
+          </Alert>
+        )}
+        {jobTab === "statisticRebuild" && flowDiagnostics && (
+          <Alert
+            severity={
+              flowDiagnostics.noProjectionReportCount ||
+              flowDiagnostics.staleProjectionReportCount ||
+              flowDiagnostics.flowMetadataMismatchReportCount
+                ? "warning"
+                : "success"
+            }
+            sx={{ borderRadius: 0 }}
+          >
+            <Stack spacing={1}>
+              <Typography variant="body2" fontWeight={600}>
+                Flow diagnostics {compactId(flowDiagnostics.flowInstanceId)} checked {formatDateTime(flowDiagnostics.checkedAtUtc)}
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Chip size="small" label={`Assignments: ${flowDiagnostics.assignmentCount}`} />
+                <Chip size="small" label={`Reports: ${flowDiagnostics.scannedReportCount}/${flowDiagnostics.matchingReportCount}`} />
+                <Chip size="small" label={`Field rows: ${flowDiagnostics.fieldProjectionRowCount}`} />
+                <Chip size="small" label={`Table rows: ${flowDiagnostics.tableProjectionRowCount}`} />
+                <Chip size="small" color="warning" label={`No projection: ${flowDiagnostics.noProjectionReportCount}`} />
+                <Chip size="small" color="warning" label={`Stale: ${flowDiagnostics.staleProjectionReportCount}`} />
+                <Chip size="small" color="warning" label={`Flow mismatch: ${flowDiagnostics.flowMetadataMismatchReportCount}`} />
+                {Object.entries(flowDiagnostics.issueCountsByType ?? {}).map(([issue, count]) => (
+                  <Chip key={issue} size="small" color="warning" label={`${issue}: ${count}`} />
+                ))}
+                {flowDiagnostics.truncated && <Chip size="small" color="info" label={`Limited to ${flowDiagnostics.limit}`} />}
+              </Stack>
+            </Stack>
           </Alert>
         )}
         {jobTab === "advancedSummary" && advancedDiagnostics && (
@@ -2233,17 +2495,31 @@ function JobRunsPanel() {
         />
       )}
       {jobTab === "statisticRebuild" && (
-        <PagedTable
-          data={statisticRebuildQuery.data}
-          isFetching={statisticRebuildQuery.isFetching}
-          isError={statisticRebuildQuery.isError}
-          columns={statisticRebuildColumns}
-          rowKey={(row) => row.id}
-          page={page}
-          pageSize={applied.pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
+        <Stack spacing={2}>
+          <PagedTable
+            data={statisticRebuildQuery.data}
+            isFetching={statisticRebuildQuery.isFetching}
+            isError={statisticRebuildQuery.isError}
+            columns={statisticRebuildColumns}
+            rowKey={(row) => row.id}
+            page={page}
+            pageSize={applied.pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+          {flowDiagnostics && (
+            <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+              <AppTable
+                rows={flowDiagnostics.rows}
+                columns={flowDiagnosticColumns}
+                rowKey={(row) => row.workAssignmentReportId}
+                enablePagination
+                initialPageSize={25}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+              />
+            </Paper>
+          )}
+        </Stack>
       )}
       {jobTab === "basicSummary" && (
         <PagedTable
