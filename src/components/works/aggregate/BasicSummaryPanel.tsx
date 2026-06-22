@@ -93,6 +93,11 @@ export type BasicSummarySourceViewState = {
   pageSize: number;
 };
 
+export type BasicSummarySourceScopeOption = {
+  value: string;
+  label: string;
+};
+
 type Props = {
   assignmentType?: string | null;
   scopeAssignmentId?: string | null;
@@ -112,6 +117,8 @@ type Props = {
   periodDateTo: string;
   selectedUnitIds: string[];
   unitOptions: AggregateUnitOption[];
+  sourceScopeMode: string;
+  sourceScopeOptions: BasicSummarySourceScopeOption[];
   onDefaultMethodsChange: (methods: WorkAssignmentBasicSummaryDefaultMethodsDto) => void;
   onFieldMethodChange: (fieldId: string, method: BasicSummaryMethod) => void;
   onPeriodScopeModeChange: (value: PeriodScopeMode) => void;
@@ -119,6 +126,7 @@ type Props = {
   onPeriodDateFromChange: (value: string) => void;
   onPeriodDateToChange: (value: string) => void;
   onSelectedUnitIdsChange: (value: string[]) => void;
+  onSourceScopeModeChange: (value: string) => void;
   onSaveConfig: () => void;
   onLoad: (forceRefresh: boolean) => void;
   onSourceViewChange: (view: BasicSummarySourceViewState) => void;
@@ -197,6 +205,8 @@ const BasicSummaryPanel: React.FC<Props> = ({
   periodDateTo,
   selectedUnitIds,
   unitOptions,
+  sourceScopeMode,
+  sourceScopeOptions,
   onDefaultMethodsChange,
   onFieldMethodChange,
   onPeriodScopeModeChange,
@@ -204,6 +214,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
   onPeriodDateFromChange,
   onPeriodDateToChange,
   onSelectedUnitIdsChange,
+  onSourceScopeModeChange,
   onSaveConfig,
   onLoad,
   onSourceViewChange,
@@ -256,7 +267,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "1.4fr 1fr" },
+              gridTemplateColumns: { xs: "1fr", lg: "1.2fr 1fr 1fr" },
               gap: 1.5,
               alignItems: "start",
             }}
@@ -283,6 +294,22 @@ const BasicSummaryPanel: React.FC<Props> = ({
                 InputProps={{ readOnly: true }}
               />
             )}
+
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Nguồn dữ liệu"
+              value={sourceScopeMode}
+              onChange={(event) => onSourceScopeModeChange(event.target.value)}
+              disabled={!canLoad || loading}
+            >
+              {sourceScopeOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
 
             <AggregateUnitSelector
               selectedUnitIds={selectedUnitIds}

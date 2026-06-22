@@ -255,6 +255,11 @@ export interface WorkAssignmentBasicSummaryRequest {
   periodKey?: string | null;
   periodKeyFrom?: string | null;
   periodKeyTo?: string | null;
+  sourceScopeMode?: string | null;
+  sourceFlowInstanceId?: string | null;
+  sourceFlowStepId?: string | null;
+  sourceFlowBranchId?: string | null;
+  sourceFlowEffectiveStatus?: string | null;
   defaultMethods?: WorkAssignmentBasicSummaryDefaultMethodsDto | null;
   rules?: WorkAssignmentBasicSummaryRuleDto[] | null;
   sourceView?: WorkAssignmentBasicSummarySourceViewRequestDto | null;
@@ -286,6 +291,11 @@ export interface WorkAssignmentAdvancedSummaryConfigDto {
   dynamicFormTemplateId: string;
   sectionId: string;
   sectionTitle?: string | null;
+  sourceScopeMode: string;
+  sourceFlowInstanceId?: string | null;
+  sourceFlowStepId?: string | null;
+  sourceFlowBranchId?: string | null;
+  sourceFlowEffectiveStatus?: string | null;
   status: "DRAFT" | "LOCKED" | "ARCHIVED" | string;
   versionNo: number;
   draftRevision: number;
@@ -318,6 +328,11 @@ export interface WorkAssignmentAdvancedSummaryConfigDto {
 
 export interface SaveWorkAssignmentAdvancedSummaryDraftRequest {
   configJson: string;
+  sourceScopeMode?: string | null;
+  sourceFlowInstanceId?: string | null;
+  sourceFlowStepId?: string | null;
+  sourceFlowBranchId?: string | null;
+  sourceFlowEffectiveStatus?: string | null;
 }
 
 export interface LockWorkAssignmentAdvancedSummaryConfigRequest {
@@ -344,6 +359,11 @@ export interface WorkAssignmentBasicSummaryMetaDto {
   periodKey?: string | null;
   periodKeyFrom?: string | null;
   periodKeyTo?: string | null;
+  sourceScopeMode?: string | null;
+  sourceFlowInstanceId?: string | null;
+  sourceFlowStepId?: string | null;
+  sourceFlowBranchId?: string | null;
+  sourceFlowEffectiveStatus?: string | null;
   sourceAssignmentCount: number;
   sourceReportCount: number;
   fromSnapshot: boolean;

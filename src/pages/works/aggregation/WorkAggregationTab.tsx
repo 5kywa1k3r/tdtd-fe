@@ -68,6 +68,7 @@ import type {
   DynamicFormAggregateResponse,
   DynamicFormStackedTableDto,
   WorkAssignmentBasicSummaryDefaultMethodsDto,
+  WorkAssignmentBasicSummaryRequest,
   WorkAssignmentBasicSummaryRuleDto,
   WorkAssignmentBasicSummaryResponse,
 } from "../../../types/reportAggregate";
@@ -79,7 +80,9 @@ import AggregateFilterBar, {
 } from "../../../components/works/aggregate/AggregateFilterBar";
 import AggregateResultTable from "../../../components/works/aggregate/AggregateResultTable";
 import AggregateSourceTable from "../../../components/works/aggregate/AggregateSourceTable";
-import BasicSummaryPanel from "../../../components/works/aggregate/BasicSummaryPanel";
+import BasicSummaryPanel, {
+  type BasicSummarySourceScopeOption,
+} from "../../../components/works/aggregate/BasicSummaryPanel";
 import AggregateWorkbookPreview from "../../../components/works/aggregate/AggregateWorkbookPreview";
 import type { WorkbookPreviewHighlight } from "../../../components/excel/fortune/WorkbookDataGrid";
 import { MARK_COLORS } from "../../../components/excel/fortune/designerMarking";
@@ -322,6 +325,58 @@ const DEFAULT_BASIC_SUMMARY_SOURCE_VIEW = {
   pageSize: 10,
 };
 
+const DEFAULT_BASIC_SUMMARY_SOURCE_SCOPE_MODE = "DIRECT_CHILDREN_OR_SELF";
+
+const BASIC_SUMMARY_BASE_SOURCE_SCOPE_OPTIONS: BasicSummarySourceScopeOption[] = [
+  { value: "DIRECT_CHILDREN_OR_SELF", label: "Cấp con hoặc chính nó" },
+  { value: "DIRECT_CHILDREN", label: "Cấp con trực tiếp" },
+  { value: "SELF", label: "Chính công việc này" },
+];
+
+const BASIC_SUMMARY_FLOW_SOURCE_SCOPE_OPTIONS: BasicSummarySourceScopeOption[] = [
+  { value: "FLOW_BRANCH", label: "Nhánh flow này" },
+  { value: "FLOW_STEP", label: "Bước flow này" },
+  { value: "FLOW_EFFECTIVE_PATH", label: "Dữ liệu flow hiệu lực" },
+  { value: "FLOW_FINAL", label: "Kết quả cuối flow" },
+];
+
+function buildBasicSummarySourceScopeOptions(
+  scope?: AggregationScopeOption | null,
+): BasicSummarySourceScopeOption[] {
+  return scope?.flowInstanceId
+    ? [...BASIC_SUMMARY_BASE_SOURCE_SCOPE_OPTIONS, ...BASIC_SUMMARY_FLOW_SOURCE_SCOPE_OPTIONS]
+    : BASIC_SUMMARY_BASE_SOURCE_SCOPE_OPTIONS;
+}
+
+function isFlowSourceScopeMode(value: string) {
+  return value.startsWith("FLOW_");
+}
+
+function buildBasicSummarySourceScopeRequest(
+  scope: AggregationScopeOption | null | undefined,
+  sourceScopeMode: string,
+): Pick<
+  WorkAssignmentBasicSummaryRequest,
+  | "sourceScopeMode"
+  | "sourceFlowInstanceId"
+  | "sourceFlowStepId"
+  | "sourceFlowBranchId"
+  | "sourceFlowEffectiveStatus"
+> {
+  const mode = sourceScopeMode || DEFAULT_BASIC_SUMMARY_SOURCE_SCOPE_MODE;
+  const hasFlow = Boolean(scope?.flowInstanceId);
+  const flowMode = hasFlow && isFlowSourceScopeMode(mode);
+  const baseMode = BASIC_SUMMARY_BASE_SOURCE_SCOPE_OPTIONS.some((option) => option.value === mode);
+
+  return {
+    sourceScopeMode: flowMode || baseMode ? mode : DEFAULT_BASIC_SUMMARY_SOURCE_SCOPE_MODE,
+    sourceFlowInstanceId: flowMode ? scope?.flowInstanceId ?? null : null,
+    sourceFlowStepId: flowMode && mode === "FLOW_STEP" ? scope?.flowStepId ?? null : null,
+    sourceFlowBranchId: flowMode && mode === "FLOW_BRANCH" ? scope?.flowBranchId ?? null : null,
+    sourceFlowEffectiveStatus: flowMode ? "EFFECTIVE" : null,
+  };
+}
+
 function normalizeSummaryMethod(value: unknown, fallback: SummaryMethod): SummaryMethod {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
   return raw in SUMMARY_METHOD_LABELS ? (raw as SummaryMethod) : fallback;
@@ -455,6 +510,10 @@ type AggregationScopeOption = {
   parentAssignmentId?: string | null;
   rootAssignmentId?: string | null;
   level?: number | null;
+  flowInstanceId?: string | null;
+  flowStepId?: string | null;
+  flowBranchId?: string | null;
+  flowEffectiveStatus?: string | null;
 };
 
 function createDefaultFilter(
@@ -496,6 +555,10 @@ function toAggregationScopeOption(row: WorkAssignmentListResponse): AggregationS
     parentAssignmentId: normalizeOptionalText(row.parentAssignmentId),
     rootAssignmentId: normalizeOptionalText(row.rootAssignmentId),
     level: row.level,
+    flowInstanceId: normalizeOptionalText(row.flowInstanceId),
+    flowStepId: normalizeOptionalText(row.flowStepId),
+    flowBranchId: normalizeOptionalText(row.flowBranchId),
+    flowEffectiveStatus: normalizeOptionalText(row.flowEffectiveStatus),
   };
 }
 
@@ -1253,7 +1316,13 @@ function formatTableModeLabel(tableMode?: DynamicFormTableMode | string | null) 
 }
 
 function formatScopeModeLabel(scopeMode?: string | null) {
+  if (scopeMode === "DIRECT_CHILDREN_OR_SELF") return "Cấp con hoặc chính nó";
   if (scopeMode === "DIRECT_CHILDREN") return "Cấp con trực tiếp";
+  if (scopeMode === "SELF") return "Chính công việc này";
+  if (scopeMode === "FLOW_BRANCH") return "Nhánh flow này";
+  if (scopeMode === "FLOW_STEP") return "Bước flow này";
+  if (scopeMode === "FLOW_EFFECTIVE_PATH") return "Dữ liệu flow hiệu lực";
+  if (scopeMode === "FLOW_FINAL") return "Kết quả cuối flow";
   if (scopeMode === "SUBTREE") return "Cấp con trực tiếp";
   return scopeMode || "-";
 }
@@ -2747,6 +2816,8 @@ const WorkAggregationTab: React.FC<Props> = ({
     React.useState<Record<string, SummaryMethod>>({});
   const [basicSummarySourceView, setBasicSummarySourceView] =
     React.useState(DEFAULT_BASIC_SUMMARY_SOURCE_VIEW);
+  const [basicSummarySourceScopeMode, setBasicSummarySourceScopeMode] =
+    React.useState(DEFAULT_BASIC_SUMMARY_SOURCE_SCOPE_MODE);
   const [stackIdentityPreviewOpen, setStackIdentityPreviewOpen] = React.useState(false);
   const [stackIdentityColumns, setStackIdentityColumns] = React.useState<string[]>([
     "periodKey",
@@ -2767,6 +2838,20 @@ const WorkAggregationTab: React.FC<Props> = ({
   }, []);
 
   const hasDynamicFormSeed = Boolean(seedDynamicFormTemplateId);
+  const basicSummarySourceScopeOptions = React.useMemo(
+    () => buildBasicSummarySourceScopeOptions(selectedScopeOption),
+    [selectedScopeOption],
+  );
+  const basicSummarySourceScopeRequest = React.useMemo(
+    () => buildBasicSummarySourceScopeRequest(selectedScopeOption, basicSummarySourceScopeMode),
+    [basicSummarySourceScopeMode, selectedScopeOption],
+  );
+
+  React.useEffect(() => {
+    if (!basicSummarySourceScopeOptions.some((option) => option.value === basicSummarySourceScopeMode)) {
+      setBasicSummarySourceScopeMode(DEFAULT_BASIC_SUMMARY_SOURCE_SCOPE_MODE);
+    }
+  }, [basicSummarySourceScopeMode, basicSummarySourceScopeOptions]);
 
   const dynamicFormQuery = useGetDynamicFormQuery(
     { id: seedDynamicFormTemplateId ?? "" },
@@ -2878,6 +2963,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     setBasicSummaryDefaultMethods(DEFAULT_BASIC_SUMMARY_METHODS);
     setBasicSummaryFieldMethods({});
     setBasicSummarySourceView(DEFAULT_BASIC_SUMMARY_SOURCE_VIEW);
+    setBasicSummarySourceScopeMode(DEFAULT_BASIC_SUMMARY_SOURCE_SCOPE_MODE);
     setFieldStatisticResult(null);
     setFieldTextConcatResult(null);
     setFieldTextConcatRequest(null);
@@ -3315,6 +3401,7 @@ const WorkAggregationTab: React.FC<Props> = ({
           isPeriodicSummary && filter.periodScopeMode === "PERIOD_RANGE" ? periodKeyFrom : null,
         periodKeyTo:
           isPeriodicSummary && filter.periodScopeMode === "PERIOD_RANGE" ? periodKeyTo : null,
+        ...basicSummarySourceScopeRequest,
         defaultMethods: basicSummaryDefaultMethods,
         rules: basicSummaryRules.length ? basicSummaryRules : null,
         sourceView: {
@@ -3335,6 +3422,7 @@ const WorkAggregationTab: React.FC<Props> = ({
     }
   }, [
     basicSummaryDefaultMethods,
+    basicSummarySourceScopeRequest,
     effectiveParentAssignmentId,
     basicSummarySourceView,
     basicSummaryRules,
@@ -3849,6 +3937,8 @@ const WorkAggregationTab: React.FC<Props> = ({
               periodDateTo={filter.periodDateTo}
               selectedUnitIds={filter.selectedUnitIds}
               unitOptions={aggregateUnitOptions}
+              sourceScopeMode={basicSummarySourceScopeMode}
+              sourceScopeOptions={basicSummarySourceScopeOptions}
               onDefaultMethodsChange={handleBasicSummaryDefaultMethodsChange}
               onFieldMethodChange={handleBasicSummaryFieldMethodChange}
               onPeriodScopeModeChange={handleBasicSummaryPeriodScopeModeChange}
@@ -3856,6 +3946,7 @@ const WorkAggregationTab: React.FC<Props> = ({
               onPeriodDateFromChange={handleBasicSummaryPeriodDateFromChange}
               onPeriodDateToChange={handleBasicSummaryPeriodDateToChange}
               onSelectedUnitIdsChange={handleBasicSummarySelectedUnitIdsChange}
+              onSourceScopeModeChange={setBasicSummarySourceScopeMode}
               onSaveConfig={() => void handleSaveBasicSummaryConfig()}
               onLoad={(forceRefresh) => void handleRunBasicSummary(forceRefresh)}
               onSourceViewChange={setBasicSummarySourceView}
