@@ -72,6 +72,7 @@ export default function DynamicFormEditPage() {
     <DynamicFormEditor
       key={query.data.id}
       mode="edit"
+      dynamicFormTemplateId={query.data.id}
       initialValue={initialValue}
       locked={query.data.isPublished}
       allowStatisticConfigEdit={query.data.isPublished}

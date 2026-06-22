@@ -105,6 +105,7 @@ export default function DynamicFormViewPage() {
         <DynamicFormEditor
           key={query.data.id}
           mode="view"
+          dynamicFormTemplateId={query.data.id}
           initialValue={initialValue}
           onBack={() => navigate("/dynamic-forms")}
         />

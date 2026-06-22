@@ -82,11 +82,14 @@ import { UITextKey, uiText } from '../../../constants/uiText';
 import { LabelEnumCatalogSelect } from "../../../components/labels/labelUi";
 import DynamicFormExcelBlockPreview from "../components/DynamicFormExcelBlockPreview";
 import DynamicFormSectionSelect from "../components/DynamicFormSectionSelect";
+import DynamicFormFlowPanel from "./DynamicFormFlowPanel";
 
 type Mode = "create" | "edit" | "view";
+type BuilderTab = "form" | "flow";
 
 type Props = {
   mode: Mode;
+  dynamicFormTemplateId?: string | null;
   initialValue: DynamicFormEditorValue;
   busy?: boolean;
   locked?: boolean;
@@ -184,6 +187,7 @@ function FieldTypePaletteButton({
 
 export default function DynamicFormEditor({
   mode,
+  dynamicFormTemplateId,
   initialValue,
   busy = false,
   locked = false,
@@ -196,6 +200,8 @@ export default function DynamicFormEditor({
 }: Props) {
   const readOnly = mode === "view" || locked;
   const statisticReadOnly = mode === "view" || (locked && !allowStatisticConfigEdit);
+  const flowReadOnly = mode === "view";
+  const [builderTab, setBuilderTab] = useState<BuilderTab>("form");
   const [preview, setPreview] = useState(mode === "view");
   const [value, setValue] = useState<DynamicFormEditorValue>(() => ({
     ...initialValue,
@@ -452,10 +458,23 @@ export default function DynamicFormEditor({
           <ToggleButtonGroup
             size="small"
             exclusive
+            value={builderTab}
+            onChange={(_, next) => {
+              if (next) setBuilderTab(next);
+            }}
+          >
+            <ToggleButton value="form">Form</ToggleButton>
+            <ToggleButton value="flow">Flow</ToggleButton>
+          </ToggleButtonGroup>
+
+          <ToggleButtonGroup
+            size="small"
+            exclusive
             value={preview ? "preview" : "edit"}
             onChange={(_, next) => {
               if (next) setPreview(next === "preview");
             }}
+            disabled={builderTab === "flow"}
           >
             <ToggleButton value="edit" disabled={mode === "view"}>
               <EditIcon fontSize="small" />
@@ -492,8 +511,17 @@ export default function DynamicFormEditor({
       {error && <Alert severity="error">{error}</Alert>}
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, md: 3 }}>
+        {builderTab === "flow" ? (
+          <DynamicFormFlowPanel
+            dynamicFormTemplateId={dynamicFormTemplateId}
+            fields={fields}
+            blocksJson={value.blocksJson}
+            excelBlockJson={value.excelBlockJson}
+            readOnly={flowReadOnly}
+          />
+        ) : (
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 3 }}>
             <Stack spacing={1.5}>
               <TextField size="small" label={uiText(UITextKey.TextMa2)} value={value.code ?? ""} disabled />
               <DebouncedTextField
@@ -594,9 +622,9 @@ export default function DynamicFormEditor({
                 </Stack>
               )}
             </Stack>
-          </Grid>
+            </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
             <Stack spacing={1.5}>
               {selectedSection && !preview && (
                 <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
@@ -727,9 +755,9 @@ export default function DynamicFormEditor({
                 </Stack>
               </Box>
             </Stack>
-          </Grid>
+            </Grid>
 
-          <Grid size={{ xs: 12, md: 3 }}>
+            <Grid size={{ xs: 12, md: 3 }}>
             {selectedExcelBlockJson && !selectedField ? (
               <ExcelBlockSummaryPanel blockJson={selectedExcelBlockJson} />
             ) : (
@@ -743,8 +771,9 @@ export default function DynamicFormEditor({
                 }}
               />
             )}
+            </Grid>
           </Grid>
-        </Grid>
+        )}
       </Paper>
 
       <LabelManagerDialog
