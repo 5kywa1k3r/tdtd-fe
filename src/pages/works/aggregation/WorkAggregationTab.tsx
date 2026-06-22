@@ -83,6 +83,7 @@ import AggregateSourceTable from "../../../components/works/aggregate/AggregateS
 import BasicSummaryPanel, {
   type BasicSummarySourceScopeOption,
 } from "../../../components/works/aggregate/BasicSummaryPanel";
+import StatisticDiffPanel from "../../../components/works/aggregate/StatisticDiffPanel";
 import AggregateWorkbookPreview from "../../../components/works/aggregate/AggregateWorkbookPreview";
 import type { WorkbookPreviewHighlight } from "../../../components/excel/fortune/WorkbookDataGrid";
 import { MARK_COLORS } from "../../../components/excel/fortune/designerMarking";
@@ -3730,6 +3731,13 @@ const WorkAggregationTab: React.FC<Props> = ({
     selectedScopeOption?.assignmentType,
   ]);
 
+  const statisticDiffPeriodKey = React.useMemo(() => {
+    if (filter.periodScopeMode === "PERIOD_RANGE") {
+      return normalizeDayKeyInput(filter.periodDateTo) || normalizeDayKeyInput(filter.periodDate);
+    }
+    return normalizeDayKeyInput(filter.periodDate);
+  }, [filter.periodDate, filter.periodDateTo, filter.periodScopeMode]);
+
   const periodSummary = React.useMemo(() => {
     if (!result) return "Chưa có dữ liệu";
     if (result.periodScopeMode === "ALL_PERIODS") return "Toàn bộ kỳ";
@@ -4135,6 +4143,18 @@ const WorkAggregationTab: React.FC<Props> = ({
             onChange={setFilter}
             onRun={() => void handleRunAggregate()}
             onReset={handleReset}
+          />
+        )}
+
+        {effectiveParentAssignmentId && workId && seedDynamicFormTemplateId && (
+          <StatisticDiffPanel
+            workId={workId}
+            assignmentId={effectiveParentAssignmentId}
+            dynamicFormTemplateId={seedDynamicFormTemplateId}
+            periodKey={statisticDiffPeriodKey}
+            selectedUnitIds={filter.selectedUnitIds}
+            sourceScopeOptions={basicSummarySourceScopeOptions}
+            defaultSourceScopeMode={basicSummarySourceScopeMode}
           />
         )}
 
