@@ -7,6 +7,8 @@ import type {
   SaveWorkAssignmentReportDraftPatchRequest,
   SaveWorkAssignmentReportDraftRequest,
   ApplyDynamicFormAggregateDraftRequest,
+  DynamicFlowMappingPreviewResponse,
+  DynamicFlowMappingRequest,
   SubmitWorkAssignmentReportRequest,
   ReturnWorkAssignmentReportRequest,
   WorkAssignmentReportListRow,
@@ -158,6 +160,34 @@ export const reportApi = baseApi.injectEndpoints({
     >({
       query: ({ id, data }) => ({
         url: `work-assignment-reports/${id}/draft/preview-dynamic-form-aggregate`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    previewDynamicFlowMapping: build.mutation<
+      DynamicFlowMappingPreviewResponse,
+      {
+        id: string;
+        data: DynamicFlowMappingRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/preview-dynamic-flow-mapping`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    applyDynamicFlowMapping: build.mutation<
+      WorkAssignmentReportResponse,
+      {
+        id: string;
+        data: DynamicFlowMappingRequest;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/apply-dynamic-flow-mapping`,
         method: "POST",
         data,
       }),
@@ -508,6 +538,8 @@ export const {
   useSaveWorkAssignmentReportDraftPatchMutation,
   useApplyDynamicFormAggregateDraftMutation,
   usePreviewDynamicFormAggregateDraftMutation,
+  usePreviewDynamicFlowMappingMutation,
+  useApplyDynamicFlowMappingMutation,
   useSubmitWorkAssignmentReportMutation,
   useWithdrawSubmittedReportMutation,
   useGetWorkAssignmentReportLogsQuery,

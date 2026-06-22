@@ -454,6 +454,79 @@ export interface ApplyDynamicFormAggregateDraftRequest {
   allowSubmittedSources?: boolean | null;
 }
 
+export interface DynamicFlowMappingRuleDto {
+  mappingId: string;
+  mappingVersion: number;
+  sourceStepId?: string | null;
+  sourceStepCode?: string | null;
+  sourceFieldId?: string | null;
+  sourceFieldKey?: string | null;
+  sourceBlockId?: string | null;
+  sourceColumnKey?: string | null;
+  targetStepId?: string | null;
+  targetStepCode?: string | null;
+  targetFieldId?: string | null;
+  targetFieldKey?: string | null;
+  targetBlockId?: string | null;
+  targetColumnKey?: string | null;
+  conceptCode?: string | null;
+  dataType?: string | null;
+  joinKey?: string | null;
+  valueTransform?: string | null;
+  conflictPolicy?: string | null;
+  contributionPolicy?: string | null;
+}
+
+export interface DynamicFlowMappingRequest {
+  sourceMode?: "CHILD_FLOW" | "PREVIOUS_PERIOD" | "EXPLICIT" | string | null;
+  sourceReportIds?: string[] | null;
+  flowTemplateVersionId?: string | null;
+  flowTemplateId?: string | null;
+  flowTemplateVersionNo?: number | null;
+  mappingRulesJson?: string | null;
+  mappingRules?: DynamicFlowMappingRuleDto[] | null;
+  conflictPolicy?: string | null;
+  contributionPolicy?: string | null;
+  requireSourceReport?: boolean | null;
+}
+
+export interface DynamicFlowMappingSourceReportDto {
+  reportId: string;
+  workAssignmentId: string;
+  flowStepId?: string | null;
+  flowStepCode?: string | null;
+  periodInstanceKey: string;
+}
+
+export interface DynamicFlowMappingChangeDto {
+  mappingId: string;
+  mappingVersion: number;
+  targetKind: string;
+  targetKey: string;
+  sourceReportId?: string | null;
+  sourceKey?: string | null;
+  previousValueJson?: string | null;
+  nextValueJson?: string | null;
+  status: string;
+  reason?: string | null;
+  conceptCode?: string | null;
+  contributionPolicy?: string | null;
+}
+
+export interface DynamicFlowMappingPreviewResponse {
+  targetReportId: string;
+  targetAssignmentId: string;
+  dataOrigin: WorkReportDataOrigin | string;
+  cumulativeContributionMode: WorkReportCumulativeContributionMode | string;
+  cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
+  fieldValuesJson?: string | null;
+  tableValuesJson?: string | null;
+  sourceReports: DynamicFlowMappingSourceReportDto[];
+  changes: DynamicFlowMappingChangeDto[];
+  hasBlockingConflicts: boolean;
+}
+
 export interface ReturnWorkAssignmentReportRequest {
   returnReason: string;
   reviewerComment?: string | null;

@@ -91,10 +91,21 @@ type MappingRule = {
   mappingId: string;
   mappingVersion: number;
   sourceStepId?: string | null;
+  sourceStepCode?: string | null;
   sourceFieldId?: string | null;
+  sourceFieldKey?: string | null;
+  sourceBlockId?: string | null;
+  sourceColumnKey?: string | null;
+  targetStepId?: string | null;
+  targetStepCode?: string | null;
   targetFieldId?: string | null;
+  targetFieldKey?: string | null;
+  targetBlockId?: string | null;
+  targetColumnKey?: string | null;
   conceptCode?: string | null;
   dataType?: string | null;
+  joinKey?: string | null;
+  valueTransform?: string | null;
   conflictPolicy?: string | null;
   contributionPolicy?: string | null;
 };
@@ -593,8 +604,10 @@ export default function DynamicFormFlowPanel({
             <TableHead>
               <TableRow>
                 <TableCell>Step</TableCell>
-                <TableCell>Source field</TableCell>
-                <TableCell>Target field</TableCell>
+                <TableCell>Source</TableCell>
+                <TableCell>Target</TableCell>
+                <TableCell>Transform</TableCell>
+                <TableCell>Policy</TableCell>
                 <TableCell>Concept</TableCell>
                 <TableCell width={44} />
               </TableRow>
@@ -603,8 +616,46 @@ export default function DynamicFormFlowPanel({
               {payload.mappingRules.map((rule, index) => (
                 <TableRow key={rule.mappingId}>
                   <TableCell>{renderStepSelect(rule.sourceStepId ?? "", (sourceStepId) => updateMappingRule(index, { sourceStepId }))}</TableCell>
-                  <TableCell>{renderFieldSelect(rule.sourceFieldId ?? "", (sourceFieldId) => updateMappingRule(index, { sourceFieldId }))}</TableCell>
-                  <TableCell>{renderFieldSelect(rule.targetFieldId ?? "", (targetFieldId) => updateMappingRule(index, { targetFieldId }))}</TableCell>
+                  <TableCell>
+                    <Stack spacing={0.75}>
+                      {renderMappingKindSelect(resolveMappingSourceKind(rule), (kind) => updateMappingRule(index, clearMappingEndpoint("source", kind)))}
+                      {resolveMappingSourceKind(rule) === "table"
+                        ? renderTableSelect(
+                            buildTableTargetValue(rule.sourceBlockId, rule.sourceColumnKey),
+                            (value) => updateMappingRule(index, toMappingTablePatch(value, "source")),
+                          )
+                        : renderFieldSelect(rule.sourceFieldId ?? "", (sourceFieldId) => updateMappingRule(index, { sourceFieldId, sourceFieldKey: null }))}
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Stack spacing={0.75}>
+                      {renderMappingKindSelect(resolveMappingTargetKind(rule), (kind) => updateMappingRule(index, clearMappingEndpoint("target", kind)))}
+                      {resolveMappingTargetKind(rule) === "table"
+                        ? renderTableSelect(
+                            buildTableTargetValue(rule.targetBlockId, rule.targetColumnKey),
+                            (value) => updateMappingRule(index, toMappingTablePatch(value, "target")),
+                          )
+                        : renderFieldSelect(rule.targetFieldId ?? "", (targetFieldId) => updateMappingRule(index, { targetFieldId, targetFieldKey: null }))}
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Stack spacing={0.75}>
+                      {renderOptionSelect(rule.valueTransform ?? "COPY", ["COPY", "FIRST_NON_BLANK", "SUM", "COUNT", "TEXT_JOIN"], (valueTransform) => updateMappingRule(index, { valueTransform }))}
+                      <TextField
+                        size="small"
+                        value={rule.joinKey ?? ""}
+                        placeholder="joinKey"
+                        disabled={readOnly}
+                        onChange={(event) => updateMappingRule(index, { joinKey: event.target.value })}
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Stack spacing={0.75}>
+                      {renderOptionSelect(rule.conflictPolicy ?? "OVERWRITE", ["OVERWRITE", "TARGET_WINS", "ERROR_ON_CONFLICT", "APPEND"], (conflictPolicy) => updateMappingRule(index, { conflictPolicy }))}
+                      {renderOptionSelect(rule.contributionPolicy ?? "EXCLUDE", ["EXCLUDE", "INCLUDE"], (contributionPolicy) => updateMappingRule(index, { contributionPolicy }))}
+                    </Stack>
+                  </TableCell>
                   <TableCell>
                     <TextField
                       size="small"
@@ -787,8 +838,9 @@ export default function DynamicFormFlowPanel({
           sourceStepId: activeStep?.stepId ?? current.steps[0]?.stepId ?? "step_1",
           sourceFieldId: fieldTargets[0]?.fieldId ?? null,
           targetFieldId: fieldTargets[0]?.fieldId ?? null,
-          conflictPolicy: "TARGET_WINS",
-          contributionPolicy: "INCLUDE",
+          valueTransform: "COPY",
+          conflictPolicy: "OVERWRITE",
+          contributionPolicy: "EXCLUDE",
         },
       ],
     }));
@@ -863,6 +915,120 @@ export default function DynamicFormFlowPanel({
       </Select>
     );
   }
+
+  function renderTableSelect(value: string, onChange: (value: string) => void) {
+    const fallback = tableTargets[0] ? buildTableTargetValue(tableTargets[0].blockId, tableTargets[0].columnKey) : "";
+    return (
+      <Select
+        size="small"
+        value={value || fallback}
+        disabled={readOnly || tableTargets.length === 0}
+        onChange={(event: SelectChangeEvent) => onChange(event.target.value)}
+        sx={{ minWidth: 210 }}
+      >
+        {tableTargets.slice(0, maxMatrixRows).map((target) => (
+          <MenuItem key={`${target.blockId}:${target.columnKey}`} value={buildTableTargetValue(target.blockId, target.columnKey)}>
+            {target.label}
+          </MenuItem>
+        ))}
+      </Select>
+    );
+  }
+
+  function renderMappingKindSelect(value: "field" | "table", onChange: (value: "field" | "table") => void) {
+    return (
+      <Select
+        size="small"
+        value={value}
+        disabled={readOnly}
+        onChange={(event: SelectChangeEvent) => onChange(event.target.value as "field" | "table")}
+        sx={{ width: 108 }}
+      >
+        <MenuItem value="field">Field</MenuItem>
+        <MenuItem value="table">Table</MenuItem>
+      </Select>
+    );
+  }
+
+  function renderOptionSelect(value: string, options: string[], onChange: (value: string) => void) {
+    return (
+      <Select
+        size="small"
+        value={value}
+        disabled={readOnly}
+        onChange={(event: SelectChangeEvent) => onChange(event.target.value)}
+        sx={{ minWidth: 150 }}
+      >
+        {options.map((option) => (
+          <MenuItem key={option} value={option}>
+            {option}
+          </MenuItem>
+        ))}
+      </Select>
+    );
+  }
+
+  function clearMappingEndpoint(side: "source" | "target", kind: "field" | "table"): Partial<MappingRule> {
+    if (side === "source") {
+      if (kind === "table") {
+        const target = tableTargets[0];
+        return {
+          sourceFieldId: null,
+          sourceFieldKey: null,
+          sourceBlockId: target?.blockId ?? null,
+          sourceColumnKey: target?.columnKey ?? null,
+        };
+      }
+
+      return {
+        sourceFieldId: fieldTargets[0]?.fieldId ?? null,
+        sourceFieldKey: null,
+        sourceBlockId: null,
+        sourceColumnKey: null,
+      };
+    }
+
+    if (kind === "table") {
+      const target = tableTargets[0];
+      return {
+        targetFieldId: null,
+        targetFieldKey: null,
+        targetBlockId: target?.blockId ?? null,
+        targetColumnKey: target?.columnKey ?? null,
+      };
+    }
+
+    return {
+      targetFieldId: fieldTargets[0]?.fieldId ?? null,
+      targetFieldKey: null,
+      targetBlockId: null,
+      targetColumnKey: null,
+    };
+  }
+
+  function toMappingTablePatch(value: string, side: "source" | "target"): Partial<MappingRule> {
+    const [blockId, columnKey] = splitTableTargetValue(value);
+    return side === "source"
+      ? { sourceBlockId: blockId, sourceColumnKey: columnKey, sourceFieldId: null, sourceFieldKey: null }
+      : { targetBlockId: blockId, targetColumnKey: columnKey, targetFieldId: null, targetFieldKey: null };
+  }
+}
+
+function resolveMappingSourceKind(rule: MappingRule): "field" | "table" {
+  return rule.sourceBlockId || rule.sourceColumnKey ? "table" : "field";
+}
+
+function resolveMappingTargetKind(rule: MappingRule): "field" | "table" {
+  return rule.targetBlockId || rule.targetColumnKey ? "table" : "field";
+}
+
+function buildTableTargetValue(blockId?: string | null, columnKey?: string | null) {
+  return `${blockId ?? ""}:${columnKey ?? ""}`;
+}
+
+function splitTableTargetValue(value: string): [string | null, string | null] {
+  const [blockId, columnKey] = value.split(":", 2);
+  return [blockId?.trim() || null, columnKey?.trim() || null];
 }
 
 function PermissionTable({
