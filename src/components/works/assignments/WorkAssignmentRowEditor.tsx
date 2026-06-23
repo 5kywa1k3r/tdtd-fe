@@ -86,12 +86,19 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
               flexWrap="wrap"
               useFlexGap
             >
+              {(draft.dynamicFormTemplateCode || draft.dynamicExcelCode) && (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={draft.dynamicFormTemplateCode || draft.dynamicExcelCode}
+                />
+              )}
               <Typography variant="subtitle1" fontWeight={600}>
                 {draft.dynamicFormTemplateName || draft.dynamicExcelName
-                  ? `${draft.dynamicFormTemplateCode || draft.dynamicExcelCode || ""} - ${draft.dynamicFormTemplateName || draft.dynamicExcelName}`
+                  ? draft.dynamicFormTemplateName || draft.dynamicExcelName
                   : isCreate
-                  ? "Giao việc"
-                  : "Cấu hình biểu mẫu"}
+                    ? "Giao việc"
+                    : "Cấu hình biểu mẫu"}
               </Typography>
 
               <Chip

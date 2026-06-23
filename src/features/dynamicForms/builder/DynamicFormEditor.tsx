@@ -38,6 +38,7 @@ import RadioButtonCheckedIcon from "@mui/icons-material/RadioButtonChecked";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import LabelOutlinedIcon from "@mui/icons-material/LabelOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 
 import type {
   DynamicFormEditorSubmit,
@@ -110,6 +111,7 @@ type Props = {
 const palette: Array<{ type: DynamicFormFieldType; icon: React.ReactNode }> = [
   { type: "shortText", icon: <ShortTextIcon fontSize="small" /> },
   { type: "longText", icon: <SubjectIcon fontSize="small" /> },
+  { type: "richText", icon: <ArticleOutlinedIcon fontSize="small" /> },
   { type: "stringList", icon: <FormatListBulletedIcon fontSize="small" /> },
   { type: "number", icon: <NumbersIcon fontSize="small" /> },
   { type: "date", icon: <EventIcon fontSize="small" /> },
@@ -131,6 +133,7 @@ function fieldTypeTooltip(type: DynamicFormFieldType) {
   if (type === "date") return "Ngày/kỳ: nhập dd/MM/yyyy, MM/yyyy hoặc yyyy.";
   if (type === "fullDate") return "Ngày đầy đủ: nhập dd/MM/yyyy.";
   if (type === "longText") return "Nội dung dài một ô.";
+  if (type === "richText") return "Soạn thảo như văn bản: in đậm, in nghiêng và chèn bảng cơ bản.";
   if (type === "stringList") return "Danh sách nội dung: nhập nhiều ý tự do để nối chuỗi, tìm kiếm và xuất dữ liệu.";
   return fieldTypeLabels[type];
 }
@@ -448,9 +451,7 @@ export default function DynamicFormEditor({
             <Typography variant="h6" fontWeight={800}>
               Biểu mẫu động
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {value.code || "Biểu mẫu mới"}
-            </Typography>
+            <Chip size="small" variant="outlined" label={value.code || "Biểu mẫu mới"} sx={{ mt: 0.5 }} />
           </Box>
         </Stack>
 
@@ -523,7 +524,12 @@ export default function DynamicFormEditor({
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 3 }}>
             <Stack spacing={1.5}>
-              <TextField size="small" label={uiText(UITextKey.TextMa2)} value={value.code ?? ""} disabled />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={value.code || "Biểu mẫu mới"}
+                sx={{ width: "fit-content", maxWidth: "100%" }}
+              />
               <DebouncedTextField
                 size="small"
                 label={uiText(UITextKey.TextTenForm)}
@@ -1006,6 +1012,31 @@ function FieldPreview({ field }: { field: DynamicFormField }) {
           </MenuItem>
         ))}
       </Select>
+    );
+  }
+
+  if (field.type === "richText") {
+    return (
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 1.25,
+          borderRadius: 1,
+          minHeight: Math.max(180, field.minHeight ?? 180),
+          bgcolor: "background.default",
+        }}
+      >
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            <Chip size="small" variant="outlined" label="B" />
+            <Chip size="small" variant="outlined" label="I" />
+            <Chip size="small" variant="outlined" label="Bảng" />
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            {displayName}
+          </Typography>
+        </Stack>
+      </Paper>
     );
   }
 
@@ -1807,12 +1838,12 @@ function getStatisticLabelDataTypesForField(fieldType: DynamicFormFieldType): La
   if (fieldType === "shortText" || fieldType === "singleSelect" || fieldType === "multiSelect") return ["SHORT_TEXT"];
   if (fieldType === "date" || fieldType === "fullDate") return ["DATE"];
   if (fieldType === "boolean") return ["BOOLEAN"];
-  if (fieldType === "longText" || fieldType === "stringList") return ["STRING_LIST"];
+  if (fieldType === "longText" || fieldType === "stringList" || fieldType === "richText") return ["STRING_LIST"];
   return [];
 }
 
 function canUseFieldStatistic(fieldType: DynamicFormFieldType): boolean {
-  return Boolean(fieldType);
+  return fieldType !== "richText";
 }
 
 function getExcelBlockTitle(json: string | null | undefined, index: number): string {

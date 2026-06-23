@@ -279,8 +279,7 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
     if (!detail) return "";
     const code = (detail.autoCode || detail.code || "").trim();
     const name = (detail.name || "").trim();
-    if (code && name) return `${code} - ${name}`;
-    return code || name || workId;
+    return name || code || workId;
   }, [detail, workId]);
 
   const handleBack = () => navigate(-1);

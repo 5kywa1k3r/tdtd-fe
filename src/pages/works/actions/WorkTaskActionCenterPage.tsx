@@ -59,9 +59,23 @@ function getUserLabel(row?: UserRefDTO | null) {
 }
 
 function getAssignmentTemplateLabel(row: WorkAssignmentListResponse) {
-  const code = row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
-  return [code, name].filter(Boolean).join(" - ") || row.code || row.id;
+  return name || row.name?.trim() || row.id;
+}
+
+function getAssignmentTemplateCode(row: WorkAssignmentListResponse) {
+  return row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim() || "";
+}
+
+function getCloneRequestTemplateLabel(row: {
+  dynamicFormTemplateName?: string | null;
+  dynamicFormTemplateId?: string | null;
+}) {
+  return row.dynamicFormTemplateName?.trim() || row.dynamicFormTemplateId || "";
+}
+
+function getCloneRequestTemplateCode(row: { dynamicFormTemplateCode?: string | null }) {
+  return row.dynamicFormTemplateCode?.trim() || "";
 }
 
 function getAssignmentAssigneeSummary(row: WorkAssignmentListResponse) {
@@ -357,16 +371,21 @@ export default function WorkTaskActionCenterPage({
                         <Stack spacing={0.5} sx={{ minWidth: 0 }}>
                           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                             <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                              {[row.dynamicFormTemplateCode, row.dynamicFormTemplateName]
-                                .filter(Boolean)
-                                .join(" - ") || row.dynamicFormTemplateId}
+                              {getCloneRequestTemplateLabel(row) || row.id}
                             </Typography>
+                            {getCloneRequestTemplateCode(row) ? (
+                              <Chip size="small" variant="outlined" label={getCloneRequestTemplateCode(row)} />
+                            ) : null}
                             {getCloneStatusChip(row)}
                           </Stack>
-                          <Typography variant="body2" color="text.secondary">
-                            Người xin quyền: {getUserLabel(row.requester)} - Công việc:{" "}
-                            {row.assignmentCode || row.workAssignmentId}
-                          </Typography>
+                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                            <Typography variant="body2" color="text.secondary">
+                              Người xin quyền: {getUserLabel(row.requester)}
+                            </Typography>
+                            {row.assignmentCode ? (
+                              <Chip size="small" variant="outlined" label={row.assignmentCode} />
+                            ) : null}
+                          </Stack>
                           {row.requestReason && (
                             <Typography variant="body2">Lý do: {row.requestReason}</Typography>
                           )}
@@ -438,12 +457,19 @@ export default function WorkTaskActionCenterPage({
                               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
                                 {getAssignmentTemplateLabel(assignment)}
                               </Typography>
+                              {getAssignmentTemplateCode(assignment) ? (
+                                <Chip size="small" variant="outlined" label={getAssignmentTemplateCode(assignment)} />
+                              ) : null}
                               {getCloneStatusChip(currentRequest)}
                             </Stack>
-                            <Typography variant="body2" color="text.secondary">
-                              Công việc: {assignment.code || assignment.id} - Người được giao:{" "}
-                              {getAssignmentAssigneeSummary(assignment)}
-                            </Typography>
+                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                              <Typography variant="body2" color="text.secondary">
+                                Người được giao: {getAssignmentAssigneeSummary(assignment)}
+                              </Typography>
+                              {assignment.code ? (
+                                <Chip size="small" variant="outlined" label={assignment.code} />
+                              ) : null}
+                            </Stack>
                           </Stack>
                           <Button
                             variant="contained"
@@ -544,6 +570,9 @@ export default function WorkTaskActionCenterPage({
                         <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
                           {getAssignmentTemplateLabel(row)}
                         </Typography>
+                        {getAssignmentTemplateCode(row) ? (
+                          <Chip size="small" variant="outlined" label={getAssignmentTemplateCode(row)} />
+                        ) : null}
                         {getProgressChip(row)}
                         <Chip
                           size="small"
@@ -551,10 +580,14 @@ export default function WorkTaskActionCenterPage({
                           label={row.assignmentType === "PERIODIC_REPORT" ? "Định kỳ" : "Một lần"}
                         />
                       </Stack>
-                      <Typography variant="body2" color="text.secondary">
-                        Công việc: {row.code || row.id} - Người được giao:{" "}
-                        {getAssignmentAssigneeSummary(row)}
-                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography variant="body2" color="text.secondary">
+                          Người được giao: {getAssignmentAssigneeSummary(row)}
+                        </Typography>
+                        {row.code ? (
+                          <Chip size="small" variant="outlined" label={row.code} />
+                        ) : null}
+                      </Stack>
                       {row.latestDueAtUtc && (
                         <Stack direction="row" spacing={1} alignItems="center">
                           <ReportProblemOutlinedIcon fontSize="small" color="warning" />
@@ -595,15 +628,16 @@ export default function WorkTaskActionCenterPage({
                   <Stack spacing={0.75}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                        {[row.dynamicFormTemplateCode, row.dynamicFormTemplateName]
-                          .filter(Boolean)
-                          .join(" - ") || row.dynamicFormTemplateId}
+                        {getCloneRequestTemplateLabel(row) || row.id}
                       </Typography>
+                      {getCloneRequestTemplateCode(row) ? (
+                        <Chip size="small" variant="outlined" label={getCloneRequestTemplateCode(row)} />
+                      ) : null}
                       {getCloneStatusChip(row)}
                     </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                      Công việc: {row.assignmentCode || row.workAssignmentId}
-                    </Typography>
+                    {row.assignmentCode ? (
+                      <Chip size="small" variant="outlined" label={row.assignmentCode} sx={{ width: "fit-content" }} />
+                    ) : null}
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography variant="caption" color="text.secondary">
                         Gửi lúc:

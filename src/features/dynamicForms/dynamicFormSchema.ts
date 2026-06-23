@@ -15,6 +15,7 @@ import type {
 export const fieldTypeLabels: Record<DynamicFormFieldType, string> = {
   shortText: "Nội dung cố định",
   longText: "Nội dung",
+  richText: "Soạn thảo văn bản",
   stringList: "Danh sách nội dung",
   number: "Số",
   date: "Ngày/kỳ",
@@ -43,6 +44,7 @@ export const excelSpecKindLabels: Record<DynamicExcelSpecKind, string> = {
 const legacyFieldLabels: Partial<Record<DynamicFormFieldType, string[]>> = {
   shortText: ["Short text", "shortText"],
   longText: ["Long text", "LongDate", "longText"],
+  richText: ["Rich text", "richText", "Document", "Word"],
   stringList: ["String list", "stringList"],
   number: ["Number", "number"],
   date: ["Date", "date"],
@@ -55,7 +57,7 @@ const legacyFieldLabels: Partial<Record<DynamicFormFieldType, string[]>> = {
 export const FIELD_DISPLAY_NAME_PLACEHOLDER = "Chưa đặt tên hiển thị";
 
 const genericFieldDisplayNamePattern =
-  /^(field|truong|number|date|full\s*date|fulldate|short\s*text|shorttext|long\s*text|longtext|string\s*list|stringlist|boolean|single\s*select|singleselect|multi\s*select|multiselect|so|ngay|ngay\s*day\s*du|van\s*ban\s*ngan|van\s*ban\s*dai|danh\s*sach\s*y|chon\s*mot|chon\s*nhieu|co\s*khong)[\s_-]*\d*$/i;
+  /^(field|truong|number|date|full\s*date|fulldate|short\s*text|shorttext|long\s*text|longtext|rich\s*text|richtext|document|string\s*list|stringlist|boolean|single\s*select|singleselect|multi\s*select|multiselect|so|ngay|ngay\s*day\s*du|van\s*ban\s*ngan|van\s*ban\s*dai|soan\s*thao\s*van\s*ban|tai\s*lieu|danh\s*sach\s*y|chon\s*mot|chon\s*nhieu|co\s*khong)[\s_-]*\d*$/i;
 
 const baseTableModesBySpecKind: Record<DynamicExcelSpecKind, DynamicFormTableMode[]> = {
   TOP: ["FIXED_GRID", "APPEND_ROWS"],
@@ -147,7 +149,7 @@ export function defaultStatistic(): DynamicFormStatisticConfig {
 export function defaultAggregateOps(type: DynamicFormFieldType) {
   if (type === "number") return ["count", "sum"];
   if (type === "shortText") return ["count", "bucketCount"];
-  if (type === "stringList" || type === "longText") return ["count"];
+  if (type === "stringList" || type === "longText" || type === "richText") return ["count"];
   if (type === "boolean") return ["count", "trueCount", "falseCount"];
   if (type === "singleSelect" || type === "multiSelect") return ["count", "bucketCount"];
   if (type === "date" || type === "fullDate") return ["count", "latest"];
@@ -167,7 +169,7 @@ export function createDefaultField(
     type,
     required: false,
     colSpan: 12,
-    minHeight: type === "longText" || type === "stringList" ? 112 : 72,
+    minHeight: type === "richText" ? 240 : type === "longText" || type === "stringList" ? 112 : 72,
     order,
     options:
       type === "shortText" || type === "singleSelect" || type === "multiSelect"
@@ -772,6 +774,7 @@ function normalizeMetricLabelDataType(value: unknown) {
   if (raw === "STRINGLIST") return "STRING_LIST";
   if (raw === "MULTI_SELECT" || raw === "MULTISELECT") return "SHORT_TEXT";
   if (raw === "LONGTEXT" || raw === "LONG_TEXT") return "STRING_LIST";
+  if (raw === "RICHTEXT" || raw === "RICH_TEXT") return "STRING_LIST";
   return "NUMBER";
 }
 
@@ -869,6 +872,7 @@ function isFieldType(value: unknown): value is DynamicFormFieldType {
   return (
     value === "shortText" ||
     value === "longText" ||
+    value === "richText" ||
     value === "stringList" ||
     value === "number" ||
     value === "date" ||

@@ -23,6 +23,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 import type { DynamicFormField, DynamicFormSection } from "../dynamicForm.types";
+import LexicalRichDocumentEditor from "./LexicalRichDocumentEditor";
 import DynamicFormSectionSelect, {
   type DynamicFormSectionEntryStatus,
   type DynamicFormSectionValidationStatus,
@@ -182,6 +183,19 @@ function renderField(
         minRows={3}
         onChange={(event) => onChange(event.target.value || null)}
         sx={{ minHeight: field.minHeight }}
+      />
+    );
+  }
+
+  if (field.type === "richText") {
+    return (
+      <LexicalRichDocumentEditor
+        label={displayName}
+        value={asText(value)}
+        required={field.required}
+        minHeight={field.minHeight}
+        locked={locked}
+        onChange={(next) => onChange(next)}
       />
     );
   }

@@ -145,10 +145,11 @@ export const DynamicFormPicker: React.FC<DynamicFormPickerProps> = React.memo(fu
                     }}
                   >
                     <ListItemText
-                      primary={`${x.code} - ${x.name}`}
+                      primary={x.name || x.code || "-"}
                       secondaryTypographyProps={{ component: "div" }}
                       secondary={
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: "wrap" }}>
+                          {x.code && <Chip size="small" variant="outlined" label={x.code} />}
                           {(x.tagCodes ?? []).slice(0, 4).map((tagCode) => (
                             <Chip key={tagCode} size="small" label={tagCode} />
                           ))}

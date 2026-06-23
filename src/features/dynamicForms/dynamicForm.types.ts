@@ -1,6 +1,7 @@
 export type DynamicFormFieldType =
   | "shortText"
   | "longText"
+  | "richText"
   | "stringList"
   | "number"
   | "date"

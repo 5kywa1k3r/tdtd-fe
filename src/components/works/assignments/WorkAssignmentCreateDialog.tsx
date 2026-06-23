@@ -156,10 +156,8 @@ interface Props {
 }
 
 function getParentLabel(x: ParentCandidateOption) {
-  const code = x.code?.trim() || x.dynamicFormTemplateCode?.trim() || x.dynamicExcelCode?.trim();
   const name = x.name?.trim() || x.dynamicFormTemplateName?.trim() || x.dynamicExcelName?.trim();
-  if (code && name) return `${code} - ${name}`;
-  return code || name || x.id;
+  return name || x.id;
 }
 
 function getTemplateFallbackName(value: AssignmentCreateValue) {
@@ -167,10 +165,12 @@ function getTemplateFallbackName(value: AssignmentCreateValue) {
 }
 
 function getTemplateLabel(value: AssignmentCreateValue) {
-  const code = value.dynamicFormTemplateCode?.trim() || value.dynamicExcelCode?.trim();
   const name = value.dynamicFormTemplateName?.trim() || value.dynamicExcelName?.trim();
-  if (code && name) return `${code} - ${name}`;
-  return code || name || value.dynamicFormTemplateId || value.dynamicExcelId || "";
+  return name || value.dynamicFormTemplateId || value.dynamicExcelId || "";
+}
+
+function getTemplateCode(value: AssignmentCreateValue) {
+  return value.dynamicFormTemplateCode?.trim() || value.dynamicExcelCode?.trim();
 }
 
 function isoToDayKey(value?: string | null) {
@@ -1017,13 +1017,18 @@ const WorkAssignmentCreateDialog: React.FC<Props> = ({
           />
 
           {isView ? (
-            <TextField
-              size="small"
-              label={uiText(UITextKey.TextBieuMau)}
-              value={getTemplateLabel(value)}
-              fullWidth
-              InputProps={{ readOnly: true }}
-            />
+            <Stack spacing={0.75}>
+              {getTemplateCode(value) ? (
+                <Chip size="small" variant="outlined" label={getTemplateCode(value)} sx={{ width: "fit-content" }} />
+              ) : null}
+              <TextField
+                size="small"
+                label={uiText(UITextKey.TextBieuMau)}
+                value={getTemplateLabel(value)}
+                fullWidth
+                InputProps={{ readOnly: true }}
+              />
+            </Stack>
           ) : (
             <DynamicFormPicker
               value={value.dynamicFormTemplateId}

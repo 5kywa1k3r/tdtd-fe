@@ -68,10 +68,8 @@ export function toAssignmentRow(x: WorkAssignmentListResponse): AssignmentTableR
 
 export function getAssignmentLabel(row?: AssignmentTableRow | null) {
   if (!row) return "";
-  const code = row.code?.trim() || row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
   const name = row.name?.trim() || row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
-  const label = [code, name].filter(Boolean).join(" - ");
-  return label || row.id;
+  return name || row.id;
 }
 
 export function getAssignmentDisplayName(row?: AssignmentTableRow | null) {

@@ -26,10 +26,8 @@ type Props = {
 
 function getAssignmentLabel(row: WorkAssignmentResponse | null | undefined) {
   if (!row) return "";
-  const code = row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
-  if (code && name) return `${code} - ${name}`;
-  return code || name || row.id;
+  return name || row.name?.trim() || row.id;
 }
 
 const WorkAssignmentAutoApproveConditionDialog: React.FC<Props> = ({

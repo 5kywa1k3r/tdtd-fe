@@ -347,6 +347,31 @@ function FieldControlPreview({ field }: { field: DynamicFormField }) {
     );
   }
 
+  if (field.type === "richText") {
+    return (
+      <Paper
+        variant="outlined"
+        sx={{
+          minHeight: Math.max(180, field.minHeight ?? 180),
+          p: 1.25,
+          borderRadius: 1,
+          bgcolor: "background.paper",
+        }}
+      >
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            <Chip size="small" variant="outlined" label="B" />
+            <Chip size="small" variant="outlined" label="I" />
+            <Chip size="small" variant="outlined" label="Bảng" />
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            Vùng soạn thảo văn bản có định dạng.
+          </Typography>
+        </Stack>
+      </Paper>
+    );
+  }
+
   return (
     <TextField
       fullWidth

@@ -1260,9 +1260,7 @@ function findDynamicFormBlockByExcelId(
 }
 
 function getDynamicFormBlockDisplayLabel(block: DynamicFormExcelBlockResolution) {
-  const template = [block.dynamicExcelCode, block.dynamicExcelName]
-    .filter(Boolean)
-    .join(" - ");
+  const template = block.dynamicExcelName || block.dynamicExcelCode || "";
   const source = template || block.blockId;
   return `${source} (${formatTableModeLabel(block.tableMode)})`;
 }
@@ -1485,9 +1483,10 @@ function DynamicFormAggregatePreviewPanel({
   const visibleMetrics = metricOptions.slice(0, METRIC_PREVIEW_LIMIT);
   const hiddenMetricCount = Math.max(metricOptions.length - visibleMetrics.length, 0);
   const excelLabel =
-    [block.dynamicExcelCode, block.dynamicExcelName].filter(Boolean).join(" - ") ||
+    block.dynamicExcelName ||
     block.dynamicExcelId ||
-    block.blockId;
+    block.blockId ||
+    block.dynamicExcelCode;
 
   return (
     <Box
@@ -2367,7 +2366,7 @@ function buildDynamicFormAggregateFileName(
   variant: "aggregate" | "template" = "aggregate"
 ) {
   const template = sanitizeFilePart(
-    result.meta.dynamicFormTemplateCode || result.meta.dynamicFormTemplateName
+    result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateCode
   );
   const block = sanitizeFilePart(result.meta.blockId);
   return `${template}_${block}_${result.meta.tableMode.toLowerCase()}_${variant}.${extension}`;
@@ -2433,7 +2432,7 @@ async function downloadDynamicFormAggregateXlsx(
     { key: "value", header: "Giá trị", width: 46 },
   ];
   [
-    ["Biểu mẫu", [result.meta.dynamicFormTemplateCode, result.meta.dynamicFormTemplateName].filter(Boolean).join(" - ") || result.meta.dynamicFormTemplateId],
+    ["Biểu mẫu", result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId],
     ["Id biểu mẫu", result.meta.dynamicFormTemplateId],
     ["Mã đại diện biểu mẫu", result.meta.dynamicFormTemplateCode],
     ["Tên biểu mẫu", result.meta.dynamicFormTemplateName],
@@ -2608,7 +2607,7 @@ async function downloadSummaryTemplateWorkbookXlsx(
     { key: "value", header: "Giá trị", width: 46 },
   ];
   [
-    ["Biểu mẫu", [result.meta.dynamicFormTemplateCode, result.meta.dynamicFormTemplateName].filter(Boolean).join(" - ") || result.meta.dynamicFormTemplateId],
+    ["Biểu mẫu", result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId],
     ["Id biểu mẫu", result.meta.dynamicFormTemplateId],
     ["Mã đại diện biểu mẫu", result.meta.dynamicFormTemplateCode],
     ["Tên biểu mẫu", result.meta.dynamicFormTemplateName],
@@ -3791,9 +3790,8 @@ const WorkAggregationTab: React.FC<Props> = ({
 
   const lockDynamicExcel = Boolean(effectiveDynamicExcelId);
   const selectedTemplateLabel = React.useMemo(() => {
-    const code = seedDynamicFormTemplateCode || effectiveDynamicExcelCode || "";
     const name = seedDynamicFormTemplateName || effectiveDynamicExcelName || "";
-    return [code, name].filter(Boolean).join(" - ");
+    return name || seedDynamicFormTemplateCode || effectiveDynamicExcelCode || "";
   }, [
     effectiveDynamicExcelCode,
     effectiveDynamicExcelName,
@@ -4602,7 +4600,8 @@ const WorkAggregationTab: React.FC<Props> = ({
                     row.assigneeUserId ||
                     `Nguồn ${index + 1}`;
                   const unit = row.unitLabel || row.unitId || "-";
-                  const assignment = row.assignmentCode || row.assignmentName || row.assignmentId;
+                  const assignment = row.assignmentName || row.assignmentId;
+                  const assignmentCode = row.assignmentCode;
                   const items = row.items ?? [];
 
                   return (
@@ -4621,6 +4620,9 @@ const WorkAggregationTab: React.FC<Props> = ({
                         <Stack spacing={1}>
                           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                             <Chip size="small" label={assignment} />
+                            {assignmentCode ? (
+                              <Chip size="small" variant="outlined" label={assignmentCode} />
+                            ) : null}
                             <Chip
                               size="small"
                               variant="outlined"

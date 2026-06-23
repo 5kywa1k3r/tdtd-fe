@@ -640,7 +640,10 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
       )}
       <Chip variant="outlined" label={`Công việc nguồn: ${result.meta.sourceAssignmentCount}`} />
       <Chip variant="outlined" label={`Báo cáo: ${result.meta.sourceReportCount}`} />
-      <Chip variant="outlined" label={`Template: ${result.meta.dynamicFormTemplateCode || result.meta.dynamicFormTemplateId}`} />
+      <Chip variant="outlined" label={`Template: ${result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId}`} />
+      {result.meta.dynamicFormTemplateCode && (
+        <Chip variant="outlined" label={result.meta.dynamicFormTemplateCode} />
+      )}
       {result.meta.periodScopeMode && (
         <Chip variant="outlined" label={`Kỳ: ${formatSummaryPeriodScope(result)}`} />
       )}
@@ -1198,7 +1201,7 @@ function toBlockPreview(json: string, index: number): BlockPreview {
     blockId,
     sectionId: readString(obj?.sectionId ?? obj?.SectionId),
     dynamicExcelTemplateId,
-    title: [dynamicExcelCode, dynamicExcelName].filter(Boolean).join(" - ") || blockId || fallbackTitle,
+    title: dynamicExcelName || blockId || dynamicExcelCode || fallbackTitle,
     tableMode,
     dataRectValue: normalizeDataRect(obj?.dataRect ?? obj?.DataRect),
   };

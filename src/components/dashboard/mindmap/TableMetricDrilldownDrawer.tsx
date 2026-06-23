@@ -107,8 +107,11 @@ export default function TableMetricDrilldownDrawer(props: TableMetricDrilldownDr
         render: (row) => (
           <Stack spacing={0.45}>
             <Typography variant="body2" fontWeight={700}>
-              {row.assignmentCode || "-"} - {row.assignmentName || "Chưa rõ tên"}
+              {row.assignmentName || "Chưa rõ tên"}
             </Typography>
+            {row.assignmentCode ? (
+              <Chip size="small" variant="outlined" label={row.assignmentCode} sx={{ width: "fit-content" }} />
+            ) : null}
             <Typography variant="caption" color="text.secondary">
               {row.periodKey || "-"}
             </Typography>

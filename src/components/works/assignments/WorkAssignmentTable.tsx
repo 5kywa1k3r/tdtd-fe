@@ -87,10 +87,12 @@ interface WorkAssignmentTableProps {
 }
 
 function getTemplateLabel(row: AssignmentTableRow) {
-  const code = row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
-  if (code && name) return `${code} - ${name}`;
-  return code || name || row.id;
+  return name || row.id;
+}
+
+function getTemplateCode(row: AssignmentTableRow) {
+  return row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
 }
 
 function getAssignmentName(row: AssignmentTableRow) {
@@ -338,10 +340,20 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         width: "18%",
         getSortValue: (row) => getTemplateLabel(row).toLowerCase(),
         render: (row) => (
-          <CommonLabelText
-            text={getTemplateLabel(row)}
-            fontWeight={600}
-          />
+          <Stack spacing={0.45} sx={{ minWidth: 0 }}>
+            {getTemplateCode(row) ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={getTemplateCode(row)}
+                sx={{ width: "fit-content", maxWidth: "100%" }}
+              />
+            ) : null}
+            <CommonLabelText
+              text={getTemplateLabel(row)}
+              fontWeight={600}
+            />
+          </Stack>
         ),
       },
       {

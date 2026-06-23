@@ -1095,9 +1095,14 @@ const WorkAssignTab: React.FC<Props> = ({
         header: "Biểu mẫu",
         width: "22%",
         render: (row) => (
-          <Typography variant="body2" noWrap title={row.dynamicFormTemplateName ?? ""}>
-            {[row.dynamicFormTemplateCode, row.dynamicFormTemplateName].filter(Boolean).join(" - ") || "-"}
-          </Typography>
+          <Stack spacing={0.4} sx={{ minWidth: 0 }}>
+            {row.dynamicFormTemplateCode ? (
+              <Chip size="small" variant="outlined" label={row.dynamicFormTemplateCode} sx={{ width: "fit-content", maxWidth: "100%" }} />
+            ) : null}
+            <Typography variant="body2" noWrap title={row.dynamicFormTemplateName ?? ""}>
+              {row.dynamicFormTemplateName || "-"}
+            </Typography>
+          </Stack>
         ),
       },
       {
@@ -1669,12 +1674,10 @@ const WorkAssignTab: React.FC<Props> = ({
         assignmentId={evaluateTarget?.id ?? ""}
         assignmentLabel={
           evaluateTarget
-            ? [
-                evaluateTarget.dynamicFormTemplateCode || evaluateTarget.dynamicExcelCode,
-                evaluateTarget.dynamicFormTemplateName || evaluateTarget.dynamicExcelName,
-              ]
-                .filter(Boolean)
-                .join(" - ")
+            ? evaluateTarget.dynamicFormTemplateName ||
+              evaluateTarget.dynamicExcelName ||
+              evaluateTarget.name ||
+              evaluateTarget.id
             : ""
         }
         evaluationTemplateId={evaluateTarget?.evaluationTemplateId ?? null}
@@ -1697,12 +1700,10 @@ const WorkAssignTab: React.FC<Props> = ({
       >
         <DialogTitle sx={{ fontWeight: 800 }}>
           Xem trước biểu mẫu động
-          {previewDynamicFormQuery.data
-            ? ` - ${[
-                previewDynamicFormQuery.data.code,
-                previewDynamicFormQuery.data.name,
-              ].filter(Boolean).join(" - ")}`
-            : ""}
+          {previewDynamicFormQuery.data?.name ? ` - ${previewDynamicFormQuery.data.name}` : ""}
+          {previewDynamicFormQuery.data?.code ? (
+            <Chip size="small" variant="outlined" label={previewDynamicFormQuery.data.code} sx={{ ml: 1 }} />
+          ) : null}
         </DialogTitle>
         <DialogContent dividers>
           {previewDynamicFormQuery.isLoading || previewDynamicFormQuery.isFetching ? (

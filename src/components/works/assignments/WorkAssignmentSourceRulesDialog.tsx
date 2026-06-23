@@ -120,13 +120,12 @@ function serializeDataSourceRules(
 
 function getAssignmentLabel(row: WorkAssignmentListResponse | WorkAssignmentResponse | null | undefined) {
   if (!row) return "";
-  const code = row.dynamicFormTemplateCode?.trim() || row.dynamicExcelCode?.trim();
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
   const assignees = (row.assignees ?? [])
     .map((x) => x.fullName || x.username || x.unitShortName || x.unitName || x.userId)
     .filter(Boolean)
     .join(", ");
-  const template = code && name ? `${code} - ${name}` : code || name || row.id;
+  const template = name || row.name?.trim() || row.id;
   return assignees ? `${template} | ${assignees}` : template;
 }
 

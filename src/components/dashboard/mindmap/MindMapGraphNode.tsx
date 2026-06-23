@@ -98,6 +98,27 @@ const DEFAULT_REPORT_STATUS_OPTIONS: Array<{ value: DashboardMindMapBucket; labe
   { value: "OVERDUE", label: getDashboardMindMapBucketLabel("OVERDUE") },
 ];
 
+const SUMMARY_DISPLAY_TOOLTIP_THRESHOLD = 1000;
+const SUMMARY_DISPLAY_MAX_LENGTH = 5000;
+
+function truncateSummaryText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  if (maxLength <= 3) return "...".slice(0, maxLength);
+  return `${value.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function formatSummaryDisplayText(value?: string | null) {
+  const raw = value?.trim() ?? "";
+  if (!raw) return { text: "", tooltip: undefined as string | undefined };
+
+  const limited = truncateSummaryText(raw, SUMMARY_DISPLAY_MAX_LENGTH);
+  const text = truncateSummaryText(limited, SUMMARY_DISPLAY_TOOLTIP_THRESHOLD);
+  return {
+    text,
+    tooltip: limited.length > SUMMARY_DISPLAY_TOOLTIP_THRESHOLD ? limited : undefined,
+  };
+}
+
 function getNodeMinHeight(kind: MindMapNodeKind): number {
   switch (kind) {
     case "template":
@@ -258,6 +279,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
           : isEmpty
             ? "rgba(148,163,184,0.16)"
             : "rgba(148,163,184,0.22)";
+  const subtitleDisplay = formatSummaryDisplayText(data.subtitle);
 
   return (
     <>
@@ -317,10 +339,11 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
               >
                 {data.title}
               </Typography>
-              {data.subtitle ? (
+              {subtitleDisplay.text ? (
                 <Typography
                   variant="caption"
                   color="text.secondary"
+                  title={subtitleDisplay.tooltip}
                   sx={{
                     mt: 0.35,
                     display: "-webkit-box",
@@ -329,7 +352,7 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
                     WebkitBoxOrient: "vertical",
                   }}
                 >
-                  {data.subtitle}
+                  {subtitleDisplay.text}
                 </Typography>
               ) : null}
             </Box>
@@ -369,8 +392,8 @@ function MindMapGraphNodeComponent(props: NodeProps<MindMapGraphNodeData>) {
               }}
             >
               <InfoOutlinedIcon fontSize="small" />
-              <Typography variant="caption">
-                {data.subtitle || "Không có dữ liệu trong nhánh này."}
+              <Typography variant="caption" title={subtitleDisplay.tooltip}>
+                {subtitleDisplay.text || "Không có dữ liệu trong nhánh này."}
               </Typography>
             </Stack>
           ) : null}

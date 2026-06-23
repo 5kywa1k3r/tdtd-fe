@@ -162,9 +162,7 @@ const AggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
     onChange({ ...value, [field]: fieldValue });
   };
 
-  const selectedTemplateLabel = [defaultDynamicExcelCode, defaultDynamicExcelName]
-    .filter(Boolean)
-    .join(" - ");
+  const selectedTemplateLabel = defaultDynamicExcelName || defaultDynamicExcelCode || "";
 
   const templateSlot =
     sourceSlot ??

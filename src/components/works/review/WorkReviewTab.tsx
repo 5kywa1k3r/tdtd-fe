@@ -115,8 +115,7 @@ function getTemplateLabel(row: {
 }) {
   const code = row.dynamicExcelCode?.trim();
   const name = row.dynamicExcelName?.trim();
-  if (code && name) return `${code} - ${name}`;
-  return code || name || row.dynamicExcelId || "-";
+  return name || row.dynamicExcelId || code || "-";
 }
 
 function isPrivilegedUsername(username?: string | null) {
