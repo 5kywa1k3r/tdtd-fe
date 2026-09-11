@@ -579,7 +579,7 @@ function estimateTextWidthPx(text: string, fontSize: number) {
     else if (isUppercaseLike(char)) units += 0.52;
     else if (/[A-ZÀ-ÝĐ]/.test(char)) units += 0.52;
     else if (/[0-9]/.test(char)) units += 0.48;
-    else if (/[.,:;()\/\\\-+]/.test(char)) units += 0.24;
+    else if (/[.,:;()/\\\-+]/.test(char)) units += 0.24;
     else units += 0.42;
   }
   return units * fontSize;

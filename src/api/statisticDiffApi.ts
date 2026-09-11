@@ -16,6 +16,7 @@ export type StatisticDiffTarget = {
   dynamicFormTemplateId?: string | null;
   fieldId?: string | null;
   fieldKey?: string | null;
+  statisticLabelCode?: string | null;
   blockId?: string | null;
   metricKey?: string | null;
   metricLabelCode?: string | null;

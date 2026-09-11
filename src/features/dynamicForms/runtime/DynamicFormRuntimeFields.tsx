@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
@@ -10,6 +11,7 @@ import {
   CircularProgress,
   Divider,
   FormControlLabel,
+  FormHelperText,
   IconButton,
   List,
   ListItemButton,
@@ -54,6 +56,10 @@ export type DynamicFormRuntimeValues = Record<string, DynamicFormRuntimeValue>;
 
 export type DynamicFormRuntimeFieldState = {
   readOnly?: boolean;
+  error?: boolean;
+  errorText?: ReactNode;
+  helperText?: ReactNode;
+  focusTarget?: boolean;
 };
 
 export type DynamicFormRuntimeFieldsProps = {
@@ -75,6 +81,8 @@ export type DynamicFormRuntimeFieldsProps = {
     section: DynamicFormSection,
   ) => { status: DynamicFormSectionEntryStatus; lastUpdatedAt?: string | null } | null;
   onSectionChange?: (section: DynamicFormSection) => void | boolean | Promise<void | boolean>;
+  activeSectionId?: string | null;
+  onActiveSectionChange?: (sectionId: string) => void;
 };
 
 function clampSpan(value: number | undefined) {
@@ -117,15 +125,48 @@ function asStringArray(value: DynamicFormRuntimeValue | undefined) {
 type ChoiceRuntimeOption = {
   code: string;
   label: string;
+  availability?: "available" | "stale" | "unverified";
 };
+
+type RuntimeFieldAccessibility = {
+  describedBy?: string;
+  invalid?: boolean;
+};
+
+function runtimeFieldDomId(fieldId: string) {
+  const normalized = String(fieldId ?? "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "field";
+}
+
+function joinAriaDescribedBy(...ids: Array<string | null | undefined>) {
+  const value = ids.filter(Boolean).join(" ");
+  return value || undefined;
+}
+
+function getRuntimeFieldDefaultHelperText(field: DynamicFormField) {
+  if (field.type === "date" || field.type === "fullDate") {
+    return `Định dạng: ${getDateInputFormatLabel(field.type === "fullDate" ? "full" : "flexible")}`;
+  }
+
+  if (field.type === "shortText" || field.type === "singleSelect" || field.type === "multiSelect") {
+    return getRuntimeChoiceHelperText(field.valueSource);
+  }
+
+  return null;
+}
 
 function renderField(
   field: DynamicFormField,
   value: DynamicFormRuntimeValue | undefined,
   locked: boolean,
   onChange: (value: DynamicFormRuntimeValue) => void,
+  accessibility: RuntimeFieldAccessibility,
 ) {
   const displayName = getDynamicFormFieldDisplayName(field);
+  const { describedBy, invalid = false } = accessibility;
 
   if (field.type === "boolean") {
     return (
@@ -149,6 +190,10 @@ function renderField(
               checked={asBoolean(value)}
               disabled={locked}
               onChange={(event) => onChange(event.target.checked)}
+              inputProps={{
+                "aria-describedby": describedBy,
+                "aria-invalid": invalid || undefined,
+              }}
             />
           }
           label={displayName}
@@ -166,6 +211,8 @@ function renderField(
         value={value}
         locked={locked}
         onChange={onChange}
+        describedBy={describedBy}
+        invalid={invalid}
       />
     );
   }
@@ -177,11 +224,16 @@ function renderField(
         size="small"
         label={displayName}
         required={field.required}
+        error={invalid}
         disabled={locked}
         value={asLongText(value)}
         multiline
         minRows={3}
         onChange={(event) => onChange(event.target.value || null)}
+        inputProps={{
+          "aria-describedby": describedBy,
+          "aria-invalid": invalid || undefined,
+        }}
         sx={{ minHeight: field.minHeight }}
       />
     );
@@ -195,6 +247,8 @@ function renderField(
         required={field.required}
         minHeight={field.minHeight}
         locked={locked}
+        describedBy={describedBy}
+        invalid={invalid}
         onChange={(next) => onChange(next)}
       />
     );
@@ -209,6 +263,8 @@ function renderField(
         minHeight={field.minHeight}
         locked={locked}
         onChange={onChange}
+        describedBy={describedBy}
+        invalid={invalid}
       />
     );
   }
@@ -220,6 +276,7 @@ function renderField(
       type={field.type === "number" ? "number" : "text"}
       label={displayName}
       required={field.required}
+      error={invalid}
       disabled={locked}
       value={
         field.type === "number"
@@ -242,11 +299,10 @@ function renderField(
           ? getDateInputFormatLabel(field.type === "fullDate" ? "full" : "flexible")
           : undefined
       }
-      helperText={
-        field.type === "date" || field.type === "fullDate"
-          ? `Định dạng: ${getDateInputFormatLabel(field.type === "fullDate" ? "full" : "flexible")}`
-          : undefined
-      }
+      inputProps={{
+        "aria-describedby": describedBy,
+        "aria-invalid": invalid || undefined,
+      }}
       InputLabelProps={field.type === "date" || field.type === "fullDate" ? { shrink: true } : undefined}
       sx={{ minHeight: field.minHeight }}
     />
@@ -347,15 +403,23 @@ function RuntimeChoiceSelect({
   value,
   locked,
   onChange,
+  describedBy,
+  invalid,
 }: {
   field: DynamicFormField;
   value: DynamicFormRuntimeValue | undefined;
   locked: boolean;
   onChange: (value: DynamicFormRuntimeValue) => void;
+  describedBy?: string;
+  invalid?: boolean;
 }) {
   const [inputValue, setInputValue] = useState("");
   const [externalOptions, setExternalOptions] = useState<ChoiceRuntimeOption[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [knownExternalOptions, setKnownExternalOptions] = useState<ChoiceRuntimeOption[]>([]);
+  const [sourceLoadState, setSourceLoadState] = useState<
+    "idle" | "loading" | "ready" | "forbidden" | "error"
+  >("idle");
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [searchUnits] = useLazySearchPickerUnitsByCodeQuery();
   const [searchUsers] = useLazySearchPickerUsersQuery();
   const [searchPositions] = useLazySearchPickerPositionsQuery();
@@ -365,6 +429,12 @@ function RuntimeChoiceSelect({
   const source = field.valueSource;
   const isMulti = field.type === "multiSelect";
   const usesExternalSource = Boolean(source && source.sourceType !== "FIXED_ENUM");
+  const sourceIdentity = [
+    source?.sourceType ?? "FIXED_ENUM",
+    source?.catalogId ?? "",
+    source?.catalogCode ?? "",
+    source?.labelCode ?? "",
+  ].join(":");
   const fixedOptions = useMemo(
     () => normalizeRuntimeChoiceOptions(
       source?.sourceType === "FIXED_ENUM" && source.options?.length
@@ -373,17 +443,27 @@ function RuntimeChoiceSelect({
     ),
     [field.options, source],
   );
+  const selectedCodes = useMemo(
+    () => (isMulti ? asStringArray(value) : asText(value) ? [asText(value)] : []),
+    [isMulti, value],
+  );
+
+  useEffect(() => {
+    setExternalOptions([]);
+    setKnownExternalOptions([]);
+    setSourceLoadState(usesExternalSource ? "idle" : "ready");
+    setRetryAttempt(0);
+  }, [sourceIdentity, usesExternalSource]);
 
   useEffect(() => {
     if (!usesExternalSource || !source) {
-      setExternalOptions([]);
       return;
     }
 
     let cancelled = false;
+    setSourceLoadState("loading");
     const timer = window.setTimeout(async () => {
       try {
-        setLoading(true);
         const rows = await loadRuntimeValueSourceOptions({
           source,
           query: inputValue,
@@ -393,11 +473,30 @@ function RuntimeChoiceSelect({
           searchUnitTypes,
           searchLabelEnumOptions,
         });
-        if (!cancelled) setExternalOptions(rows);
-      } catch {
-        if (!cancelled) setExternalOptions([]);
-      } finally {
-        if (!cancelled) setLoading(false);
+        const selectedLookups = await Promise.all(
+          selectedCodes.map((code) => loadRuntimeValueSourceOptions({
+            source,
+            query: code,
+            searchUnits,
+            searchUsers,
+            searchPositions,
+            searchUnitTypes,
+            searchLabelEnumOptions,
+          })),
+        );
+        const verifiedSelectedRows = selectedLookups
+          .flat()
+          .filter((option) => selectedCodes.some((code) => option.code === code));
+        if (!cancelled) {
+          setExternalOptions(rows);
+          setKnownExternalOptions((current) => mergeRuntimeChoiceOptions(current, rows, verifiedSelectedRows));
+          setSourceLoadState("ready");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setExternalOptions([]);
+          setSourceLoadState(isRuntimeValueSourceForbiddenError(error) ? "forbidden" : "error");
+        }
       }
     }, 250);
 
@@ -407,6 +506,8 @@ function RuntimeChoiceSelect({
     };
   }, [
     inputValue,
+    retryAttempt,
+    selectedCodes,
     searchLabelEnumOptions,
     searchPositions,
     searchUnitTypes,
@@ -417,40 +518,157 @@ function RuntimeChoiceSelect({
   ]);
 
   const baseOptions = usesExternalSource ? externalOptions : fixedOptions;
-  const selectedCodes = isMulti ? asStringArray(value) : asText(value) ? [asText(value)] : [];
-  const mergedOptions = useMemo(
-    () => mergeRuntimeChoiceOptions(baseOptions, selectedCodes),
-    [baseOptions, selectedCodes],
+  const knownOptions = usesExternalSource ? knownExternalOptions : fixedOptions;
+  const selectedKnownOptions = selectedCodes
+    .map((code) => knownOptions.find((option) => option.code === code))
+    .filter((option): option is ChoiceRuntimeOption => Boolean(option));
+  const selectableOptions = useMemo(
+    () => mergeRuntimeChoiceOptions(baseOptions, selectedKnownOptions),
+    [baseOptions, selectedKnownOptions],
   );
+  const sourceReady = !usesExternalSource || sourceLoadState === "ready";
+  const staleCodes = sourceReady
+    ? selectedCodes.filter((code) => !knownOptions.some((option) => option.code === code))
+    : [];
   const selectedOptions = selectedCodes
-    .map((code) => mergedOptions.find((option) => option.code === code) ?? { code, label: code })
+    .map((code) => {
+      const known = knownOptions.find((option) => option.code === code);
+      if (known) return { ...known, availability: "available" as const };
+      return sourceReady
+        ? { code, label: `${code} · Không còn khả dụng`, availability: "stale" as const }
+        : { code, label: `${code} · Chưa xác minh`, availability: "unverified" as const };
+    })
     .filter((option) => option.code);
   const displayName = getDynamicFormFieldDisplayName(field);
+  const sourceStatusId = `dynamic-form-runtime-${runtimeFieldDomId(field.id)}-source-status`;
+  const loading = sourceLoadState === "loading";
+  const sourceFailed = sourceLoadState === "forbidden" || sourceLoadState === "error";
+  const sourceHasStatus = loading || sourceFailed || staleCodes.length > 0;
+  const inputDescribedBy = joinAriaDescribedBy(describedBy, sourceHasStatus ? sourceStatusId : null);
+  const noOptionsText = sourceLoadState === "forbidden"
+    ? "Không có quyền tải lựa chọn"
+    : sourceLoadState === "error"
+      ? "Không tải được nguồn lựa chọn"
+      : loading
+        ? "Đang tải lựa chọn"
+        : "Không có lựa chọn";
+  const renderSourceState = () => {
+    if (loading) {
+      return (
+        <Typography id={sourceStatusId} role="status" variant="caption" color="text.secondary">
+          Đang tải nguồn lựa chọn...
+        </Typography>
+      );
+    }
+
+    if (sourceFailed) {
+      return (
+        <Alert
+          id={sourceStatusId}
+          severity="error"
+          action={(
+            <Button color="inherit" size="small" onClick={() => setRetryAttempt((current) => current + 1)}>
+              Thử lại
+            </Button>
+          )}
+          sx={{ py: 0, alignItems: "center" }}
+        >
+          {sourceLoadState === "forbidden"
+            ? "Bạn không có quyền tải nguồn lựa chọn này."
+            : "Không tải được nguồn lựa chọn. Vui lòng thử lại."}
+        </Alert>
+      );
+    }
+
+    if (staleCodes.length > 0) {
+      return (
+        <Alert id={sourceStatusId} severity="warning" sx={{ py: 0 }}>
+          Giá trị đã lưu không còn khả dụng trong nguồn hiện tại: {staleCodes.slice(0, 3).join(", ")}
+          {staleCodes.length > 3 ? ` và ${staleCodes.length - 3} giá trị khác` : ""}.
+        </Alert>
+      );
+    }
+
+    return null;
+  };
 
   if (isMulti) {
     return (
-      <Autocomplete<ChoiceRuntimeOption, true, false, false>
-        multiple
+      <Stack spacing={0.75}>
+        <Autocomplete<ChoiceRuntimeOption, true, false, false>
+          multiple
+          fullWidth
+          size="small"
+          disabled={locked}
+          loading={loading}
+          options={selectableOptions}
+          value={selectedOptions}
+          inputValue={inputValue}
+          filterSelectedOptions
+          isOptionEqualToValue={(option, selected) => option.code === selected.code}
+          getOptionLabel={(option) => option.label || option.code}
+          onInputChange={(_event, next) => setInputValue(next)}
+          onChange={(_event, rows) => onChange(rows.length > 0 ? rows.map((row) => row.code) : null)}
+          noOptionsText={noOptionsText}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={displayName}
+              required={field.required}
+              error={Boolean(invalid)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{
+                ...params.inputProps,
+                "aria-busy": loading || undefined,
+                "aria-describedby": inputDescribedBy,
+                "aria-invalid": invalid || undefined,
+              }}
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {loading && <CircularProgress color="inherit" size={18} />}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+          sx={{ minHeight: field.minHeight }}
+        />
+        {renderSourceState()}
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack spacing={0.75}>
+      <Autocomplete<ChoiceRuntimeOption, false, false, false>
         fullWidth
         size="small"
         disabled={locked}
         loading={loading}
-        options={mergedOptions}
-        value={selectedOptions}
+        options={selectableOptions}
+        value={selectedOptions[0] ?? null}
         inputValue={inputValue}
-        filterSelectedOptions
         isOptionEqualToValue={(option, selected) => option.code === selected.code}
         getOptionLabel={(option) => option.label || option.code}
         onInputChange={(_event, next) => setInputValue(next)}
-        onChange={(_event, rows) => onChange(rows.length > 0 ? rows.map((row) => row.code) : null)}
-        noOptionsText="Không có lựa chọn"
+        onChange={(_event, row) => onChange(row?.code ?? null)}
+        noOptionsText={noOptionsText}
         renderInput={(params) => (
           <TextField
             {...params}
             label={displayName}
             required={field.required}
-            helperText={getRuntimeChoiceHelperText(source)}
+            error={Boolean(invalid)}
             InputLabelProps={{ shrink: true }}
+            inputProps={{
+              ...params.inputProps,
+              "aria-busy": loading || undefined,
+              "aria-describedby": inputDescribedBy,
+              "aria-invalid": invalid || undefined,
+            }}
             InputProps={{
               ...params.InputProps,
               endAdornment: (
@@ -464,43 +682,8 @@ function RuntimeChoiceSelect({
         )}
         sx={{ minHeight: field.minHeight }}
       />
-    );
-  }
-
-  return (
-    <Autocomplete<ChoiceRuntimeOption, false, false, false>
-      fullWidth
-      size="small"
-      disabled={locked}
-      loading={loading}
-      options={mergedOptions}
-      value={selectedOptions[0] ?? null}
-      inputValue={inputValue}
-      isOptionEqualToValue={(option, selected) => option.code === selected.code}
-      getOptionLabel={(option) => option.label || option.code}
-      onInputChange={(_event, next) => setInputValue(next)}
-      onChange={(_event, row) => onChange(row?.code ?? null)}
-      noOptionsText="Không có lựa chọn"
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label={displayName}
-          required={field.required}
-          helperText={getRuntimeChoiceHelperText(source)}
-          InputLabelProps={{ shrink: true }}
-          InputProps={{
-            ...params.InputProps,
-            endAdornment: (
-              <>
-                {loading && <CircularProgress color="inherit" size={18} />}
-                {params.InputProps.endAdornment}
-              </>
-            ),
-          }}
-        />
-      )}
-      sx={{ minHeight: field.minHeight }}
-    />
+      {renderSourceState()}
+    </Stack>
   );
 }
 
@@ -516,20 +699,30 @@ function normalizeRuntimeChoiceOptions(options?: Array<{ code: string; label: st
   return rows;
 }
 
-function mergeRuntimeChoiceOptions(options: ChoiceRuntimeOption[], selectedCodes: string[]) {
+function mergeRuntimeChoiceOptions(...groups: ChoiceRuntimeOption[][]) {
   const seen = new Set<string>();
   const rows: ChoiceRuntimeOption[] = [];
-  for (const option of options) {
-    if (!option.code || seen.has(option.code)) continue;
-    seen.add(option.code);
-    rows.push(option);
-  }
-  for (const code of selectedCodes) {
-    if (!code || seen.has(code)) continue;
-    seen.add(code);
-    rows.push({ code, label: code });
+  for (const options of groups) {
+    for (const option of options) {
+      const key = option.code.toLowerCase();
+      if (!option.code || seen.has(key)) continue;
+      seen.add(key);
+      rows.push(option);
+    }
   }
   return rows;
+}
+
+function isRuntimeValueSourceForbiddenError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const row = error as {
+    status?: unknown;
+    originalStatus?: unknown;
+    response?: { status?: unknown };
+    data?: { status?: unknown };
+  };
+  return [row.status, row.originalStatus, row.response?.status, row.data?.status]
+    .some((status) => Number(status) === 403);
 }
 
 function getRuntimeChoiceHelperText(source: DynamicFormField["valueSource"]) {
@@ -537,7 +730,7 @@ function getRuntimeChoiceHelperText(source: DynamicFormField["valueSource"]) {
     return "Chọn từ danh sách đã cấu hình; hệ thống lưu mã để thống kê.";
   }
   if (source.sourceType === "ENUM_CATALOG") {
-    return "Chọn từ danh mục enum riêng; hệ thống lưu mã để thống kê.";
+    return "Chọn từ danh mục lựa chọn riêng; hệ thống lưu mã để thống kê.";
   }
   return "Chọn từ danh mục hệ thống; hệ thống lưu mã để thống kê.";
 }
@@ -591,6 +784,8 @@ function StringListRuntimeEditor({
   minHeight,
   locked,
   onChange,
+  describedBy,
+  invalid,
 }: {
   label: string;
   value: string[];
@@ -598,6 +793,8 @@ function StringListRuntimeEditor({
   minHeight: number;
   locked: boolean;
   onChange: (value: DynamicFormRuntimeValue) => void;
+  describedBy?: string;
+  invalid?: boolean;
 }) {
   const rows = value.length > 0 ? value : [""];
   const commit = (nextRows: string[]) => {
@@ -637,9 +834,14 @@ function StringListRuntimeEditor({
               size="small"
               label={`Ý ${index + 1}`}
               value={item}
+              error={Boolean(invalid)}
               disabled={locked}
               multiline
               minRows={2}
+              inputProps={{
+                "aria-describedby": describedBy,
+                "aria-invalid": invalid || undefined,
+              }}
               onChange={(event) => {
                 const next = [...rows];
                 next[index] = event.target.value;
@@ -649,7 +851,7 @@ function StringListRuntimeEditor({
             {!locked && (
               <IconButton
                 size="small"
-                aria-label="Xóa ý"
+                aria-label={`Xóa ý ${index + 1}`}
                 disabled={rows.length <= 1}
                 onClick={() => commit(rows.filter((_row, rowIndex) => rowIndex !== index))}
               >
@@ -660,6 +862,97 @@ function StringListRuntimeEditor({
         ))}
       </Stack>
     </Box>
+  );
+}
+
+function RuntimeFieldControl({
+  field,
+  value,
+  locked,
+  state,
+  onChange,
+}: {
+  field: DynamicFormField;
+  value: DynamicFormRuntimeValue | undefined;
+  locked: boolean;
+  state?: DynamicFormRuntimeFieldState | null;
+  onChange: (value: DynamicFormRuntimeValue) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const displayName = getDynamicFormFieldDisplayName(field);
+  const hasError = Boolean(state?.error || state?.errorText);
+  const defaultHelperText = getRuntimeFieldDefaultHelperText(field);
+  const feedbackText = hasError
+    ? state?.errorText ?? "Giá trị chưa hợp lệ."
+    : state?.helperText !== undefined
+      ? state.helperText
+      : defaultHelperText;
+  const hasFeedback = feedbackText !== null && feedbackText !== undefined && feedbackText !== false && feedbackText !== "";
+  const feedbackId = hasFeedback
+    ? `dynamic-form-runtime-${runtimeFieldDomId(field.id)}-feedback`
+    : undefined;
+
+  useEffect(() => {
+    if (!state?.focusTarget) return;
+
+    const timer = window.setTimeout(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      const selectors = [
+        "input:not([disabled])",
+        "textarea:not([disabled])",
+        '[contenteditable="true"]',
+        'button[role="combobox"]:not([disabled])',
+        "button:not([disabled])",
+      ];
+      const target = selectors
+        .map((selector) => container.querySelector<HTMLElement>(selector))
+        .find(Boolean) ?? container;
+      target.focus();
+      target.scrollIntoView?.({ block: "center", inline: "nearest" });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [field.id, state?.focusTarget]);
+
+  return (
+    <Stack
+      ref={containerRef}
+      spacing={0.5}
+      role="group"
+      aria-label={displayName}
+      aria-describedby={feedbackId}
+      aria-invalid={hasError || undefined}
+      tabIndex={state?.focusTarget ? -1 : undefined}
+      data-runtime-field-id={field.id}
+      data-runtime-field-focus-target={state?.focusTarget ? "true" : undefined}
+    >
+      {renderField(
+        field,
+        value,
+        locked || Boolean(state?.readOnly),
+        onChange,
+        { describedBy: feedbackId, invalid: hasError },
+      )}
+      {hasFeedback && (
+        <FormHelperText
+          id={feedbackId}
+          error={hasError}
+          role={hasError ? "alert" : undefined}
+          sx={{ mx: 1.75, mt: 0.25 }}
+        >
+          {feedbackText}
+        </FormHelperText>
+      )}
+      {field.isStatistic && field.type !== "boolean" && (
+        <Chip
+          size="small"
+          variant="outlined"
+          label={uiText(UITextKey.TextThongKe)}
+          sx={{ alignSelf: "flex-start" }}
+        />
+      )}
+    </Stack>
   );
 }
 
@@ -679,6 +972,8 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
     getSectionValidationState,
     getSectionEntryState,
     onSectionChange,
+    activeSectionId,
+    onActiveSectionChange,
   } = props;
 
   const locked = readOnly || disabled;
@@ -709,8 +1004,9 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
   );
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [sectionSwitching, setSectionSwitching] = useState(false);
+  const effectiveSelectedSectionId = activeSectionId ?? selectedSectionId;
   const selectedSection =
-    visibleSections.find((section) => section.id === selectedSectionId) ??
+    visibleSections.find((section) => section.id === effectiveSelectedSectionId) ??
     visibleSections[0] ??
     null;
   const selectedSectionFields = selectedSection
@@ -737,12 +1033,20 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
   );
 
   useEffect(() => {
+    if (activeSectionId !== undefined) return;
     setSelectedSectionId((prev) =>
       visibleSections.some((section) => section.id === prev)
         ? prev
         : visibleSections[0]?.id ?? "",
     );
-  }, [visibleSections]);
+  }, [activeSectionId, visibleSections]);
+
+  useEffect(() => {
+    if (activeSectionId === undefined || !selectedSection) return;
+    if (selectedSection.id !== activeSectionId) {
+      onActiveSectionChange?.(selectedSection.id);
+    }
+  }, [activeSectionId, onActiveSectionChange, selectedSection]);
 
   if (visibleSections.length === 0) return null;
 
@@ -759,7 +1063,8 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
         return;
       }
 
-      setSelectedSectionId(section.id);
+      if (activeSectionId === undefined) setSelectedSectionId(section.id);
+      onActiveSectionChange?.(section.id);
     } catch {
       // Caller owns user-facing error messaging.
     } finally {
@@ -803,19 +1108,13 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                   minWidth: 0,
                 }}
               >
-                <Stack spacing={0.5}>
-                  {renderField(field, values[field.id], locked || Boolean(getFieldState?.(field)?.readOnly), (value) =>
-                    onChange(field.id, value),
-                  )}
-                  {field.isStatistic && field.type !== "boolean" && (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={uiText(UITextKey.TextThongKe)}
-                      sx={{ alignSelf: "flex-start" }}
-                    />
-                  )}
-                </Stack>
+                <RuntimeFieldControl
+                  field={field}
+                  value={values[field.id]}
+                  locked={locked}
+                  state={getFieldState?.(field)}
+                  onChange={(value) => onChange(field.id, value)}
+                />
               </Box>
             ))}
           </Box>
@@ -904,6 +1203,8 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                 return (
                   <ListItemButton
                     key={item.section.id}
+                    data-testid={`dynamic-form-runtime-section-${item.section.id}`}
+                    data-runtime-section-id={item.section.id}
                     selected={selected}
                     disabled={sectionSwitching}
                     onClick={() => void requestSectionChange(item.section)}
@@ -1044,19 +1345,13 @@ export default function DynamicFormRuntimeFields(props: DynamicFormRuntimeFields
                             minWidth: 0,
                           }}
                         >
-                          <Stack spacing={0.5}>
-                            {renderField(field, values[field.id], locked || Boolean(getFieldState?.(field)?.readOnly), (value) =>
-                              onChange(field.id, value),
-                            )}
-                            {field.isStatistic && field.type !== "boolean" && (
-                              <Chip
-                                size="small"
-                                variant="outlined"
-                                label={uiText(UITextKey.TextThongKe)}
-                                sx={{ alignSelf: "flex-start" }}
-                              />
-                            )}
-                          </Stack>
+                          <RuntimeFieldControl
+                            field={field}
+                            value={values[field.id]}
+                            locked={locked}
+                            state={getFieldState?.(field)}
+                            onChange={(value) => onChange(field.id, value)}
+                          />
                         </Box>
                       ))}
                     </Box>

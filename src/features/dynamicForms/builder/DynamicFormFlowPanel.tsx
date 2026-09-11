@@ -4,8 +4,6 @@ import {
   Box,
   Button,
   Checkbox,
-  Divider,
-  FormControlLabel,
   IconButton,
   MenuItem,
   Select,
@@ -39,7 +37,7 @@ import {
 import type { DynamicFormField } from "../dynamicForm.types";
 import { getDynamicFormBlockJsonList, getDynamicFormFieldDisplayName } from "../dynamicFormSchema";
 
-type FlowTab = "steps" | "actors" | "permissions" | "mapping" | "rollback" | "final" | "stats";
+type FlowTab = "steps" | "actors" | "permissions" | "mapping" | "rollback" | "final";
 type PermissionTargetTab = "fields" | "tables";
 
 type FlowStep = {
@@ -143,14 +141,39 @@ type Props = {
 };
 
 const actorRoles = ["ISSUER", "ASSIGNEE", "COORDINATOR", "REVIEWER", "FINALIZER"];
+const actorRoleLabels: Record<string, string> = {
+  ISSUER: "Người khởi tạo",
+  ASSIGNEE: "Người thực hiện",
+  COORDINATOR: "Điều phối",
+  REVIEWER: "Người duyệt",
+  FINALIZER: "Người chốt",
+};
+const flowOptionLabels: Record<string, string> = {
+  COPY: "Sao chép",
+  FIRST_NON_BLANK: "Giá trị đầu tiên",
+  SUM: "Tổng",
+  COUNT: "Đếm",
+  TEXT_JOIN: "Nối văn bản",
+  OVERWRITE: "Ghi đè",
+  TARGET_WINS: "Giữ giá trị đích",
+  ERROR_ON_CONFLICT: "Báo lỗi khi xung đột",
+  APPEND: "Nối thêm",
+  EXCLUDE: "Không tính",
+  INCLUDE: "Có tính",
+};
+const flowTemplateStatusLabels: Record<string, string> = {
+  DRAFT: "Bản nháp",
+  ACTIVE: "Đang dùng",
+  INACTIVE: "Ngừng dùng",
+  LOCKED: "Đã khóa",
+};
 const flowTabs: Array<{ value: FlowTab; label: string }> = [
-  { value: "steps", label: "Buoc" },
-  { value: "actors", label: "Vai tro" },
-  { value: "permissions", label: "Quyen" },
-  { value: "mapping", label: "Mapping" },
-  { value: "rollback", label: "Rollback" },
-  { value: "final", label: "Ket qua" },
-  { value: "stats", label: "Thong ke" },
+  { value: "steps", label: "Bước" },
+  { value: "actors", label: "Vai trò" },
+  { value: "permissions", label: "Quyền" },
+  { value: "mapping", label: "Liên kết" },
+  { value: "rollback", label: "Quay lại bước trước" },
+  { value: "final", label: "Kết quả" },
 ];
 const maxMatrixRows = 80;
 
@@ -203,8 +226,6 @@ export default function DynamicFormFlowPanel({
   const activeStep = payload.steps.find((step) => step.stepId === selectedStepId) ?? payload.steps[0];
   const visibleFieldTargets = fieldTargets.slice(0, maxMatrixRows);
   const visibleTableTargets = tableTargets.slice(0, maxMatrixRows);
-  const rowIdentityWarning = hasRowCompare(statisticProfile(payload)) && tableTargets.length === 0;
-
   useEffect(() => {
     if (!dynamicFormTemplateId) {
       setTemplates([]);
@@ -215,7 +236,6 @@ export default function DynamicFormFlowPanel({
     }
 
     void reloadTemplates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dynamicFormTemplateId]);
 
   useEffect(() => {
@@ -231,7 +251,7 @@ export default function DynamicFormFlowPanel({
         if (!cancelled) setTemplateDetail(detail);
       })
       .catch((err) => {
-        if (!cancelled) setMessage({ severity: "error", text: readErrorMessage(err, "Khong tai duoc flow.") });
+        if (!cancelled) setMessage({ severity: "error", text: readErrorMessage(err, "Không tải được quy trình.") });
       });
 
     return () => {
@@ -279,7 +299,7 @@ export default function DynamicFormFlowPanel({
       const nextPayload = createDefaultPayload(fieldTargets);
       const created = await createTemplate({
         code: buildTemplateCode(dynamicFormTemplateId),
-        name: "Dynamic flow",
+        name: "Quy trình động",
         dynamicFormTemplateId,
         payloadJson: JSON.stringify(normalizePayload(nextPayload)),
       }).unwrap();
@@ -287,9 +307,9 @@ export default function DynamicFormFlowPanel({
       setSelectedTemplateId(created.id);
       setPayload(parseFlowPayload(created.draftVersion?.payloadJson));
       await reloadTemplates(created.id);
-      setMessage({ severity: "success", text: "Da tao flow." });
+      setMessage({ severity: "success", text: "Đã tạo quy trình." });
     } catch (err) {
-      setMessage({ severity: "error", text: readErrorMessage(err, "Khong tao duoc flow.") });
+      setMessage({ severity: "error", text: readErrorMessage(err, "Không tạo được quy trình.") });
     }
   }
 
@@ -304,9 +324,9 @@ export default function DynamicFormFlowPanel({
       }).unwrap();
       await refreshTemplate(activeTemplate.id);
       await reloadTemplates(activeTemplate.id);
-      setMessage({ severity: "success", text: "Da luu flow." });
+      setMessage({ severity: "success", text: "Đã lưu quy trình." });
     } catch (err) {
-      setMessage({ severity: "error", text: readErrorMessage(err, "Khong luu duoc flow.") });
+      setMessage({ severity: "error", text: readErrorMessage(err, "Không lưu được quy trình.") });
     }
   }
 
@@ -317,17 +337,17 @@ export default function DynamicFormFlowPanel({
       await lockVersion({ versionId: activeTemplate.draftVersion.id }).unwrap();
       await refreshTemplate(activeTemplate.id);
       await reloadTemplates(activeTemplate.id);
-      setMessage({ severity: "success", text: "Da khoa version flow." });
+      setMessage({ severity: "success", text: "Đã khóa phiên bản quy trình." });
     } catch (err) {
-      setMessage({ severity: "error", text: readErrorMessage(err, "Khong khoa duoc flow.") });
+      setMessage({ severity: "error", text: readErrorMessage(err, "Không khóa được quy trình.") });
     }
   }
 
   if (!dynamicFormTemplateId) {
     return (
       <Stack spacing={1.5}>
-        <Typography fontWeight={800}>Flow</Typography>
-        <Alert severity="info">Luu bieu mau truoc khi cau hinh flow.</Alert>
+        <Typography fontWeight={800}>Quy trình</Typography>
+        <Alert severity="info">Lưu biểu mẫu trước khi cấu hình luồng.</Alert>
       </Stack>
     );
   }
@@ -339,10 +359,12 @@ export default function DynamicFormFlowPanel({
           <AccountTreeIcon color="primary" />
           <Box sx={{ minWidth: 0 }}>
             <Typography fontWeight={800} noWrap>
-              Flow
+              Luồng
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
-              {activeTemplate ? `${activeTemplate.code} - ${activeTemplate.status}` : "Chua co template"}
+              {activeTemplate
+                ? `${activeTemplate.code} - ${flowTemplateStatusLabels[activeTemplate.status] ?? activeTemplate.status}`
+                : "Chưa có mẫu quy trình"}
             </Typography>
           </Box>
         </Stack>
@@ -370,7 +392,7 @@ export default function DynamicFormFlowPanel({
               disabled={busy}
               onClick={() => void createFlowTemplate()}
             >
-              Tao flow
+              Tạo quy trình
             </Button>
           )}
           {activeTemplate && !readOnly && (
@@ -380,7 +402,7 @@ export default function DynamicFormFlowPanel({
               disabled={busy}
               onClick={() => void saveFlowDraft()}
             >
-              Luu flow
+              Lưu quy trình
             </Button>
           )}
           {activeTemplate?.draftVersion && !readOnly && (
@@ -390,7 +412,7 @@ export default function DynamicFormFlowPanel({
               disabled={busy}
               onClick={() => void lockFlowVersion()}
             >
-              Khoa version
+              Khóa phiên bản
             </Button>
           )}
         </Stack>
@@ -398,10 +420,10 @@ export default function DynamicFormFlowPanel({
 
       {message && <Alert severity={message.severity}>{message.text}</Alert>}
       {!activeTemplate && !busy && (
-        <Alert severity="info">Chua co flow template cho bieu mau nay.</Alert>
+        <Alert severity="info">Chưa có mẫu quy trình cho biểu mẫu này.</Alert>
       )}
       {activeTemplate && !activeVersion && (
-        <Alert severity="warning">Template chua co payload version.</Alert>
+        <Alert severity="warning">Mẫu chưa có dữ liệu phiên bản.</Alert>
       )}
 
       <Tabs
@@ -419,9 +441,9 @@ export default function DynamicFormFlowPanel({
       {tab === "steps" && (
         <Stack spacing={1}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography fontWeight={700}>Flow steps</Typography>
+            <Typography fontWeight={700}>Các bước quy trình</Typography>
             {!readOnly && (
-              <Tooltip title="Them buoc">
+              <Tooltip title="Thêm bước">
                 <IconButton size="small" onClick={() => setPayload(addStep(payload))}>
                   <AddIcon fontSize="small" />
                 </IconButton>
@@ -431,10 +453,10 @@ export default function DynamicFormFlowPanel({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Order</TableCell>
-                <TableCell>Step id</TableCell>
-                <TableCell>Step code</TableCell>
-                <TableCell>Name</TableCell>
+                <TableCell>Thứ tự</TableCell>
+                <TableCell>Định danh bước</TableCell>
+                <TableCell>Mã bước</TableCell>
+                <TableCell>Tên bước</TableCell>
                 <TableCell width={44} />
               </TableRow>
             </TableHead>
@@ -484,9 +506,9 @@ export default function DynamicFormFlowPanel({
       {tab === "actors" && (
         <Stack spacing={1}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography fontWeight={700}>Actor policies</Typography>
+            <Typography fontWeight={700}>Chính sách vai trò</Typography>
             {!readOnly && (
-              <Tooltip title="Them policy">
+              <Tooltip title="Thêm chính sách">
                 <IconButton size="small" onClick={addActorPolicy}>
                   <AddIcon fontSize="small" />
                 </IconButton>
@@ -496,11 +518,11 @@ export default function DynamicFormFlowPanel({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Step</TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Sub-flow</TableCell>
-                <TableCell>Forward</TableCell>
-                <TableCell>Final</TableCell>
+                <TableCell>Bước</TableCell>
+                <TableCell>Vai trò</TableCell>
+                <TableCell>Luồng con</TableCell>
+                <TableCell>Chuyển tiếp</TableCell>
+                <TableCell>Kết thúc</TableCell>
                 <TableCell width={44} />
               </TableRow>
             </TableHead>
@@ -554,8 +576,8 @@ export default function DynamicFormFlowPanel({
               onChange={(_, value) => setPermissionTab(value as PermissionTargetTab)}
               sx={{ minHeight: 36 }}
             >
-              <Tab value="fields" label={`Fields ${fieldTargets.length}`} />
-              <Tab value="tables" label={`Tables ${tableTargets.length}`} />
+              <Tab value="fields" label={`Trường ${fieldTargets.length}`} />
+              <Tab value="tables" label={`Bảng ${tableTargets.length}`} />
             </Tabs>
           </Stack>
           {permissionTab === "fields" ? (
@@ -591,9 +613,9 @@ export default function DynamicFormFlowPanel({
       {tab === "mapping" && (
         <Stack spacing={1}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography fontWeight={700}>Mapping rules</Typography>
+            <Typography fontWeight={700}>Quy tắc ánh xạ</Typography>
             {!readOnly && (
-              <Tooltip title="Them mapping">
+              <Tooltip title="Thêm ánh xạ">
                 <IconButton size="small" onClick={addMappingRule}>
                   <AddIcon fontSize="small" />
                 </IconButton>
@@ -603,12 +625,12 @@ export default function DynamicFormFlowPanel({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Step</TableCell>
-                <TableCell>Source</TableCell>
-                <TableCell>Target</TableCell>
-                <TableCell>Transform</TableCell>
-                <TableCell>Policy</TableCell>
-                <TableCell>Concept</TableCell>
+                <TableCell>Bước</TableCell>
+                <TableCell>Nguồn</TableCell>
+                <TableCell>Đích</TableCell>
+                <TableCell>Biến đổi</TableCell>
+                <TableCell>Chính sách</TableCell>
+                <TableCell>Khái niệm</TableCell>
                 <TableCell width={44} />
               </TableRow>
             </TableHead>
@@ -644,7 +666,7 @@ export default function DynamicFormFlowPanel({
                       <TextField
                         size="small"
                         value={rule.joinKey ?? ""}
-                        placeholder="joinKey"
+                        placeholder="Khóa ghép"
                         disabled={readOnly}
                         onChange={(event) => updateMappingRule(index, { joinKey: event.target.value })}
                       />
@@ -680,7 +702,7 @@ export default function DynamicFormFlowPanel({
 
       {tab === "rollback" && (
         <JsonObjectEditor
-          label="Rollback policy"
+          label="Chính sách quay lại"
           value={payload.rollbackPolicy}
           disabled={readOnly}
           onChange={(rollbackPolicy) => setPayload((current) => ({ ...current, rollbackPolicy }))}
@@ -689,45 +711,13 @@ export default function DynamicFormFlowPanel({
 
       {tab === "final" && (
         <JsonObjectEditor
-          label="Final result policy"
+          label="Chính sách kết quả cuối"
           value={payload.finalResultPolicy}
           disabled={readOnly}
           onChange={(finalResultPolicy) => setPayload((current) => ({ ...current, finalResultPolicy }))}
         />
       )}
 
-      {tab === "stats" && (
-        <Stack spacing={1.5}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={hasRowCompare(statisticProfile(payload))}
-                disabled={readOnly}
-                onChange={(event) =>
-                  setPayload((current) => ({
-                    ...current,
-                    statisticProfile: {
-                      ...current.statisticProfile,
-                      diffMode: event.target.checked ? "ROW_COMPARE" : "NONE",
-                    },
-                  }))
-                }
-              />
-            }
-            label="Row compare"
-          />
-          {rowIdentityWarning && (
-            <Alert severity="warning">Bang hien tai chua co row identity cho row compare.</Alert>
-          )}
-          <Divider />
-          <JsonObjectEditor
-            label="Statistic profile"
-            value={payload.statisticProfile}
-            disabled={readOnly}
-            onChange={(statisticProfile) => setPayload((current) => ({ ...current, statisticProfile }))}
-          />
-        </Stack>
-      )}
     </Stack>
   );
 
@@ -891,7 +881,7 @@ export default function DynamicFormFlowPanel({
       >
         {actorRoles.map((role) => (
           <MenuItem key={role} value={role}>
-            {role}
+            {actorRoleLabels[role] ?? "Vai trò chưa hỗ trợ"}
           </MenuItem>
         ))}
       </Select>
@@ -944,8 +934,8 @@ export default function DynamicFormFlowPanel({
         onChange={(event: SelectChangeEvent) => onChange(event.target.value as "field" | "table")}
         sx={{ width: 108 }}
       >
-        <MenuItem value="field">Field</MenuItem>
-        <MenuItem value="table">Table</MenuItem>
+        <MenuItem value="field">Trường</MenuItem>
+        <MenuItem value="table">Bảng</MenuItem>
       </Select>
     );
   }
@@ -961,7 +951,7 @@ export default function DynamicFormFlowPanel({
       >
         {options.map((option) => (
           <MenuItem key={option} value={option}>
-            {option}
+            {flowOptionLabels[option] ?? "Lựa chọn chưa hỗ trợ"}
           </MenuItem>
         ))}
       </Select>
@@ -1047,12 +1037,12 @@ function PermissionTable({
     <Table size="small">
       <TableHead>
         <TableRow>
-          <TableCell>Target</TableCell>
-          <TableCell>Read</TableCell>
-          <TableCell>Write</TableCell>
-          <TableCell>Required</TableCell>
-          <TableCell>Hidden</TableCell>
-          <TableCell>Lock</TableCell>
+          <TableCell>Đối tượng</TableCell>
+          <TableCell>Đọc</TableCell>
+          <TableCell>Ghi</TableCell>
+          <TableCell>Bắt buộc</TableCell>
+          <TableCell>Ẩn</TableCell>
+          <TableCell>Khóa</TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
@@ -1117,18 +1107,18 @@ function JsonObjectEditor({
         value={text}
         disabled={disabled}
         error={Boolean(error)}
-        helperText={error ?? "JSON object"}
+        helperText={error ?? "Đối tượng JSON"}
         onChange={(event) => setText(event.target.value)}
         onBlur={() => {
           try {
             const parsed = JSON.parse(text || "{}");
             if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-              throw new Error("Object required");
+              throw new Error("Cần nhập đối tượng JSON");
             }
             setError(null);
             onChange(parsed);
           } catch {
-            setError("JSON object khong hop le.");
+            setError("Đối tượng JSON không hợp lệ.");
           }
         }}
       />
@@ -1175,7 +1165,7 @@ function normalizeSteps(steps?: FlowStep[] | null): FlowStep[] {
 
 function createDefaultPayload(fields: FieldTarget[] = []): FlowPayload {
   return {
-    steps: [{ stepId: "step_1", stepCode: "ISSUER", name: "Issuer", order: 1 }],
+    steps: [{ stepId: "step_1", stepCode: "ISSUER", name: "Người khởi tạo", order: 1 }],
     transitions: [],
     actorPolicies: [
       {
@@ -1204,7 +1194,7 @@ function createDefaultPayload(fields: FieldTarget[] = []): FlowPayload {
     mappingRules: [],
     rollbackPolicy: {},
     finalResultPolicy: {},
-    statisticProfile: { diffMode: "NONE" },
+    statisticProfile: {},
   };
 }
 
@@ -1213,7 +1203,7 @@ function addStep(payload: FlowPayload): FlowPayload {
   const step: FlowStep = {
     stepId: createId("step"),
     stepCode: `STEP_${index}`,
-    name: `Step ${index}`,
+    name: `Bước ${index}`,
     order: index,
   };
   return { ...payload, steps: [...payload.steps, step] };
@@ -1305,14 +1295,6 @@ function buildTemplateCode(dynamicFormTemplateId: string) {
   const suffix = dynamicFormTemplateId.slice(-8).toUpperCase();
   const stamp = Date.now().toString(36).toUpperCase().slice(-5);
   return `FLOW_${suffix}_${stamp}`;
-}
-
-function statisticProfile(payload: FlowPayload) {
-  return payload.statisticProfile ?? {};
-}
-
-function hasRowCompare(profile: Record<string, unknown>) {
-  return readString(profile.diffMode)?.toUpperCase() === "ROW_COMPARE";
 }
 
 function createId(prefix: string) {

@@ -470,7 +470,7 @@ export default function LabelListPage() {
             {uiText(UITextKey.TextTaoNhanMoi)}
           </Button>
           <Button variant="outlined" onClick={() => setEnumCatalogOpen(true)} sx={listToolbarButtonSx}>
-            Danh mục enum riêng
+            Danh mục lựa chọn riêng
           </Button>
         </Stack>
 

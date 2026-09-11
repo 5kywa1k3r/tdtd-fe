@@ -256,7 +256,7 @@ export type WorkAssignmentHandoverResponse = {
   queueItemCount: number;
 };
 
-export type AssignmentDraft = {
+export type AssignmentDraft = WorkAssignmentFlowMetadataFields & {
   localId: string;
   id?: string;
   workId?: string;
@@ -322,6 +322,22 @@ export function emptyAssignmentDraft(): AssignmentDraft {
     name: "",
     parentAssignmentId: null,
     createMode: "root",
+    flowTemplateId: null,
+    flowTemplateVersionNo: null,
+    flowInstanceId: null,
+    flowStepId: null,
+    flowStepCode: null,
+    flowStepOrder: null,
+    flowBranchId: null,
+    parentFlowBranchId: null,
+    flowAttemptNo: null,
+    flowRole: null,
+    flowEffectiveStatus: null,
+    issuedByUnitId: null,
+    targetUnitIds: null,
+    allowSubFlow: null,
+    isFlowFinalNode: null,
+    invalidatedByFlowEventId: null,
     dynamicExcelId: "",
     dynamicExcelCode: "",
     dynamicExcelName: "",
@@ -373,6 +389,22 @@ export function toAssignmentDraft(x: WorkAssignmentResponse): AssignmentDraft {
     name: x.name ?? "",
     parentAssignmentId: x.parentAssignmentId ?? null,
     createMode: x.parentAssignmentId ? "child" : "root",
+    flowTemplateId: x.flowTemplateId ?? null,
+    flowTemplateVersionNo: x.flowTemplateVersionNo ?? null,
+    flowInstanceId: x.flowInstanceId ?? null,
+    flowStepId: x.flowStepId ?? null,
+    flowStepCode: x.flowStepCode ?? null,
+    flowStepOrder: x.flowStepOrder ?? null,
+    flowBranchId: x.flowBranchId ?? null,
+    parentFlowBranchId: x.parentFlowBranchId ?? null,
+    flowAttemptNo: x.flowAttemptNo ?? null,
+    flowRole: x.flowRole ?? null,
+    flowEffectiveStatus: x.flowEffectiveStatus ?? null,
+    issuedByUnitId: x.issuedByUnitId ?? null,
+    targetUnitIds: x.targetUnitIds ?? null,
+    allowSubFlow: x.allowSubFlow ?? null,
+    isFlowFinalNode: x.isFlowFinalNode ?? null,
+    invalidatedByFlowEventId: x.invalidatedByFlowEventId ?? null,
     dynamicExcelId: x.dynamicExcelId,
     dynamicExcelCode: x.dynamicExcelCode,
     dynamicExcelName: x.dynamicExcelName,

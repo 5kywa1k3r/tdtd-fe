@@ -8,6 +8,7 @@ export type FieldStatisticSummaryRequest = {
   dynamicFormTemplateId?: string | null;
   fieldId?: string | null;
   fieldKey?: string | null;
+  statisticLabelCode?: string | null;
   fieldType?: string | null;
   bucketKey?: string | null;
   showInTree?: boolean | null;
@@ -33,6 +34,7 @@ export type FieldStatisticSummaryRow = {
   fieldKey: string;
   fieldLabel: string;
   fieldType: string;
+  statisticLabelCodes: string[];
   showInTree: boolean;
   showInDetail: boolean;
   bucketKey?: string | null;

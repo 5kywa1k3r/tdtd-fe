@@ -468,6 +468,16 @@ export function AppTable<T, F extends string = string>(props: AppTableProps<T, F
           onPageChange={handleChangePage}
           onRowsPerPageChange={handleChangeRowsPerPage}
           rowsPerPageOptions={rowsPerPageOptions}
+          labelRowsPerPage="Số dòng:"
+          labelDisplayedRows={({ from, to, count }) =>
+            `${from}–${to} / ${count === -1 ? `hơn ${to}` : count}`
+          }
+          getItemAriaLabel={(type) => {
+            if (type === 'first') return 'Trang đầu';
+            if (type === 'last') return 'Trang cuối';
+            if (type === 'next') return 'Trang tiếp';
+            return 'Trang trước';
+          }}
         />
       )}
     </div>

@@ -4,11 +4,11 @@ import type {
   MyReportTemplateRow,
   MyReportTemplateSearchRequest,
   PagedResult,
+  DynamicFlowMappingPreviewResponse,
+  DynamicFlowMappingRequest,
   SaveWorkAssignmentReportDraftPatchRequest,
   SaveWorkAssignmentReportDraftRequest,
   ApplyDynamicFormAggregateDraftRequest,
-  DynamicFlowMappingPreviewResponse,
-  DynamicFlowMappingRequest,
   SubmitWorkAssignmentReportRequest,
   ReturnWorkAssignmentReportRequest,
   WorkAssignmentReportListRow,
@@ -50,6 +50,122 @@ import type {
 import type { WorkAssignmentEvaluationLogRow } from "./workAssignmentApi";
 import type {EvaluateAssignmentRequest} from '../types/evaluation';
 import type { DynamicExcelDetail } from "./dynamicExcelApi";
+
+export const DYNAMIC_FLOW_MAPPING_APPLY_RESPONSE_INVALID =
+  "DYNAMIC_FLOW_MAPPING_APPLY_RESPONSE_INVALID";
+
+export type DynamicFlowMappingApplyResponseExpectation = {
+  targetReportId: string;
+  targetAssignmentId: string | null | undefined;
+  targetPayloadRevision: number | null | undefined;
+  targetLifecycleRevision: number | null | undefined;
+  commandId: string | null | undefined;
+  resultSemanticHash: string | null | undefined;
+};
+
+function isDynamicFlowMappingApplyRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasDynamicFlowMappingApplyText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isDynamicFlowMappingApplySha256(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function isDynamicFlowMappingApplyNonNegativeInteger(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+const DYNAMIC_FLOW_MAPPING_APPLY_STATES = new Set([
+  "COMMITTED",
+  "PARTIAL",
+  "RETRYING",
+  "RECONCILED",
+]);
+
+/**
+ * Validate the full report core that the editor mutates from after mapping.
+ * A 2xx transport status is not sufficient authority to clear local command
+ * or conflict state.
+ */
+export function sanitizeDynamicFlowMappingApplyResponse(
+  value: unknown,
+  expected: DynamicFlowMappingApplyResponseExpectation,
+): WorkAssignmentReportResponse | null {
+  if (
+    !isDynamicFlowMappingApplyRecord(value) ||
+    !hasDynamicFlowMappingApplyText(expected.targetReportId) ||
+    !hasDynamicFlowMappingApplyText(expected.targetAssignmentId) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(
+      expected.targetPayloadRevision,
+    ) ||
+    Number(expected.targetPayloadRevision) >= Number.MAX_SAFE_INTEGER ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(
+      expected.targetLifecycleRevision,
+    ) ||
+    !hasDynamicFlowMappingApplyText(expected.commandId) ||
+    !isDynamicFlowMappingApplySha256(expected.resultSemanticHash) ||
+    value.id !== expected.targetReportId ||
+    value.workAssignmentId !== expected.targetAssignmentId ||
+    value.dynamicFlowMappingCommandId !== expected.commandId ||
+    value.dynamicFlowMappingResultSemanticHash !== expected.resultSemanticHash ||
+    !hasDynamicFlowMappingApplyText(value.workId) ||
+    !hasDynamicFlowMappingApplyText(value.workReportPeriodId) ||
+    !hasDynamicFlowMappingApplyText(value.periodKey) ||
+    typeof value.specJson !== "string" ||
+    !hasDynamicFlowMappingApplyText(value.createdAtUtc) ||
+    !hasDynamicFlowMappingApplyText(value.updatedAtUtc) ||
+    !Number.isFinite(Date.parse(value.createdAtUtc)) ||
+    !Number.isFinite(Date.parse(value.updatedAtUtc)) ||
+    value.status !== 0 ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.payloadRevision) ||
+    value.payloadRevision !== Number(expected.targetPayloadRevision) + 1 ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.lifecycleRevision) ||
+    value.lifecycleRevision !== expected.targetLifecycleRevision ||
+    !isDynamicFlowMappingApplySha256(value.payloadHash) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.dataRectR0) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.dataRectC0) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.dataRectR1) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.dataRectC1) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.w) ||
+    !isDynamicFlowMappingApplyNonNegativeInteger(value.h) ||
+    !Number.isInteger(value.versionNo) ||
+    Number(value.versionNo) < 1 ||
+    typeof value.canEditPayload !== "boolean" ||
+    typeof value.canSubmit !== "boolean" ||
+    typeof value.canWithdraw !== "boolean" ||
+    typeof value.isLateSubmission !== "boolean" ||
+    value.isCurrent !== true ||
+    value.isActive !== true ||
+    !hasDynamicFlowMappingApplyText(value.lifecycleCommitState) ||
+    (
+      value.lifecycleCommitState !== "COMMITTED" &&
+      value.lifecycleCommitState !== "COMMITTED_PENDING_PROJECTION"
+    ) ||
+    typeof value.lifecycleProjectionPending !== "boolean" ||
+    (
+      value.lifecycleProjectionPending !==
+      (value.lifecycleCommitState === "COMMITTED_PENDING_PROJECTION")
+    ) ||
+    !hasDynamicFlowMappingApplyText(value.dynamicFlowMappingApplyState) ||
+    !DYNAMIC_FLOW_MAPPING_APPLY_STATES.has(value.dynamicFlowMappingApplyState) ||
+    !hasDynamicFlowMappingApplyText(value.dynamicFlowMappingReceiptId) ||
+    !isDynamicFlowMappingApplySha256(
+      value.dynamicFlowMappingResultSemanticHash,
+    ) ||
+    value.dataOrigin !== "PARTIAL_MAPPING" ||
+    value.cumulativeContributionMode !== "EXCLUDE"
+  ) {
+    return null;
+  }
+
+  return value as unknown as WorkAssignmentReportResponse;
+}
 
 export const reportApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -123,6 +239,46 @@ export const reportApi = baseApi.injectEndpoints({
       }),
     }),
 
+    previewDynamicFlowMappingDraft: build.mutation<
+      DynamicFlowMappingPreviewResponse,
+      { id: string; data: DynamicFlowMappingRequest }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/preview-dynamic-flow-mapping`,
+        method: "POST",
+        data,
+      }),
+    }),
+
+    applyDynamicFlowMappingDraft: build.mutation<
+      WorkAssignmentReportResponse,
+      { id: string; data: DynamicFlowMappingRequest }
+    >({
+      query: ({ id, data }) => ({
+        url: `work-assignment-reports/${id}/draft/apply-dynamic-flow-mapping`,
+        method: "POST",
+        data,
+      }),
+      transformResponse: (
+        response: unknown,
+        _meta,
+        { id, data },
+      ) => {
+        const decoded = sanitizeDynamicFlowMappingApplyResponse(response, {
+          targetReportId: id,
+          targetAssignmentId: data.targetAssignmentId,
+          targetPayloadRevision: data.expectedPayloadRevision,
+          targetLifecycleRevision: data.expectedLifecycleRevision,
+          commandId: data.commandId,
+          resultSemanticHash: data.resultSemanticHash,
+        });
+        if (!decoded) {
+          throw new Error(DYNAMIC_FLOW_MAPPING_APPLY_RESPONSE_INVALID);
+        }
+        return decoded;
+      },
+    }),
+
     saveWorkAssignmentReportDraft: build.mutation<
       WorkAssignmentReportResponse,
       {
@@ -160,34 +316,6 @@ export const reportApi = baseApi.injectEndpoints({
     >({
       query: ({ id, data }) => ({
         url: `work-assignment-reports/${id}/draft/preview-dynamic-form-aggregate`,
-        method: "POST",
-        data,
-      }),
-    }),
-
-    previewDynamicFlowMapping: build.mutation<
-      DynamicFlowMappingPreviewResponse,
-      {
-        id: string;
-        data: DynamicFlowMappingRequest;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `work-assignment-reports/${id}/draft/preview-dynamic-flow-mapping`,
-        method: "POST",
-        data,
-      }),
-    }),
-
-    applyDynamicFlowMapping: build.mutation<
-      WorkAssignmentReportResponse,
-      {
-        id: string;
-        data: DynamicFlowMappingRequest;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `work-assignment-reports/${id}/draft/apply-dynamic-flow-mapping`,
         method: "POST",
         data,
       }),
@@ -534,12 +662,12 @@ export const {
   useGetWorkAssignmentReportSectionDetailQuery,
   useLazyGetWorkAssignmentReportSectionDetailQuery,
   useGetWorkAssignmentReportTemplateWorkbookQuery,
+  usePreviewDynamicFlowMappingDraftMutation,
+  useApplyDynamicFlowMappingDraftMutation,
   useSaveWorkAssignmentReportDraftMutation,
   useSaveWorkAssignmentReportDraftPatchMutation,
   useApplyDynamicFormAggregateDraftMutation,
   usePreviewDynamicFormAggregateDraftMutation,
-  usePreviewDynamicFlowMappingMutation,
-  useApplyDynamicFlowMappingMutation,
   useSubmitWorkAssignmentReportMutation,
   useWithdrawSubmittedReportMutation,
   useGetWorkAssignmentReportLogsQuery,

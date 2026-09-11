@@ -75,12 +75,12 @@ const UsersTableComponent: React.FC<UsersTableProps> = ({
     if (row.id === meId) return false;
     if (!canUpdate) return false;
     if (hasRole(row.roles, "ADMIN")) return false;
-    if (meIsAdmin) return hasRole(row.roles, "SYSTEM_ADMIN");
-
     if (meIsSys) {
       if (hasRole(row.roles, "SYSTEM_ADMIN") && row.id !== meId) return false;
       return true;
     }
+
+    if (meIsAdmin) return hasRole(row.roles, "SYSTEM_ADMIN");
 
     if (hasRole(row.roles, "SYSTEM_ADMIN")) return false;
     return true;
@@ -201,6 +201,9 @@ const UsersTableComponent: React.FC<UsersTableProps> = ({
                   <span>
                     <IconButton
                       size="small"
+                      aria-label={`${uiText(UITextKey.TextNgungDungUser)} ${row.username}`}
+                      data-admin-user-action="disable"
+                      data-admin-user-id={row.id}
                       disabled={!delOk}
                       onClick={(e) => {
                         e.stopPropagation();

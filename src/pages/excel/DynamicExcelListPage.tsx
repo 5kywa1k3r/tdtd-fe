@@ -1,6 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { dynamicFormPath } from "../../routes/dynamicFormRoutes";
 
 import { DynamicExcelListTable } from "../../components/excel/DynamicExcelListTable";
 import DynamicExcelFilterBar, {
@@ -141,10 +142,10 @@ export default function DynamicExcelListPage() {
         title={uiText(UITextKey.TextTaoDynamicForm)}
         message={
           <Typography variant="body2">
-            Tạo hoặc mở biểu mẫu động chứa bảng <b>{wrapTarget?.code}</b>.
+            Khởi tạo hoặc mở bản nháp biểu mẫu động chứa bảng <b>{wrapTarget?.code}</b> để tiếp tục cấu hình trước khi công bố.
           </Typography>
         }
-        confirmText="Tạo biểu mẫu"
+        confirmText="Mở bản nháp"
         cancelText="Hủy"
         variant="info"
         confirmLoading={wrapState.isLoading}
@@ -153,7 +154,7 @@ export default function DynamicExcelListPage() {
           const form = await wrapAsForm({ dynamicExcelTemplateId: wrapTarget.id }).unwrap();
           setWrapConfirmOpen(false);
           setWrapTarget(null);
-          navigate(`/dynamic-forms/${form.id}`);
+          navigate(dynamicFormPath(form.id, "edit"));
         }}
         onClose={() => {
           if (wrapState.isLoading) return;

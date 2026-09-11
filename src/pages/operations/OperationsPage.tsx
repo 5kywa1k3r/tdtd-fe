@@ -79,8 +79,14 @@ import type { AppTableColumn } from "../../components/common/AppTable";
 import { Role, isManagerLevelRole, isManagerUnitRole } from "../../constants/roles";
 import type { PagedResult } from "../../types/pagedResult";
 import { UITextKey, uiText } from '../../constants/uiText';
+import { StatConfigReadinessOperationsPanel } from "./StatConfigReadinessOperationsPanel";
 
-type MainTab = "history" | "jobRuns" | "payloadDiagnostics" | "summaryTokens";
+type MainTab =
+  | "history"
+  | "jobRuns"
+  | "payloadDiagnostics"
+  | "statConfigReadiness"
+  | "summaryTokens";
 type JobRunTab =
   | "operationLogs"
   | "materialize"
@@ -302,7 +308,7 @@ const jobRunTabs = [
   ["basicSummary", "Tổng hợp cơ bản"],
 ] as const;
 
-const advancedSummaryJobRunTab = ["advancedSummary", "Advanced summary"] as const;
+const advancedSummaryJobRunTab = ["advancedSummary", "Tổng hợp nâng cao"] as const;
 
 const operationResultOptions = [
   ["", "Tất cả trạng thái"],
@@ -339,43 +345,43 @@ const basicSummaryStatusOptions = [
 ] as const;
 
 const advancedSummaryStatusOptions = [
-  ["", "All statuses"],
-  ["CLEAN", "Clean"],
-  ["DIRTY", "Dirty"],
-  ["BUILDING", "Building"],
-  ["FAILED", "Failed"],
+  ["", "Tất cả trạng thái"],
+  ["CLEAN", "Sạch"],
+  ["DIRTY", "Cần dựng lại"],
+  ["BUILDING", "Đang dựng"],
+  ["FAILED", "Lỗi"],
 ] as const;
 
 const advancedSummaryGrainOptions = [
-  ["", "All grains"],
-  ["DAY", "Day"],
-  ["MONTH", "Month"],
-  ["YEAR", "Year"],
+  ["", "Tất cả mức thời gian"],
+  ["DAY", "Ngày"],
+  ["MONTH", "Tháng"],
+  ["YEAR", "Năm"],
 ] as const;
 
 const flowEffectiveStatusOptions = [
-  ["", "All flow statuses"],
-  ["EFFECTIVE", "Effective"],
-  ["INVALIDATED", "Invalidated"],
-  ["TERMINATED", "Terminated"],
+  ["", "Tất cả trạng thái quy trình"],
+  ["EFFECTIVE", "Đang hiệu lực"],
+  ["INVALIDATED", "Đã vô hiệu"],
+  ["TERMINATED", "Đã kết thúc"],
 ] as const;
 
 const summaryTokenKindOptions = [
-  ["ADVANCED_SUMMARY_CONFIG_LOCK", "Advanced config lock"],
-  ["ADVANCED_SUMMARY_BROAD_HISTORICAL_BUILD", "Broad historical build"],
+  ["ADVANCED_SUMMARY_CONFIG_LOCK", "Khóa cấu hình tổng hợp nâng cao"],
+  ["ADVANCED_SUMMARY_BROAD_HISTORICAL_BUILD", "Dựng dữ liệu lịch sử diện rộng"],
 ] as const;
 
 const summaryTokenDirectionOptions = [
-  ["", "All directions"],
-  ["FREE", "Free"],
-  ["CONSUME", "Consume"],
-  ["GRANT", "Grant"],
+  ["", "Tất cả hướng"],
+  ["FREE", "Giải phóng"],
+  ["CONSUME", "Sử dụng"],
+  ["GRANT", "Cấp thêm"],
 ] as const;
 
 const summaryTokenOutcomeOptions = [
-  ["", "All outcomes"],
-  ["SUCCESS", "Success"],
-  ["FAILED", "Failed"],
+  ["", "Tất cả kết quả"],
+  ["SUCCESS", "Thành công"],
+  ["FAILED", "Lỗi"],
 ] as const;
 
 const formatDateTime = (value?: string | null) => {
@@ -487,6 +493,55 @@ const actionResultLabel = (value?: string | null) => {
   if (normalized === "partialfailed") return "Lỗi một phần";
   if (normalized === "skipped") return "Bỏ qua";
   return value ?? "-";
+};
+
+const flowProjectionIssueLabel = (value?: string | null) => {
+  const labels: Record<string, string> = {
+    NO_STAT_PROJECTION: "Chưa có dữ liệu đọc thống kê",
+    STALE_STAT_PROJECTION: "Dữ liệu đọc thống kê đã cũ",
+    FLOW_METADATA_MISMATCH: "Thông tin quy trình không khớp",
+  };
+  return value ? labels[value.toUpperCase()] ?? value : "-";
+};
+
+const statisticScopeKindLabel = (value?: string | null) => {
+  const labels: Record<string, string> = {
+    TEMPLATE: "Toàn biểu mẫu",
+    BOUNDED: "Phạm vi giới hạn",
+  };
+  return value ? labels[value.toUpperCase()] ?? value : "-";
+};
+
+const advancedSummaryGrainLabel = (value?: string | null) =>
+  labelFromOptions(advancedSummaryGrainOptions, value) ?? value ?? "-";
+
+const advancedSummaryDiagnosticStatusLabel = (value?: string | null) => {
+  const labels: Record<string, string> = {
+    MATCH: "Khớp",
+    MISMATCH: "Không khớp",
+  };
+  return value ? labels[value.toUpperCase()] ?? statusLabel(value) : "-";
+};
+
+const advancedSummaryDifferenceLabel = (value?: string | null) => {
+  const labels: Record<string, string> = {
+    MATCH: "Khớp",
+    CACHE_MISSING: "Thiếu dữ liệu bộ nhớ đệm",
+    CACHE_DIRTY: "Bộ nhớ đệm cần dựng lại",
+    SOURCE_REPORT_COUNT: "Số báo cáo nguồn không khớp",
+    SOURCE_SIGNATURE_HASH: "Mã băm nguồn không khớp",
+    SOURCE_REPORT_IDS: "Danh sách báo cáo nguồn không khớp",
+    INPUT_NODE_KEYS: "Danh sách nút đầu vào không khớp",
+    CACHE_VALUE_JSON_INVALID: "Dữ liệu bộ nhớ đệm không hợp lệ",
+    DIRECT_VALUE_JSON_INVALID: "Dữ liệu tính trực tiếp không hợp lệ",
+    COMPARABLE_VALUE_HASH: "Kết quả tổng hợp không khớp",
+  };
+  if (!value) return "-";
+  const normalized = value.toUpperCase();
+  if (normalized.startsWith("CACHE_STATUS_")) {
+    return `Trạng thái bộ nhớ đệm: ${statusLabel(normalized.slice("CACHE_STATUS_".length))}`;
+  }
+  return labels[normalized] ?? value;
 };
 
 const resultColor = (value?: string | null): ChipColor => {
@@ -720,7 +775,7 @@ function OperationsPage() {
   const canReadSummaryTokens = canViewHistory || canManageSummaryTokenGrants;
   const [tab, setTab] = useState<MainTab>("history");
   const activeTab =
-    tab === "jobRuns" && !isSystemAdmin
+    (tab === "jobRuns" || tab === "statConfigReadiness") && !isSystemAdmin
       ? canReadSummaryTokens ? "summaryTokens" : "history"
       : tab === "payloadDiagnostics" && !isSystemAdmin
         ? canReadSummaryTokens ? "summaryTokens" : "history"
@@ -732,7 +787,10 @@ function OperationsPage() {
 
   const handleMainTabChange = (_event: unknown, value: MainTab) => {
     if (value === "history" && !canViewHistory) return;
-    if ((value === "jobRuns" || value === "payloadDiagnostics") && !isSystemAdmin) return;
+    if (
+      (value === "jobRuns" || value === "payloadDiagnostics" || value === "statConfigReadiness") &&
+      !isSystemAdmin
+    ) return;
     if (value === "summaryTokens" && !canReadSummaryTokens) return;
     setTab(value);
   };
@@ -762,16 +820,25 @@ function OperationsPage() {
           <Tab value="jobRuns" icon={<ManageSearchIcon />} iconPosition="start" label={uiText(UITextKey.TextJobRun)} />
         )}
         {isSystemAdmin && (
-          <Tab value="payloadDiagnostics" icon={<FactCheckIcon />} iconPosition="start" label="Payload báo cáo" />
+          <Tab value="payloadDiagnostics" icon={<FactCheckIcon />} iconPosition="start" label="Dữ liệu báo cáo" />
+        )}
+        {isSystemAdmin && (
+          <Tab
+            value="statConfigReadiness"
+            icon={<FactCheckIcon />}
+            iconPosition="start"
+            label="Readiness cấu hình"
+          />
         )}
         {canReadSummaryTokens && (
-          <Tab value="summaryTokens" icon={<ManageSearchIcon />} iconPosition="start" label="Summary tokens" />
+          <Tab value="summaryTokens" icon={<ManageSearchIcon />} iconPosition="start" label="Hạn mức tổng hợp" />
         )}
       </Tabs>
 
       {activeTab === "history" && canViewHistory && <HistoryPanel />}
       {activeTab === "jobRuns" && isSystemAdmin && <JobRunsPanel />}
       {activeTab === "payloadDiagnostics" && isSystemAdmin && <ReportPayloadDiagnosticsPanel />}
+      {activeTab === "statConfigReadiness" && isSystemAdmin && <StatConfigReadinessOperationsPanel />}
       {activeTab === "summaryTokens" && canReadSummaryTokens && (
         <SummaryTokensPanel canGrant={canManageSummaryTokenGrants} />
       )}
@@ -815,31 +882,31 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
     () => [
       {
         field: "createdAtUtc",
-        header: "Created",
+        header: "Ngày tạo",
         width: 170,
         render: (row) => formatDateTime(row.createdAtUtc),
       },
       {
         field: "ownerUnitId",
-        header: "Owner unit",
+        header: "Đơn vị sở hữu",
         width: 160,
         render: (row) => compactId(row.ownerUnitId),
       },
       {
         field: "periodMonthKey",
-        header: "Month",
+        header: "Tháng",
         width: 100,
         render: (row) => row.periodMonthKey || "-",
       },
       {
         field: "tokenKind",
-        header: "Token kind",
+        header: "Loại hạn mức",
         width: 220,
         render: (row) => <Chip size="small" label={summaryTokenKindLabel(row.tokenKind)} />,
       },
       {
         field: "direction",
-        header: "Direction",
+        header: "Hướng",
         width: 120,
         render: (row) => (
           <Chip
@@ -851,7 +918,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
       },
       {
         field: "outcome",
-        header: "Outcome",
+        header: "Kết quả",
         width: 110,
         render: (row) => (
           <Chip size="small" color={resultColor(row.outcome)} label={summaryTokenOutcomeLabel(row.outcome)} />
@@ -859,14 +926,14 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
       },
       {
         field: "units",
-        header: "Units",
+        header: "Số lượng",
         width: 110,
         align: "right",
         render: (row) => `${row.units}/${row.monthlyQuota}`,
       },
       {
         field: "configId",
-        header: "Config / job",
+        header: "Cấu hình / tác vụ",
         width: 180,
         render: (row) => (
           <Stack spacing={0.25}>
@@ -879,7 +946,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
       },
       {
         field: "actorUserId",
-        header: "Actor / issuer",
+        header: "Người thao tác / người cấp",
         width: 180,
         render: (row) => (
           <Stack spacing={0.25}>
@@ -892,7 +959,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
       },
       {
         field: "reason",
-        header: "Reason / error",
+        header: "Lý do / lỗi",
         render: (row) => renderLimitedText(row.error || row.reason, 420),
       },
     ],
@@ -919,7 +986,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
 
     const request = toSummaryTokenGrantRequest(grantDraft, draft.ownerUnitId || applied.ownerUnitId);
     if (!request.ownerUnitId) {
-      setNotice("Enter Owner unit ID before granting extra quota.");
+      setNotice("Nhập mã đơn vị sở hữu trước khi cấp thêm hạn mức.");
       return;
     }
 
@@ -927,7 +994,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
     try {
       const result = await grantQuota(request).unwrap();
       setNotice(
-        `Granted ${result.units} token(s) to unit ${compactId(result.ownerUnitId)}. Remaining: ${result.quota.remainingUnits}/${result.quota.monthlyQuota}.`,
+        `Đã cấp ${result.units} lượt tổng hợp cho đơn vị ${compactId(result.ownerUnitId)}. Còn lại: ${result.quota.remainingUnits}/${result.quota.monthlyQuota}.`,
       );
       setPage(0);
       setDraft((current) => ({
@@ -943,7 +1010,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
         periodMonthKey: request.periodMonthKey || currentMonthKey(),
       }));
     } catch {
-      setNotice("Grant failed. Check unit scope, token kind, month key, and units.");
+      setNotice("Cấp hạn mức thất bại. Kiểm tra phạm vi đơn vị, loại hạn mức, tháng và số lượng.");
     }
   };
 
@@ -953,7 +1020,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
         <Box sx={operationsFilterRowSx}>
           <TextField
             size="small"
-            label="Search ledger"
+            label="Tìm trong sổ ghi nhận"
             value={draft.q}
             onChange={(event) => setDraft((current) => ({ ...current, q: event.target.value }))}
             onKeyDown={(event) => {
@@ -963,7 +1030,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
           />
           <TextField
             size="small"
-            label="Owner unit ID"
+            label="Mã đơn vị sở hữu"
             value={draft.ownerUnitId}
             onChange={(event) => setDraft((current) => ({ ...current, ownerUnitId: event.target.value }))}
             sx={operationsFilterFieldSx}
@@ -971,7 +1038,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
           <TextField
             select
             size="small"
-            label="Token kind"
+            label="Loại hạn mức"
             value={draft.tokenKind}
             onChange={(event) => setDraft((current) => ({ ...current, tokenKind: event.target.value }))}
             sx={operationsFilterFieldSx}
@@ -985,7 +1052,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
           <TextField
             select
             size="small"
-            label="Direction"
+            label="Hướng"
             value={draft.direction}
             onChange={(event) => setDraft((current) => ({ ...current, direction: event.target.value }))}
             sx={{ ...operationsFilterFieldSx, flexGrow: 0.8 }}
@@ -999,7 +1066,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
           <TextField
             select
             size="small"
-            label="Outcome"
+            label="Kết quả"
             value={draft.outcome}
             onChange={(event) => setDraft((current) => ({ ...current, outcome: event.target.value }))}
             sx={{ ...operationsFilterFieldSx, flexGrow: 0.8 }}
@@ -1012,48 +1079,48 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
           </TextField>
           <TextField
             size="small"
-            label="Month"
+            label="Tháng"
             value={draft.periodMonthKey}
             onChange={(event) => setDraft((current) => ({ ...current, periodMonthKey: event.target.value }))}
             sx={{ ...operationsFilterFieldSx, flexGrow: 0.7 }}
             placeholder="yyyy-MM"
           />
           <Button variant="contained" startIcon={<SearchIcon />} onClick={applyFilters} sx={operationsFilterButtonSx}>
-            Filter
+            Lọc
           </Button>
         </Box>
         <Box sx={{ ...operationsFilterRowSx, mt: 1.5 }}>
           <TextField
             size="small"
-            label="Owner user ID"
+            label="Mã người dùng sở hữu"
             value={draft.ownerUserId}
             onChange={(event) => setDraft((current) => ({ ...current, ownerUserId: event.target.value }))}
             sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
-            label="Actor user ID"
+            label="Mã người thao tác"
             value={draft.actorUserId}
             onChange={(event) => setDraft((current) => ({ ...current, actorUserId: event.target.value }))}
             sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
-            label="Issuer user ID"
+            label="Mã người cấp"
             value={draft.issuerUserId}
             onChange={(event) => setDraft((current) => ({ ...current, issuerUserId: event.target.value }))}
             sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
-            label="Config ID"
+            label="Mã cấu hình"
             value={draft.configId}
             onChange={(event) => setDraft((current) => ({ ...current, configId: event.target.value }))}
             sx={operationsFilterFieldSx}
           />
           <TextField
             size="small"
-            label="Job ID"
+            label="Mã tác vụ"
             value={draft.jobId}
             onChange={(event) => setDraft((current) => ({ ...current, jobId: event.target.value }))}
             sx={operationsFilterFieldSx}
@@ -1065,25 +1132,25 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
         <Paper variant="outlined" sx={{ p: 2, flex: 1 }}>
           <Stack spacing={1}>
             <Typography variant="subtitle1" fontWeight={700}>
-              Quota pool
+              Nhóm hạn mức
             </Typography>
             {quotaQuery.isFetching && <LinearProgress />}
             {quotaQuery.isError && (
-              <Alert severity="warning">Cannot load quota. Set Owner unit ID if this account has no default unit.</Alert>
+              <Alert severity="warning">Không tải được hạn mức. Hãy nhập mã đơn vị sở hữu nếu tài khoản này chưa có đơn vị mặc định.</Alert>
             )}
             {!quotaQuery.isFetching && !quotaQuery.data && !quotaQuery.isError && (
-              <Alert severity="info">Set Owner unit ID to inspect a unit quota pool.</Alert>
+              <Alert severity="info">Nhập mã đơn vị sở hữu để xem nhóm hạn mức của đơn vị.</Alert>
             )}
             {quotaQuery.data && (
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip label={`Unit: ${compactId(quotaQuery.data.ownerUnitId)}`} />
-                <Chip label={`Month: ${quotaQuery.data.periodMonthKey}`} />
-                <Chip label={`Base: ${quotaQuery.data.baseMonthlyQuota}`} />
-                <Chip label={`Granted: ${quotaQuery.data.grantedUnits}`} />
-                <Chip label={`Used: ${quotaQuery.data.usedUnits}`} />
+                <Chip label={`Đơn vị: ${compactId(quotaQuery.data.ownerUnitId)}`} />
+                <Chip label={`Tháng: ${quotaQuery.data.periodMonthKey}`} />
+                <Chip label={`Cơ bản: ${quotaQuery.data.baseMonthlyQuota}`} />
+                <Chip label={`Đã cấp: ${quotaQuery.data.grantedUnits}`} />
+                <Chip label={`Đã dùng: ${quotaQuery.data.usedUnits}`} />
                 <Chip
                   color={quotaQuery.data.remainingUnits > 0 ? "success" : "warning"}
-                  label={`Remaining: ${quotaQuery.data.remainingUnits}/${quotaQuery.data.monthlyQuota}`}
+                  label={`Còn lại: ${quotaQuery.data.remainingUnits}/${quotaQuery.data.monthlyQuota}`}
                 />
               </Stack>
             )}
@@ -1094,12 +1161,12 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
           <Paper variant="outlined" sx={{ p: 2, flex: 1 }}>
             <Stack spacing={1.5}>
               <Typography variant="subtitle1" fontWeight={700}>
-                Admin grant
+                Cấp hạn mức quản trị
               </Typography>
               <Box sx={operationsFilterRowSx}>
                 <TextField
                   size="small"
-                  label="Owner unit ID"
+                  label="Mã đơn vị sở hữu"
                   value={grantDraft.ownerUnitId}
                   onChange={(event) => setGrantDraft((current) => ({ ...current, ownerUnitId: event.target.value }))}
                   sx={operationsFilterFieldSx}
@@ -1107,7 +1174,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
                 <TextField
                   select
                   size="small"
-                  label="Token kind"
+                  label="Loại hạn mức"
                   value={grantDraft.tokenKind}
                   onChange={(event) => setGrantDraft((current) => ({ ...current, tokenKind: event.target.value }))}
                   sx={operationsFilterFieldSx}
@@ -1122,7 +1189,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
               <Box sx={operationsFilterRowSx}>
                 <TextField
                   size="small"
-                  label="Month"
+                  label="Tháng"
                   value={grantDraft.periodMonthKey}
                   onChange={(event) => setGrantDraft((current) => ({ ...current, periodMonthKey: event.target.value }))}
                   placeholder="yyyy-MM"
@@ -1131,7 +1198,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
                 <TextField
                   size="small"
                   type="number"
-                  label="Units"
+                  label="Số lượng"
                   value={grantDraft.units}
                   onChange={(event) => setGrantDraft((current) => ({ ...current, units: Number(event.target.value) || 1 }))}
                   inputProps={{ min: 1, max: 1000 }}
@@ -1141,7 +1208,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
               <Box sx={operationsFilterRowSx}>
                 <TextField
                   size="small"
-                  label="Reason"
+                  label="Lý do"
                   value={grantDraft.reason}
                   onChange={(event) => setGrantDraft((current) => ({ ...current, reason: event.target.value }))}
                   sx={{ ...operationsFilterFieldSx, flexGrow: 1.8 }}
@@ -1153,7 +1220,7 @@ function SummaryTokensPanel({ canGrant }: { canGrant: boolean }) {
                   onClick={runGrant}
                   sx={operationsFilterButtonSx}
                 >
-                  Grant
+                  Cấp
                 </Button>
               </Box>
             </Stack>
@@ -1356,8 +1423,8 @@ function ReportPayloadDiagnosticsPanel() {
         render: (row) => <Chip size="small" color={row.type.includes("ORPHAN") ? "warning" : "error"} label={row.type} />,
       },
       { field: "workAssignmentReportId", header: "Báo cáo", width: 160, render: (row) => compactId(row.workAssignmentReportId) },
-      { field: "payloadId", header: "Payload", width: 160, render: (row) => compactId(row.payloadId || row.tableValueId || row.statValueId) },
-      { field: "statCollection", header: "Projection", width: 190, render: (row) => row.statCollection || "-" },
+      { field: "payloadId", header: "Dữ liệu báo cáo", width: 160, render: (row) => compactId(row.payloadId || row.tableValueId || row.statValueId) },
+      { field: "statCollection", header: "Bảng thống kê", width: 190, render: (row) => row.statCollection || "-" },
       { field: "message", header: "Vấn đề", render: (row) => renderLimitedText(row.message, 420) },
       { field: "recommendedAction", header: "Xử lý", render: (row) => renderLimitedText(row.recommendedAction, 420) },
     ],
@@ -1370,7 +1437,7 @@ function ReportPayloadDiagnosticsPanel() {
   };
 
   const runRepair = async (dryRun: boolean) => {
-    if (!dryRun && !window.confirm("Áp dụng repair sẽ soft-delete orphan rows và enqueue rebuild jobs theo diagnostics hiện tại. Tiếp tục?")) {
+    if (!dryRun && !window.confirm("Áp dụng sửa sẽ xóa mềm các dòng mồ côi và đưa tác vụ dựng lại vào hàng đợi theo chẩn đoán hiện tại. Tiếp tục?")) {
       return;
     }
 
@@ -1390,11 +1457,11 @@ function ReportPayloadDiagnosticsPanel() {
 
       setNotice(
         dryRun
-          ? `Dry-run: ${result.diagnostics.issueCount} vấn đề, ${result.plannedOrphanPayloadRows} payload orphan, ${result.plannedOrphanTableValueRows} table orphan, ${result.plannedStatisticTemplateRebuilds} template cần rebuild.`
-          : `Đã áp dụng: ${result.softDeletedPayloadRows} payload, ${result.softDeletedTableValueRows} table rows, ${result.enqueuedStatisticTemplateRebuilds} rebuild jobs.`,
+          ? `Chạy thử: ${result.diagnostics.issueCount} vấn đề, ${result.plannedOrphanPayloadRows} dòng dữ liệu báo cáo mồ côi, ${result.plannedOrphanTableValueRows} dòng bảng mồ côi, ${result.plannedStatisticTemplateRebuilds} mẫu cần dựng lại.`
+          : `Đã áp dụng: ${result.softDeletedPayloadRows} dòng dữ liệu báo cáo, ${result.softDeletedTableValueRows} dòng bảng, ${result.enqueuedStatisticTemplateRebuilds} tác vụ dựng lại.`,
       );
     } catch {
-      setNotice("Không chạy được diagnostics repair.");
+      setNotice("Không chạy được sửa theo chẩn đoán.");
     }
   };
 
@@ -1451,7 +1518,7 @@ function ReportPayloadDiagnosticsPanel() {
             onClick={() => runRepair(true)}
             sx={operationsFilterButtonSx}
           >
-            Dry-run
+            Chạy thử
           </Button>
           <Button
             color="warning"
@@ -1470,7 +1537,7 @@ function ReportPayloadDiagnosticsPanel() {
         {query.isFetching && <LinearProgress sx={{ mx: -2, mt: -2, mb: 2 }} />}
         {query.isError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            Không tải được diagnostics payload báo cáo.
+            Không tải được chẩn đoán dữ liệu báo cáo.
           </Alert>
         )}
         {notice && (
@@ -1480,9 +1547,9 @@ function ReportPayloadDiagnosticsPanel() {
         )}
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} useFlexGap flexWrap="wrap">
           <Chip label={`Báo cáo: ${query.data?.scannedReportCount ?? 0}`} />
-          <Chip label={`Payload: ${query.data?.scannedPayloadRowCount ?? 0}`} />
-          <Chip label={`Table rows: ${query.data?.scannedTableValueRowCount ?? 0}`} />
-          <Chip label={`Stat rows: ${query.data?.scannedStatValueRowCount ?? 0}`} />
+          <Chip label={`Dữ liệu báo cáo: ${query.data?.scannedPayloadRowCount ?? 0}`} />
+          <Chip label={`Dòng bảng: ${query.data?.scannedTableValueRowCount ?? 0}`} />
+          <Chip label={`Dòng thống kê: ${query.data?.scannedStatValueRowCount ?? 0}`} />
           <Chip color={query.data?.hasIssues ? "warning" : "success"} label={`Vấn đề: ${query.data?.issueCount ?? 0}`} />
           {issueCounts.map(([type, count]) => (
             <Chip key={type} size="small" color="warning" label={`${type}: ${count}`} />
@@ -1597,7 +1664,7 @@ function JobRunsPanel() {
     const workId = draft.workId.trim();
     const flowInstanceId = draft.flowInstanceId.trim();
     if (!workId || !flowInstanceId) {
-      setNotice("Flow diagnostics requires Work ID and Flow Instance ID.");
+      setNotice("Chẩn đoán quy trình cần có mã đầu việc và mã phiên quy trình.");
       return;
     }
 
@@ -1618,10 +1685,10 @@ function JobRunsPanel() {
       setFlowDiagnostics(result);
       const issueCount = Object.values(result.issueCountsByType ?? {}).reduce((sum, count) => sum + count, 0);
       setNotice(
-        `Flow statistic diagnostics scanned ${result.scannedReportCount}/${result.matchingReportCount} reports, issues: ${issueCount}.`,
+        `Chẩn đoán thống kê quy trình đã quét ${result.scannedReportCount}/${result.matchingReportCount} báo cáo, số vấn đề: ${issueCount}.`,
       );
     } catch {
-      setNotice("Cannot run flow statistic diagnostics.");
+      setNotice("Không chạy được chẩn đoán thống kê quy trình.");
     }
   };
 
@@ -1630,7 +1697,7 @@ function JobRunsPanel() {
     try {
       const result = await resetBasicSummary(snapshotId).unwrap();
       setNotice(
-        `Đã reset job tổng hợp cơ bản. Job: ${compactId(result.jobId)}. Correlation: ${compactId(result.correlationId)}.`,
+        `Đã đặt lại tác vụ tổng hợp cơ bản. Tác vụ: ${compactId(result.jobId)}. Tương quan: ${compactId(result.correlationId)}.`,
       );
     } catch {
       setNotice("Không reset được job tổng hợp cơ bản.");
@@ -1642,10 +1709,10 @@ function JobRunsPanel() {
     try {
       const result = await resetAdvancedSummaryNode({ grain: row.grain, nodeId: row.id }).unwrap();
       setNotice(
-        `Advanced summary node ${row.grain}:${row.grainKey} queued. Job: ${compactId(result.jobId)}. Correlation: ${compactId(result.correlationId)}.`,
+        `Đã đưa nút tổng hợp nâng cao ${advancedSummaryGrainLabel(row.grain)}:${row.grainKey} vào hàng đợi. Tác vụ: ${compactId(result.jobId)}. Tương quan: ${compactId(result.correlationId)}.`,
       );
     } catch {
-      setNotice("Khong reset duoc advanced summary node.");
+      setNotice("Không reset được nút tổng hợp nâng cao.");
     }
   };
 
@@ -1676,16 +1743,16 @@ function JobRunsPanel() {
       setAdvancedDiagnostics(diagnostics);
       setNotice(
         diagnostics.matches
-          ? `Diagnostics ${grain}:${row.grainKey}: cache matches direct source.`
-          : `Diagnostics ${grain}:${row.grainKey}: ${diagnostics.status} (${diagnostics.differences.join(", ") || "difference detected"}).`,
+          ? `Chẩn đoán ${advancedSummaryGrainLabel(grain)}:${row.grainKey}: bộ nhớ đệm khớp nguồn trực tiếp.`
+          : `Chẩn đoán ${advancedSummaryGrainLabel(grain)}:${row.grainKey}: ${advancedSummaryDiagnosticStatusLabel(diagnostics.status)} (${diagnostics.differences.map(advancedSummaryDifferenceLabel).join(", ") || "phát hiện khác biệt"}).`,
       );
     } catch {
-      setNotice("Khong chay duoc diagnostics advanced summary node. Kiem tra child nodes neu grain la MONTH/YEAR.");
+      setNotice("Không chạy được chẩn đoán nút tổng hợp nâng cao. Kiểm tra các nút con nếu mức thời gian là MONTH/YEAR.");
     }
   };
 
   const runAdvancedSummaryCleanup = async (dryRun: boolean) => {
-    if (!dryRun && !window.confirm("Soft-delete advanced summary cache nodes theo filter hien tai. Tiep tuc?")) {
+    if (!dryRun && !window.confirm("Xóa mềm các nút bộ nhớ đệm tổng hợp nâng cao theo bộ lọc hiện tại. Tiếp tục?")) {
       return;
     }
 
@@ -1698,11 +1765,11 @@ function JobRunsPanel() {
       ).unwrap();
       setNotice(
         dryRun
-          ? `Dry-run cleanup: matched ${result.matchedCount}, selected ${result.selectedCount}, limit ${result.limit}${result.hasMore ? ", con tiep" : ""}.`
-          : `Cleanup done: soft-deleted ${result.softDeletedCount}/${result.selectedCount}, matched ${result.matchedCount}${result.hasMore ? ", con tiep" : ""}.`,
+          ? `Chạy thử dọn bộ nhớ đệm: khớp ${result.matchedCount}, chọn ${result.selectedCount}, giới hạn ${result.limit}${result.hasMore ? ", còn tiếp" : ""}.`
+          : `Đã dọn bộ nhớ đệm: xóa mềm ${result.softDeletedCount}/${result.selectedCount}, khớp ${result.matchedCount}${result.hasMore ? ", còn tiếp" : ""}.`,
       );
     } catch {
-      setNotice("Khong chay duoc cleanup advanced summary cache. Kiem tra lai scope filter.");
+      setNotice("Không chạy được dọn bộ nhớ đệm tổng hợp nâng cao. Kiểm tra lại phạm vi bộ lọc.");
     }
   };
 
@@ -1781,11 +1848,11 @@ function JobRunsPanel() {
       },
       {
         field: "scopeKind",
-        header: "Scope",
+        header: "Phạm vi",
         width: 190,
         render: (row) => (
           <Stack spacing={0.25}>
-            <Chip size="small" label={row.scopeKind || "-"} />
+            <Chip size="small" label={statisticScopeKindLabel(row.scopeKind)} />
             <Typography variant="caption" color="text.secondary">
               {compactId(row.workId)} / {compactId(row.workAssignmentId)}
             </Typography>
@@ -1794,7 +1861,7 @@ function JobRunsPanel() {
       },
       {
         field: "flowInstanceId",
-        header: "Flow",
+        header: "Quy trình",
         width: 190,
         render: (row) => (
           <Stack spacing={0.25}>
@@ -1805,7 +1872,7 @@ function JobRunsPanel() {
           </Stack>
         ),
       },
-      { field: "periodInstanceKey", header: "Period", width: 130, render: (row) => row.periodInstanceKey || "-" },
+      { field: "periodInstanceKey", header: "Kỳ", width: 130, render: (row) => row.periodInstanceKey || "-" },
       {
         field: "actions",
         header: "",
@@ -1821,7 +1888,7 @@ function JobRunsPanel() {
               disabled={busy || resetStatisticRebuildState.isLoading}
               onClick={() => resetStatisticRebuildJob(row)}
             >
-              Reset
+              Đặt lại
             </Button>
           );
         },
@@ -1844,45 +1911,46 @@ function JobRunsPanel() {
 
   const flowDiagnosticColumns = useMemo<AppTableColumn<FlowStatisticProjectionDiagnosticRow>[]>(
     () => [
-      { field: "periodInstanceKey", header: "Period", width: 130, render: (row) => row.periodInstanceKey || row.periodKey || "-" },
-      { field: "workAssignmentReportId", header: "Report", width: 160, render: (row) => compactId(row.workAssignmentReportId) },
-      { field: "workAssignmentId", header: "Assignment", width: 160, render: (row) => compactId(row.workAssignmentId) },
-      { field: "reportStatus", header: "Status", width: 90, align: "right" },
+      { field: "periodInstanceKey", header: "Kỳ", width: 130, render: (row) => row.periodInstanceKey || row.periodKey || "-" },
+      { field: "workAssignmentReportId", header: "Báo cáo", width: 160, render: (row) => compactId(row.workAssignmentReportId) },
+      { field: "workAssignmentId", header: "Nhiệm vụ", width: 160, render: (row) => compactId(row.workAssignmentId) },
+      { field: "reportStatus", header: "Trạng thái", width: 90, align: "right" },
       {
         field: "fieldProjectionRows",
-        header: "Projection",
-        width: 120,
-        render: (row) => `${row.fieldProjectionRows}/${row.tableProjectionRows}`,
+        header: "Số dòng đọc",
+        width: 180,
+        render: (row) => `Trường ${row.fieldProjectionRows} / Bảng ${row.tableProjectionRows} / Nhãn ${row.labelProjectionRows}`,
       },
       {
         field: "fieldProjectionFresh",
-        header: "Fresh",
+        header: "Dữ liệu mới",
         width: 130,
         render: (row) => (
           <Stack direction="row" spacing={0.5}>
-            <Chip size="small" color={row.fieldProjectionFresh ? "success" : "warning"} label="Field" />
-            <Chip size="small" color={row.tableProjectionFresh ? "success" : "warning"} label="Table" />
+            <Chip size="small" color={row.fieldProjectionFresh ? "success" : "warning"} label="Trường" />
+            <Chip size="small" color={row.tableProjectionFresh ? "success" : "warning"} label="Bảng" />
+            <Chip size="small" color={row.labelProjectionFresh ? "success" : "warning"} label="Nhãn" />
           </Stack>
         ),
       },
       {
         field: "flowMetadataMatches",
-        header: "Flow meta",
+        header: "Thông tin luồng",
         width: 110,
         render: (row) => (
-          <Chip size="small" color={row.flowMetadataMatches ? "success" : "warning"} label={row.flowMetadataMatches ? "OK" : "Mismatch"} />
+          <Chip size="small" color={row.flowMetadataMatches ? "success" : "warning"} label={row.flowMetadataMatches ? "Khớp" : "Lệch"} />
         ),
       },
       {
         field: "issueTypes",
-        header: "Issues",
+        header: "Vấn đề",
         render: (row) =>
           row.issueTypes.length === 0 ? (
-            <Chip size="small" color="success" label="OK" />
+            <Chip size="small" color="success" label="Không có" />
           ) : (
             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
               {row.issueTypes.map((issue) => (
-                <Chip key={issue} size="small" color="warning" label={issue} />
+                <Chip key={issue} size="small" color="warning" label={flowProjectionIssueLabel(issue)} />
               ))}
             </Stack>
           ),
@@ -1895,7 +1963,7 @@ function JobRunsPanel() {
     () => [
       {
         field: "refreshQueuedAtUtc",
-        header: "Queue lúc",
+        header: "Xếp hàng lúc",
         width: 170,
         render: (row) => formatDateTime(row.refreshQueuedAtUtc || row.createdAtUtc),
       },
@@ -1910,7 +1978,7 @@ function JobRunsPanel() {
       { field: "workId", header: "Đầu việc", width: 150, render: (row) => compactId(row.workId) },
       {
         field: "scopeAssignmentId",
-        header: "Scope",
+        header: "Phạm vi",
         width: 150,
         render: (row) => compactId(row.scopeAssignmentId),
       },
@@ -1929,7 +1997,7 @@ function JobRunsPanel() {
       },
       {
         field: "refreshCorrelationId",
-        header: "Correlation",
+        header: "Tương quan",
         width: 160,
         render: (row) => compactId(row.refreshCorrelationId),
       },
@@ -1971,31 +2039,31 @@ function JobRunsPanel() {
 
   const advancedSummaryColumns = useMemo<AppTableColumn<AdvancedSummaryNodeRow>[]>(
     () => [
-      { field: "updatedAtUtc", header: "Updated", width: 170, render: (row) => formatDateTime(row.updatedAtUtc) },
+      { field: "updatedAtUtc", header: "Cập nhật", width: 170, render: (row) => formatDateTime(row.updatedAtUtc) },
       {
         field: "status",
-        header: "Status",
+        header: "Trạng thái",
         width: 140,
         render: (row) => (
-          <Chip size="small" color={resultColor(row.status)} label={`${statusLabel(row.status)}${row.isDirty ? " / dirty" : ""}`} />
+          <Chip size="small" color={resultColor(row.status)} label={`${statusLabel(row.status)}${row.isDirty ? " / cần dựng lại" : ""}`} />
         ),
       },
-      { field: "grain", header: "Grain", width: 90, render: (row) => <Chip size="small" label={row.grain} /> },
-      { field: "grainKey", header: "Key", width: 130, render: (row) => row.grainKey },
-      { field: "configId", header: "Config", width: 160, render: (row) => compactId(row.configId) },
-      { field: "sectionId", header: "Section", width: 160, render: (row) => renderLimitedText(row.sectionId, 160) },
-      { field: "assignmentId", header: "Assignment", width: 150, render: (row) => compactId(row.assignmentId) },
-      { field: "dynamicFormTemplateId", header: "Template", width: 150, render: (row) => compactId(row.dynamicFormTemplateId) },
+      { field: "grain", header: "Mức", width: 90, render: (row) => <Chip size="small" label={advancedSummaryGrainLabel(row.grain)} /> },
+      { field: "grainKey", header: "Khóa", width: 130, render: (row) => row.grainKey },
+      { field: "configId", header: "Cấu hình", width: 160, render: (row) => compactId(row.configId) },
+      { field: "sectionId", header: "Khu vực", width: 160, render: (row) => renderLimitedText(row.sectionId, 160) },
+      { field: "assignmentId", header: "Nhiệm vụ", width: 150, render: (row) => compactId(row.assignmentId) },
+      { field: "dynamicFormTemplateId", header: "Biểu mẫu", width: 150, render: (row) => compactId(row.dynamicFormTemplateId) },
       {
         field: "sourceReportCount",
-        header: "Source",
+        header: "Nguồn",
         width: 100,
         align: "right",
         render: (row) => row.sourceReportCount,
       },
-      { field: "sourceSignatureHash", header: "Source hash", width: 160, render: (row) => compactId(row.sourceSignatureHash) },
-      { field: "builtAtUtc", header: "Built", width: 170, render: (row) => formatDateTime(row.builtAtUtc) },
-      { field: "buildError", header: "Error", render: (row) => renderLimitedText(row.buildError || row.dirtyReason, 360) },
+      { field: "sourceSignatureHash", header: "Mã băm nguồn", width: 160, render: (row) => compactId(row.sourceSignatureHash) },
+      { field: "builtAtUtc", header: "Đã dựng", width: 170, render: (row) => formatDateTime(row.builtAtUtc) },
+      { field: "buildError", header: "Lỗi", render: (row) => renderLimitedText(row.buildError || row.dirtyReason, 360) },
       {
         field: "actions",
         header: "",
@@ -2012,7 +2080,7 @@ function JobRunsPanel() {
                 disabled={busy || resetAdvancedSummaryNodeState.isLoading}
                 onClick={() => resetAdvancedNode(row)}
               >
-                Reset
+                Đặt lại
               </Button>
               <Button
                 size="small"
@@ -2021,7 +2089,7 @@ function JobRunsPanel() {
                 disabled={advancedDiagnosticsLoading}
                 onClick={() => diagnoseAdvancedNode(row)}
               >
-                Check
+                Kiểm tra
               </Button>
             </Stack>
           );
@@ -2114,7 +2182,7 @@ function JobRunsPanel() {
             <TextField
               select
               size="small"
-              label="Grain"
+              label="Mức thời gian"
               value={draft.grain}
               onChange={(event) => setDraft((current) => ({ ...current, grain: event.target.value }))}
               sx={operationsFilterFieldSx}
@@ -2152,7 +2220,7 @@ function JobRunsPanel() {
             <>
               <TextField
                 size="small"
-                label="Template ID"
+                label="Mã biểu mẫu"
                 value={draft.dynamicFormTemplateId}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, dynamicFormTemplateId: event.target.value }))
@@ -2161,7 +2229,7 @@ function JobRunsPanel() {
               />
               <TextField
                 size="small"
-                label="Flow Instance"
+                label="Phiên quy trình"
                 value={draft.flowInstanceId}
                 onChange={(event) => setDraft((current) => ({ ...current, flowInstanceId: event.target.value }))}
                 sx={operationsFilterFieldSx}
@@ -2169,7 +2237,7 @@ function JobRunsPanel() {
               <TextField
                 select
                 size="small"
-                label="Flow status"
+                label="Trạng thái quy trình"
                 value={draft.flowEffectiveStatus}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, flowEffectiveStatus: event.target.value }))
@@ -2184,7 +2252,7 @@ function JobRunsPanel() {
               </TextField>
               <TextField
                 size="small"
-                label="Period key"
+                label="Khóa kỳ"
                 value={draft.periodInstanceKey}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, periodInstanceKey: event.target.value }))
@@ -2194,7 +2262,7 @@ function JobRunsPanel() {
               <TextField
                 size="small"
                 type="number"
-                label="Diagnostics limit"
+                label="Giới hạn chẩn đoán"
                 value={draft.diagnosticsLimit}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, diagnosticsLimit: Number(event.target.value) || 100 }))
@@ -2208,7 +2276,7 @@ function JobRunsPanel() {
             <>
               <TextField
                 size="small"
-                label="Template ID"
+                label="Mã biểu mẫu"
                 value={draft.dynamicFormTemplateId}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, dynamicFormTemplateId: event.target.value }))
@@ -2217,28 +2285,28 @@ function JobRunsPanel() {
               />
               <TextField
                 size="small"
-                label="Section"
+                label="Khu vực"
                 value={draft.sectionId}
                 onChange={(event) => setDraft((current) => ({ ...current, sectionId: event.target.value }))}
                 sx={operationsFilterFieldSx}
               />
               <TextField
                 size="small"
-                label="Config ID"
+                label="Mã cấu hình"
                 value={draft.configId}
                 onChange={(event) => setDraft((current) => ({ ...current, configId: event.target.value }))}
                 sx={operationsFilterFieldSx}
               />
               <TextField
                 size="small"
-                label="Config hash"
+                label="Mã băm cấu hình"
                 value={draft.configHash}
                 onChange={(event) => setDraft((current) => ({ ...current, configHash: event.target.value }))}
                 sx={operationsFilterFieldSx}
               />
               <TextField
                 size="small"
-                label="Source hash"
+                label="Mã băm nguồn"
                 value={draft.sourceSignatureHash}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, sourceSignatureHash: event.target.value }))
@@ -2248,7 +2316,7 @@ function JobRunsPanel() {
               <TextField
                 size="small"
                 type="number"
-                label="Cleanup limit"
+                label="Giới hạn dọn dẹp"
                 value={draft.cleanupLimit}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, cleanupLimit: Number(event.target.value) || 100 }))
@@ -2337,7 +2405,7 @@ function JobRunsPanel() {
                 disabled={flowDiagnosticsQuery.isFetching || !draft.workId.trim() || !draft.flowInstanceId.trim()}
                 onClick={runFlowStatisticDiagnostics}
               >
-                Check flow
+                Kiểm tra quy trình
               </Button>
             )}
             {jobTab === "advancedSummary" && (
@@ -2349,7 +2417,7 @@ function JobRunsPanel() {
                   disabled={cleanupAdvancedSummaryState.isLoading}
                   onClick={() => runAdvancedSummaryCleanup(true)}
                 >
-                  Dry-run cleanup
+                  Chạy thử dọn dẹp
                 </Button>
                 <Button
                   size="small"
@@ -2359,7 +2427,7 @@ function JobRunsPanel() {
                   disabled={cleanupAdvancedSummaryState.isLoading}
                   onClick={() => runAdvancedSummaryCleanup(false)}
                 >
-                  Soft-delete
+                  Xóa mềm
                 </Button>
               </>
             )}
@@ -2384,20 +2452,21 @@ function JobRunsPanel() {
           >
             <Stack spacing={1}>
               <Typography variant="body2" fontWeight={600}>
-                Flow diagnostics {compactId(flowDiagnostics.flowInstanceId)} checked {formatDateTime(flowDiagnostics.checkedAtUtc)}
+                Chẩn đoán quy trình {compactId(flowDiagnostics.flowInstanceId)} lúc {formatDateTime(flowDiagnostics.checkedAtUtc)}
               </Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip size="small" label={`Assignments: ${flowDiagnostics.assignmentCount}`} />
-                <Chip size="small" label={`Reports: ${flowDiagnostics.scannedReportCount}/${flowDiagnostics.matchingReportCount}`} />
-                <Chip size="small" label={`Field rows: ${flowDiagnostics.fieldProjectionRowCount}`} />
-                <Chip size="small" label={`Table rows: ${flowDiagnostics.tableProjectionRowCount}`} />
-                <Chip size="small" color="warning" label={`No projection: ${flowDiagnostics.noProjectionReportCount}`} />
-                <Chip size="small" color="warning" label={`Stale: ${flowDiagnostics.staleProjectionReportCount}`} />
-                <Chip size="small" color="warning" label={`Flow mismatch: ${flowDiagnostics.flowMetadataMismatchReportCount}`} />
+                <Chip size="small" label={`Nhiệm vụ: ${flowDiagnostics.assignmentCount}`} />
+                <Chip size="small" label={`Báo cáo: ${flowDiagnostics.scannedReportCount}/${flowDiagnostics.matchingReportCount}`} />
+                <Chip size="small" label={`Dòng trường: ${flowDiagnostics.fieldProjectionRowCount}`} />
+                <Chip size="small" label={`Dòng bảng: ${flowDiagnostics.tableProjectionRowCount}`} />
+                <Chip size="small" label={`Dòng nhãn: ${flowDiagnostics.labelProjectionRowCount}`} />
+                <Chip size="small" color="warning" label={`Thiếu dữ liệu đọc nền: ${flowDiagnostics.noProjectionReportCount}`} />
+                <Chip size="small" color="warning" label={`Cũ: ${flowDiagnostics.staleProjectionReportCount}`} />
+                <Chip size="small" color="warning" label={`Lệch quy trình: ${flowDiagnostics.flowMetadataMismatchReportCount}`} />
                 {Object.entries(flowDiagnostics.issueCountsByType ?? {}).map(([issue, count]) => (
-                  <Chip key={issue} size="small" color="warning" label={`${issue}: ${count}`} />
+                  <Chip key={issue} size="small" color="warning" label={`${flowProjectionIssueLabel(issue)}: ${count}`} />
                 ))}
-                {flowDiagnostics.truncated && <Chip size="small" color="info" label={`Limited to ${flowDiagnostics.limit}`} />}
+                {flowDiagnostics.truncated && <Chip size="small" color="info" label={`Giới hạn ${flowDiagnostics.limit}`} />}
               </Stack>
             </Stack>
           </Alert>
@@ -2409,30 +2478,30 @@ function JobRunsPanel() {
           >
             <Stack spacing={1}>
               <Typography variant="body2" fontWeight={600}>
-                Diagnostics {advancedDiagnostics.grain}:{advancedDiagnostics.key}: {advancedDiagnostics.status}
+                Chẩn đoán {advancedSummaryGrainLabel(advancedDiagnostics.grain)}:{advancedDiagnostics.key}: {advancedSummaryDiagnosticStatusLabel(advancedDiagnostics.status)}
               </Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip size="small" label={`Direct reports: ${advancedDiagnostics.direct.sourceReportCount}`} />
+                <Chip size="small" label={`Báo cáo trực tiếp: ${advancedDiagnostics.direct.sourceReportCount}`} />
                 <Chip
                   size="small"
-                  label={`Cache reports: ${advancedDiagnostics.cache?.sourceReportCount ?? "-"}`}
+                  label={`Báo cáo bộ nhớ đệm: ${advancedDiagnostics.cache?.sourceReportCount ?? "-"}`}
                 />
                 <Chip
                   size="small"
-                  label={`Direct inputs: ${advancedDiagnostics.direct.inputNodeKeys?.length ?? 0}`}
+                  label={`Đầu vào trực tiếp: ${advancedDiagnostics.direct.inputNodeKeys?.length ?? 0}`}
                 />
                 <Chip
                   size="small"
-                  label={`Cache inputs: ${advancedDiagnostics.cache?.inputNodeKeys?.length ?? 0}`}
+                  label={`Đầu vào bộ nhớ đệm: ${advancedDiagnostics.cache?.inputNodeKeys?.length ?? 0}`}
                 />
-                <Chip size="small" label={`Actor: ${compactId(advancedDiagnostics.diagnosticActorUserId)}`} />
+                <Chip size="small" label={`Người chạy: ${compactId(advancedDiagnostics.diagnosticActorUserId)}`} />
                 {(advancedDiagnostics.differences.length > 0 ? advancedDiagnostics.differences : ["MATCH"]).map(
                   (item) => (
                     <Chip
                       key={item}
                       size="small"
                       color={item === "MATCH" ? "success" : "warning"}
-                      label={item}
+                      label={advancedSummaryDifferenceLabel(item)}
                     />
                   ),
                 )}

@@ -15,8 +15,9 @@ import CommonDateText from "../../common/CommonDateText";
 import BooleanChip from "../../common/BooleanChip";
 import AssignmentProgressChip from "../../reports/AssignmentProgressChip";
 import { UITextKey, uiText } from '../../../constants/uiText';
+import type { WorkAssignmentFlowMetadataFields } from "../../../types/workAssignment";
 
-export interface AssignmentTableRow {
+export interface AssignmentTableRow extends WorkAssignmentFlowMetadataFields {
   id: string;
   code?: string | null;
   name?: string | null;
@@ -89,6 +90,15 @@ interface WorkAssignmentTableProps {
 function getTemplateLabel(row: AssignmentTableRow) {
   const name = row.dynamicFormTemplateName?.trim() || row.dynamicExcelName?.trim();
   return name || row.id;
+}
+
+const FLOW_RUNTIME_READONLY_REASON =
+  "Assignment do Flow runtime sở hữu; chỉ server capability tại canonical Flow route mới được mở thao tác.";
+const FLOW_RUNTIME_P7_REASON = "Flow runtime mapping/source rules bị khóa đến P7.";
+const FLOW_RUNTIME_P8_REASON = "Flow runtime statistics/aggregation bị khóa đến P8.";
+
+function isFlowRuntimeOwned(row: AssignmentTableRow) {
+  return Boolean(row.flowInstanceId?.trim());
 }
 
 function getTemplateCode(row: AssignmentTableRow) {
@@ -165,21 +175,37 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
         sortable: false,
         render: (row) => (
           <Stack direction="row" spacing={0.5} justifyContent="center">
-            <Tooltip title={uiText(UITextKey.TextXemChiTiet)}>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onViewDetail?.(row);
-                }}
-              >
-                <VisibilityOutlinedIcon fontSize="small" />
-              </IconButton>
+            <Tooltip
+              title={
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_READONLY_REASON
+                  : uiText(UITextKey.TextXemChiTiet)
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={isFlowRuntimeOwned(row)}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_READONLY_REASON
+                      : uiText(UITextKey.TextXemChiTiet)
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewDetail?.(row);
+                  }}
+                >
+                  <VisibilityOutlinedIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
 
             <Tooltip
               title={
-                row.dynamicFormTemplateId
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_READONLY_REASON
+                  : row.dynamicFormTemplateId
                   ? "Xem trước biểu mẫu động"
                   : "Công việc chưa có biểu mẫu động"
               }
@@ -187,7 +213,12 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={!row.dynamicFormTemplateId}
+                  disabled={isFlowRuntimeOwned(row) || !row.dynamicFormTemplateId}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_READONLY_REASON
+                      : "Xem trước biểu mẫu động"
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     onPreviewTemplate?.(row);
@@ -200,7 +231,9 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
 
             <Tooltip
               title={
-                row.evaluationTemplateId
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_READONLY_REASON
+                  : row.evaluationTemplateId
                   ? "Đánh giá công việc"
                   : "Công việc chưa có bộ tiêu chí"
               }
@@ -208,7 +241,12 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={readOnly || !row.evaluationTemplateId}
+                  disabled={readOnly || isFlowRuntimeOwned(row) || !row.evaluationTemplateId}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_READONLY_REASON
+                      : "Đánh giá công việc"
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     onEvaluate?.(row);
@@ -221,7 +259,9 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
 
             <Tooltip
               title={
-                isRootAssignment(row)
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_P8_REASON
+                  : isRootAssignment(row)
                   ? "Tổng hợp bảng từ các công việc đã giao hoặc phối hợp"
                   : uiText(UITextKey.TextTongHop)
               }
@@ -229,6 +269,12 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
+                  disabled={isFlowRuntimeOwned(row)}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_P8_REASON
+                      : uiText(UITextKey.TextTongHop)
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     onOpenAggregate?.(row);
@@ -241,7 +287,9 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
 
             <Tooltip
               title={
-                row.dynamicFormTemplateId
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_P7_REASON
+                  : row.dynamicFormTemplateId
                   ? "Cấu hình nguồn dữ liệu"
                   : "Công việc chưa có biểu mẫu động"
               }
@@ -249,7 +297,12 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={readOnly || !row.dynamicFormTemplateId}
+                  disabled={readOnly || isFlowRuntimeOwned(row) || !row.dynamicFormTemplateId}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_P7_REASON
+                      : "Cấu hình nguồn dữ liệu"
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     onConfigureSourceRules?.(row);
@@ -262,7 +315,9 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
 
             <Tooltip
               title={
-                row.dynamicFormTemplateId
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_READONLY_REASON
+                  : row.dynamicFormTemplateId
                   ? "Cấu hình tự duyệt"
                   : "Công việc chưa có biểu mẫu động"
               }
@@ -270,7 +325,12 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               <span>
                 <IconButton
                   size="small"
-                  disabled={readOnly || !row.dynamicFormTemplateId}
+                  disabled={readOnly || isFlowRuntimeOwned(row) || !row.dynamicFormTemplateId}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_READONLY_REASON
+                      : "Cấu hình tự duyệt"
+                  }
                   color={row.autoApproveConditionJson ? "success" : "default"}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -282,11 +342,26 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               </span>
             </Tooltip>
 
-            <Tooltip title={row.isActive ? "Ngừng hiệu lực" : "Kích hoạt lại"}>
+            <Tooltip
+              title={
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_READONLY_REASON
+                  : row.isActive
+                    ? "Ngừng hiệu lực"
+                    : "Kích hoạt lại"
+              }
+            >
               <span>
                 <IconButton
                   size="small"
-                  disabled={readOnly}
+                  disabled={readOnly || isFlowRuntimeOwned(row)}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_READONLY_REASON
+                      : row.isActive
+                        ? "Ngừng hiệu lực"
+                        : "Kích hoạt lại"
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleActive?.(row);
@@ -297,11 +372,26 @@ const WorkAssignmentTable: React.FC<WorkAssignmentTableProps> = ({
               </span>
             </Tooltip>
 
-            <Tooltip title={isAssignmentCompleted(row) ? completedActionLabel : completeActionLabel}>
+            <Tooltip
+              title={
+                isFlowRuntimeOwned(row)
+                  ? FLOW_RUNTIME_READONLY_REASON
+                  : isAssignmentCompleted(row)
+                    ? completedActionLabel
+                    : completeActionLabel
+              }
+            >
               <span>
                 <IconButton
                   size="small"
-                  disabled={readOnly || isAssignmentCompleted(row)}
+                  disabled={readOnly || isFlowRuntimeOwned(row) || isAssignmentCompleted(row)}
+                  aria-label={
+                    isFlowRuntimeOwned(row)
+                      ? FLOW_RUNTIME_READONLY_REASON
+                      : isAssignmentCompleted(row)
+                        ? completedActionLabel
+                        : completeActionLabel
+                  }
                   color={isAssignmentCompleted(row) ? "success" : "default"}
                   onClick={(e) => {
                     e.stopPropagation();

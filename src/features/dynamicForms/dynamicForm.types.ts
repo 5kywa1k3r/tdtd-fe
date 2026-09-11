@@ -10,11 +10,25 @@ export type DynamicFormFieldType =
   | "multiSelect"
   | "boolean";
 
+export type DynamicFormStatisticAggregateOperation =
+  | "count"
+  | "sum"
+  | "avg"
+  | "min"
+  | "max"
+  | "latest"
+  | "trueCount"
+  | "falseCount"
+  | "bucketCount"
+  | "concat";
+
+export type DynamicFormStatisticBucketMode = "none" | "option" | "date";
+
 export type DynamicFormStatisticConfig = {
   showInDetail: boolean;
   showInTree: boolean;
-  aggregateOps: string[];
-  bucketMode: "none" | "option" | "date";
+  aggregateOps: DynamicFormStatisticAggregateOperation[];
+  bucketMode: DynamicFormStatisticBucketMode;
 };
 
 export type DynamicFormTableMode =
@@ -29,6 +43,9 @@ export type DynamicFormTableIndexMapItem = {
   rowKey: string;
   columnKey: string;
   metricKey: string;
+  label?: string | null;
+  dataType?: string | null;
+  targetDataType?: string | null;
 };
 
 export type DynamicFormTableMetricRule = {
@@ -109,6 +126,10 @@ export type DynamicFormField = {
   required: boolean;
   colSpan: number;
   minHeight: number;
+  canvasX?: number;
+  canvasY?: number;
+  canvasW?: number;
+  canvasH?: number;
   order: number;
   options?: Array<{ code: string; label: string }>;
   valueSource?: DynamicFormValueSource | null;

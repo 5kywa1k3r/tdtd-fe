@@ -144,7 +144,7 @@ export const WorkAssignmentRowEditor: React.FC<Props> = ({
 
           {isExisting && (
             <Alert severity="info">
-              Assignment đã tạo không chỉnh sửa trực tiếp. Chỉ cho phép bật/tắt hiệu lực
+              Phần việc đã tạo không chỉnh sửa trực tiếp. Chỉ cho phép bật/tắt hiệu lực
               rồi bấm <b>Lưu trạng thái</b>. Muốn đổi cấu hình, hãy giao công việc mới.
             </Alert>
           )}

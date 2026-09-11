@@ -153,7 +153,7 @@ function WorkbookDataGrid(
     embeddedFullscreen = false,
     inlineReadOnly = false,
     changeCommitMode = "immediate",
-    saveLabel = "Lưu draft",
+    saveLabel = "Lưu bản nháp",
     backLabel = "Quay lại",
     surfaceVariant = "card",
 
@@ -337,10 +337,6 @@ function WorkbookDataGrid(
       onChange: (data: any) => {
         if (isView) return;
         if (Array.isArray(data)) {
-          if (changeCommitMode === "manual") {
-            onDirty?.();
-            return;
-          }
           const baseWorkbookData = cloneDeepJson(stripWorkbookZoom(data as Sheet[]));
           const nextWorkbookData = sanitizeRuntimeWorkbookData(
             baseWorkbookData,
@@ -353,6 +349,24 @@ function WorkbookDataGrid(
             lockedCellKeySet,
           );
           workbookRef.current = nextWorkbookData;
+          if (changeCommitMode === "manual") {
+            const currentPayload = buildWorkbookSavePayload(
+              nextWorkbookData,
+              dataRect,
+              excludedDataColumns,
+              initialSpec,
+            );
+            const baselinePayload = buildWorkbookSavePayload(
+              baselineWorkbookRef.current,
+              dataRect,
+              excludedDataColumns,
+              initialSpec,
+            );
+            if (currentPayload?.valuesHash !== baselinePayload?.valuesHash) {
+              onDirty?.();
+            }
+            return;
+          }
           setWorkbookData(renderWorkbookForState(nextWorkbookData));
           onChangeRaw?.(
             nextWorkbookData,
@@ -646,7 +660,7 @@ function WorkbookDataGrid(
 
           {previewSummary.statisticsDisabled && (
             <Alert severity="warning" sx={{ py: 0.75 }}>
-              Bảng có {previewSummary.inputCells} ô nhập, vượt ngưỡng {previewSummary.statisticsInputCellLimit}. Hệ thống không ghi thống kê nền từng ô, nhưng vẫn có thể tổng hợp trực tiếp từ báo cáo đã duyệt nếu không vượt {DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô input.
+              Bảng có {previewSummary.inputCells} ô nhập, vượt ngưỡng {previewSummary.statisticsInputCellLimit}. Hệ thống không ghi thống kê nền từng ô, nhưng vẫn có thể tổng hợp trực tiếp từ báo cáo đã duyệt nếu không vượt {DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô nhập.
             </Alert>
           )}
 

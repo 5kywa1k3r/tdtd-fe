@@ -1,5 +1,4 @@
 import { clearAuthStorage } from "../stores/authStorage";
-import { baseApi } from "../api/base/baseApi";
 
 export const AUTH_LOGOUT_EVENT = 'tdtd:logout';
 
@@ -9,6 +8,5 @@ export function emitLogout() {
 
 export function performLogout() {
   clearAuthStorage();
-  baseApi.util.resetApiState();
   emitLogout();                 
 }

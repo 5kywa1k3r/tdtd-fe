@@ -7,6 +7,21 @@ import { normalizeApiError } from '../../utils/apiError';
 
 const baseURL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'https://localhost:7232/api' : '/api');
 
+export function resolveAuthorizedApiHref(href: string): string | null {
+  try {
+    const browserOrigin = typeof window === 'undefined'
+      ? 'http://localhost'
+      : window.location.origin;
+    const apiOrigin = new URL(baseURL, browserOrigin).origin;
+    const resolved = new URL(href, apiOrigin);
+    if ((resolved.protocol !== 'http:' && resolved.protocol !== 'https:') ||
+      resolved.origin !== apiOrigin || resolved.username || resolved.password) return null;
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
 function isAuthRequest(url: string, path: string): boolean {
   return url === path || url.endsWith(path) || url.includes(path);
 }

@@ -31,7 +31,16 @@ function manualChunks(id: string) {
   if (normalizedId.includes("/@reduxjs/") || normalizedId.includes("/redux/")) return undefined;
   if (normalizedId.includes("/axios/")) return undefined;
 
-  if (normalizedId.includes("/d3-") || fileName.startsWith("d3-")) return "vendor-charts";
+  // d3-array imports InternMap. With onlyExplicitManualChunks enabled, leaving
+  // internmap in a route chunk creates vendor-charts <-> route-chunk cycles and
+  // can throw a TDZ ReferenceError when that lazy route is evaluated.
+  if (
+    normalizedId.includes("/d3-") ||
+    fileName.startsWith("d3-") ||
+    normalizedId.includes("/internmap/")
+  ) {
+    return "vendor-charts";
+  }
   if (
     normalizedId.includes("/exceljs/") ||
     normalizedId.includes("/jszip/") ||

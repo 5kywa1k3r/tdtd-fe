@@ -109,6 +109,8 @@ export interface ReviewReportFlatRowDto {
 
   reportId?: string | null;
   reportStatus?: number | null;
+  payloadRevision?: number | null;
+  lifecycleRevision?: number | null;
   reportIsActive?: boolean | null;
   reportDeactivatedAtUtc?: string | null;
   reportDeactivationReason?: string | null;
@@ -137,19 +139,31 @@ export interface ReviewReportFlatRowDto {
 }
 
 export interface ApproveReportRequest {
+  expectedPayloadRevision: number;
+  expectedLifecycleRevision: number;
+  commandId: string;
   comment?: string | null;
   reviewerComment?: string | null;
   confirmHistoricalDataApproval?: boolean;
 }
 
 export interface ReturnReportRequest {
+  expectedPayloadRevision: number;
+  expectedLifecycleRevision: number;
+  commandId: string;
   comment: string;
 }
 
 export interface RecallApprovedReportRequest {
+  expectedPayloadRevision: number;
+  expectedLifecycleRevision: number;
+  commandId: string;
   comment: string;
 }
 
 export interface ReportActiveRequest {
+  expectedPayloadRevision: number;
+  expectedLifecycleRevision: number;
+  commandId: string;
   comment?: string | null;
 }

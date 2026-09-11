@@ -57,6 +57,11 @@ import type { WorkAssignmentListResponse } from "../../types/workAssignment";
 import { getMeSnapshot } from "../../stores/authStorage";
 import { UITextKey, uiText } from "../../constants/uiText";
 import { getWorkStatusLabel, WORK_STATUS, WORK_TYPE } from "../../types/work";
+import {
+  dynamicFlowRuntimePath,
+  type DynamicFlowRuntimeDeepLink,
+  type DynamicFlowRuntimeTab,
+} from "../../routes/dynamicFlowRoutes";
 
 const WorkForm = lazy(() =>
   import("../../components/works/workform/WorkForm").then((module) => ({ default: module.WorkForm })),
@@ -1335,21 +1340,6 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
               spacing={1.5}
               sx={{ flex: 1, minHeight: 0 }}
             >
-              {false && (
-                <AssignmentBranchTree
-                  rootRows={entryAssignmentRows}
-                  childrenByParentId={branchTreeChildrenByParentId}
-                  activeId={selectedBranchId}
-                  pathIds={selectedBranchPath.map((row) => row.id)}
-                  collapsed={branchTreeCollapsed}
-                  loading={assignmentTreeLoading || selectedBranchChildrenLoading}
-                  error={Boolean(selectedBranchChildrenError)}
-                  onToggleCollapsed={() => setBranchTreeCollapsed((prev) => !prev)}
-                  onSelectRoot={handleClearBranch}
-                  onSelectNode={handleSelectBranchId}
-                />
-              )}
-
               <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
             <Suspense fallback={<DetailTabFallback />}>
               {tab === "COMMON" && (
@@ -1385,6 +1375,20 @@ const WorkDetailPage: React.FC<WorkDetailPageProps> = ({ type }) => {
                     onOpenAggregation={handleOpenAggregation}
                     onOpenReports={() => handleOpenFunction("REPORT")}
                     onOpenReview={() => handleOpenFunction("REVIEW")}
+                    onOpenFlowInstance={(
+                      instanceId: string,
+                      runtimeTab: DynamicFlowRuntimeTab = "overview",
+                      targetWorkId?: string,
+                      identity?: DynamicFlowRuntimeDeepLink,
+                    ) =>
+                      navigate(
+                        dynamicFlowRuntimePath(
+                          targetWorkId ?? workId,
+                          instanceId,
+                          runtimeTab,
+                          identity,
+                        ),
+                      )}
                     selectedBranch={selectedBranch}
                     branchRows={selectedBranchChildrenRows}
                     branchLoading={selectedBranchChildrenLoading}

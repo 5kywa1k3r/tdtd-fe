@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../hooks';
 import { logout } from '../stores/authSlice';
 import { AUTH_LOGOUT_EVENT } from '../utils/AuthEvents';
+import { baseApi } from '../api/base/baseApi';
 
 export const AuthListener = () => {
   const dispatch = useAppDispatch();
@@ -11,6 +12,7 @@ export const AuthListener = () => {
   useEffect(() => {
     const handler = () => {
       dispatch(logout());
+      dispatch(baseApi.util.resetApiState());
       navigate('/login', { replace: true });
     };
 

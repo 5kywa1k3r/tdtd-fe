@@ -416,7 +416,7 @@ const BasicSummaryPanel: React.FC<Props> = ({
           sx={{ borderRadius: 1, p: 3, textAlign: "center" }}
         >
           <Typography variant="body2" color="text.secondary">
-            Chưa tải snapshot thống kê cơ bản.
+            Chưa tải bản chụp thống kê cơ bản.
           </Typography>
         </Paper>
       )}
@@ -461,7 +461,7 @@ function ConfigurationPanel({
               Cấu hình thống kê
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Đổi cấu hình sẽ làm hệ thống tính lại snapshot; nếu nhiều báo cáo, thao tác có thể lâu hơn.
+              Đổi cấu hình sẽ làm hệ thống tính lại bản chụp; nếu nhiều báo cáo, thao tác có thể lâu hơn.
             </Typography>
           </Box>
           <Button variant="outlined" onClick={onHide} disabled={saving}>
@@ -571,11 +571,11 @@ function FieldMethodTable({
 }) {
   const columns = React.useMemo<AppTableColumn<BasicSummaryFieldMethodRow>[]>(
     () => [
-      { field: "label", header: "Field", sortable: true, render: (row) => <strong>{row.label}</strong> },
+      { field: "label", header: "Trường", sortable: true, render: (row) => <strong>{row.label}</strong> },
       { field: "dataTypeLabel", header: "Kiểu", sortable: true },
       {
         field: "selectedMethod",
-        header: "Method",
+        header: "Cách tính",
         width: 220,
         render: (row) => (
           <TextField
@@ -606,7 +606,7 @@ function FieldMethodTable({
   return (
     <Stack spacing={0.75}>
       <Typography variant="body2" sx={{ fontWeight: 800 }}>
-        Field dữ liệu
+        Trường dữ liệu
       </Typography>
       <AppTable
         rows={rows}
@@ -626,21 +626,21 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
       <Chip
         color={result.meta.fromSnapshot ? "default" : "primary"}
         variant="outlined"
-        label={result.meta.fromSnapshot ? "Snapshot" : "Vừa tính"}
+        label={result.meta.fromSnapshot ? "Bản chụp" : "Vừa tính"}
       />
       {isActiveBasicSummaryJob(result.meta.calculationStatus) && (
         <Chip color="warning" variant="outlined" label="Đang tính ngầm" />
       )}
       {normalizeBasicSummaryJobStatus(result.meta.calculationStatus) === "FAILED" && (
-        <Chip color="error" variant="outlined" label="Lỗi job" />
+        <Chip color="error" variant="outlined" label="Lỗi tác vụ" />
       )}
-      <Chip variant="outlined" label={result.meta.summaryType || "BASIC"} />
+      <Chip variant="outlined" label={formatSummaryType(result.meta.summaryType)} />
       {result.meta.contractVersion && (
-        <Chip variant="outlined" label={result.meta.contractVersion} />
+        <Chip variant="outlined" label={`Phiên bản: ${result.meta.contractVersion}`} />
       )}
       <Chip variant="outlined" label={`Công việc nguồn: ${result.meta.sourceAssignmentCount}`} />
       <Chip variant="outlined" label={`Báo cáo: ${result.meta.sourceReportCount}`} />
-      <Chip variant="outlined" label={`Template: ${result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId}`} />
+      <Chip variant="outlined" label={`Biểu mẫu: ${result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId}`} />
       {result.meta.dynamicFormTemplateCode && (
         <Chip variant="outlined" label={result.meta.dynamicFormTemplateCode} />
       )}
@@ -655,8 +655,8 @@ function SummaryMetaChips({ result }: { result: WorkAssignmentBasicSummaryRespon
 function BasicSummaryJobAlert({ result }: { result: WorkAssignmentBasicSummaryResponse }) {
   const status = normalizeBasicSummaryJobStatus(result.meta.calculationStatus);
   const jobParts = [
-    result.meta.calculationJobId ? `Mã job: ${result.meta.calculationJobId}` : "",
-    result.meta.calculationCorrelationId ? `Correlation: ${result.meta.calculationCorrelationId}` : "",
+    result.meta.calculationJobId ? `Mã tác vụ: ${result.meta.calculationJobId}` : "",
+    result.meta.calculationCorrelationId ? `Tương quan: ${result.meta.calculationCorrelationId}` : "",
   ].filter(Boolean);
   const jobSuffix = jobParts.length ? ` ${jobParts.join(". ")}.` : "";
 
@@ -664,7 +664,7 @@ function BasicSummaryJobAlert({ result }: { result: WorkAssignmentBasicSummaryRe
     const error = result.meta.calculationError?.trim();
     return (
       <Alert severity="error">
-        Job tính snapshot thống kê cơ bản thất bại{error ? `: ${error}` : "."} Bấm Tính lại để enqueue lại.{jobSuffix}
+        Tác vụ tính bản chụp thống kê cơ bản thất bại{error ? `: ${error}` : "."} Bấm Tính lại để đưa vào hàng đợi lần nữa.{jobSuffix}
       </Alert>
     );
   }
@@ -672,7 +672,7 @@ function BasicSummaryJobAlert({ result }: { result: WorkAssignmentBasicSummaryRe
   if (result.meta.isCalculating || isActiveBasicSummaryJob(status)) {
     return (
       <Alert severity="info">
-        Snapshot thống kê cơ bản đang được tính ngầm. Tải lại sau để xem kết quả mới.{jobSuffix}
+        Bản chụp thống kê cơ bản đang được tính ngầm. Tải lại sau để xem kết quả mới.{jobSuffix}
       </Alert>
     );
   }
@@ -680,7 +680,7 @@ function BasicSummaryJobAlert({ result }: { result: WorkAssignmentBasicSummaryRe
   if (result.meta.snapshotDirty) {
     return (
       <Alert severity="warning">
-        Snapshot thống kê cơ bản đang cần tính lại. Bấm Tính lại để enqueue job mới.{jobSuffix}
+        Bản chụp thống kê cơ bản đang cần tính lại. Bấm Tính lại để đưa tác vụ mới vào hàng đợi.{jobSuffix}
       </Alert>
     );
   }
@@ -770,7 +770,7 @@ function DynamicFormSummaryPreview({
   );
 
   if (!detail || !editorValue) {
-    return <Alert severity="info">Chưa tải được template để nhúng số liệu tổng hợp.</Alert>;
+    return <Alert severity="info">Chưa tải được biểu mẫu để nhúng số liệu tổng hợp.</Alert>;
   }
 
   return (
@@ -1053,7 +1053,7 @@ function SourceReportsTable({
       },
       {
         field: "payloadRevision",
-        header: "Payload",
+        header: "Phiên bản dữ liệu",
         align: "right",
         sortable: true,
       },
@@ -1106,14 +1106,14 @@ function SourceReportsTable({
           />
           <TextField
             size="small"
-            label="Unit ID"
+            label="Mã đơn vị"
             value={sourceView.unitId}
             onChange={(event) => updateView({ unitId: event.target.value })}
             sx={{ width: { xs: "100%", md: 180 } }}
           />
           <TextField
             size="small"
-            label="User ID"
+            label="Mã người dùng"
             value={sourceView.assigneeUserId}
             onChange={(event) => updateView({ assigneeUserId: event.target.value })}
             sx={{ width: { xs: "100%", md: 180 } }}
@@ -1460,33 +1460,64 @@ function formatUnknownValue(value: unknown) {
   return JSON.stringify(value);
 }
 
+function formatSummaryType(value?: string | null) {
+  const normalized = value?.trim().toUpperCase();
+  if (!normalized || normalized === "BASIC") return "Tổng hợp cơ bản";
+  if (normalized === "ADVANCED") return "Tổng hợp nâng cao";
+  return value ?? "Tổng hợp cơ bản";
+}
+
+function formatSummaryTargetKind(value?: string | null) {
+  const normalized = value?.trim().toUpperCase();
+  if (normalized === "FIELD") return "Trường";
+  if (normalized === "TABLE") return "Bảng";
+  return value ?? "-";
+}
+
+function formatSummaryDataType(value?: string | null) {
+  const labels: Record<string, string> = {
+    NUMBER: "Số",
+    DATE: "Ngày",
+    FULL_DATE: "Ngày và giờ",
+    BOOLEAN: "Đúng/sai",
+    TEXT: "Văn bản",
+    SHORT_TEXT: "Văn bản ngắn",
+    LONG_TEXT: "Văn bản dài",
+    SINGLE_SELECT: "Chọn một",
+    MULTI_SELECT: "Chọn nhiều",
+    STRING_LIST: "Danh sách văn bản",
+  };
+  const normalized = value?.trim().toUpperCase();
+  return normalized ? labels[normalized] ?? value ?? "-" : "-";
+}
+
 function downloadBasicSummaryCsv(result: WorkAssignmentBasicSummaryResponse) {
   const headers = [
-    "targetKind",
-    "targetKey",
-    "label",
-    "dataType",
-    "operation",
-    "value",
-    "valueCount",
-    "reportCount",
-    "sum",
-    "min",
-    "max",
-    "mean",
-    "trueCount",
-    "falseCount",
-    "minDateUtc",
-    "maxDateUtc",
-    "text",
-    "buckets",
+    "Loại đích",
+    "Khóa đích",
+    "Tên hiển thị",
+    "Kiểu dữ liệu",
+    "Phép tổng hợp",
+    "Kết quả",
+    "Số giá trị",
+    "Số báo cáo",
+    "Tổng",
+    "Nhỏ nhất",
+    "Lớn nhất",
+    "Trung bình",
+    "Số giá trị đúng",
+    "Số giá trị sai",
+    "Ngày sớm nhất",
+    "Ngày mới nhất",
+    "Văn bản",
+    "Nhóm giá trị",
   ];
   const rows = [...result.fields, ...result.tables].map((item: WorkAssignmentBasicSummaryItemDto) => [
-    item.targetKind,
+    formatSummaryTargetKind(item.targetKind),
     item.targetKey,
     item.label,
-    item.dataType,
-    item.operation,
+    formatSummaryDataType(item.dataType),
+    BASIC_SUMMARY_METHOD_LABELS[item.operation as BasicSummaryMethod] ?? item.operation,
     formatUnknownValue(item.value) ?? "",
     item.valueCount,
     item.reportCount,
@@ -1509,7 +1540,7 @@ function downloadBasicSummaryCsv(result: WorkAssignmentBasicSummaryResponse) {
   const a = document.createElement("a");
   const templateCode = result.meta.dynamicFormTemplateCode || result.meta.dynamicFormTemplateId;
   a.href = url;
-  a.download = `basic-summary-${templateCode}-${Date.now()}.csv`;
+  a.download = `tong-hop-co-ban-${templateCode}-${Date.now()}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -174,8 +174,150 @@ export interface DynamicFlowTableColumnPermission {
 }
 
 export interface DynamicFlowPolicyEvaluationResult {
-  fields?: Record<string, DynamicFlowFieldPermission> | null;
-  tableColumns?: Record<string, DynamicFlowTableColumnPermission> | null;
+  fields: Record<string, DynamicFlowFieldPermission>;
+  tableColumns: Record<string, DynamicFlowTableColumnPermission>;
+  denyAllFields: boolean;
+  denyAllTableColumns: boolean;
+}
+
+export type DynamicFlowMappingCapability = "ALLOWED" | "BLOCKED" | "READONLY" | string;
+export type DynamicFlowMappingFreshness = "FRESH" | "STALE" | "UNKNOWN" | string;
+
+export interface DynamicFlowMappingRequest {
+  expectedPayloadRevision?: number | null;
+  expectedLifecycleRevision?: number | null;
+  expectedPayloadHash?: string | null;
+  commandId?: string | null;
+  previewToken?: string | null;
+  sourceSignature?: string | null;
+  resultSemanticHash?: string | null;
+
+  // Optional identity assertions copied from the server preview. These are
+  // never caller-owned selectors; the backend resolves and verifies every pin.
+  flowFamilyId?: string | null;
+  flowVersionId?: string | null;
+  flowPayloadHash?: string | null;
+  catalogVersion?: string | null;
+  catalogSemanticHash?: string | null;
+  mappingRuleSetHash?: string | null;
+  evaluatorVersion?: string | null;
+  functionRegistryVersion?: string | null;
+  functionRegistryHash?: string | null;
+  flowInstanceId?: string | null;
+  executionEpoch?: number | null;
+  stepInstanceId?: string | null;
+  stepId?: string | null;
+  branchId?: string | null;
+  attemptNo?: number | null;
+  targetAssignmentId?: string | null;
+  targetReportId?: string | null;
+  formFamilyId?: string | null;
+  formVersionId?: string | null;
+  formVersionNo?: number | null;
+  formSchemaHash?: string | null;
+}
+
+export interface DynamicFlowMappingSourceReport {
+  reportId?: string | null;
+  workAssignmentId?: string | null;
+  flowInstanceId?: string | null;
+  executionEpoch?: number | null;
+  stepInstanceId?: string | null;
+  branchId?: string | null;
+  attemptNo?: number | null;
+  flowStepId?: string | null;
+  flowStepCode?: string | null;
+  dynamicFormTemplateId?: string | null;
+  formFamilyId?: string | null;
+  formVersionId?: string | null;
+  formVersionNo?: number | null;
+  formSchemaHash?: string | null;
+  payloadRevision?: number | null;
+  payloadHash?: string | null;
+  lifecycleRevision?: number | null;
+  lifecycleStatus?: string | null;
+  periodInstanceKey?: string | null;
+  identityRedacted: boolean;
+}
+
+export interface DynamicFlowMappingInputProvenance {
+  inputKey?: string | null;
+  sourceDynamicFormTemplateId?: string | null;
+  sourceStepId?: string | null;
+  sourceStepCode?: string | null;
+  sourceAssignmentId?: string | null;
+  sourceReportId?: string | null;
+  sourcePayloadRevision?: number | null;
+  sourcePayloadHash?: string | null;
+  sourceLifecycleRevision?: number | null;
+  sourceKey?: string | null;
+  rowKey?: string | null;
+  valueJson?: string | null;
+}
+
+export interface DynamicFlowMappingChange {
+  mappingId: string;
+  mappingVersion: number;
+  targetKind: string;
+  targetKey: string;
+  sourceReportId?: string | null;
+  sourceKey?: string | null;
+  previousValueJson?: string | null;
+  nextValueJson?: string | null;
+  status: string;
+  reason?: string | null;
+  conceptCode?: string | null;
+  contributionPolicy?: string | null;
+  sources: DynamicFlowMappingInputProvenance[];
+}
+
+export interface DynamicFlowMappingPreviewResponse {
+  targetReportId: string;
+  targetAssignmentId: string;
+  flowFamilyId: string;
+  flowVersionId: string;
+  flowPayloadHash: string;
+  catalogVersion: string;
+  catalogSemanticHash: string;
+  mappingRuleSetHash: string;
+  evaluatorVersion: string;
+  functionRegistryVersion: string;
+  functionRegistryHash: string;
+  flowInstanceId: string;
+  executionEpoch: number;
+  stepInstanceId: string;
+  stepId: string;
+  branchId: string;
+  attemptNo: number;
+  formFamilyId: string;
+  formVersionId: string;
+  formVersionNo: number;
+  formSchemaHash: string;
+  targetPayloadRevision: number;
+  targetPayloadHash: string;
+  targetLifecycleRevision: number;
+  sourceSignature: string;
+  resultSemanticHash: string;
+  previewToken?: string | null;
+  previewIssuedAtUtc?: string | null;
+  previewExpiresAtUtc?: string | null;
+  mappingCapability: DynamicFlowMappingCapability;
+  mappingCapabilityReason: string;
+  canPreview: boolean;
+  canApply: boolean;
+  freshness: DynamicFlowMappingFreshness;
+  applyState?: string | null;
+  receiptId?: string | null;
+  commandId?: string | null;
+  dataOrigin: string;
+  cumulativeContributionMode: string;
+  cumulativeContributionPolicyJson?: string | null;
+  summarySourceJson?: string | null;
+  fieldValuesJson?: string | null;
+  tableValuesJson?: string | null;
+  sourceReports: DynamicFlowMappingSourceReport[];
+  changes: DynamicFlowMappingChange[];
+  hasBlockingConflicts: boolean;
 }
 
 export interface WorkAssignmentReportResponse {
@@ -219,6 +361,9 @@ export interface WorkAssignmentReportResponse {
   dynamicFormTemplateId?: string | null;
   dynamicFormTemplateCode?: string | null;
   dynamicFormTemplateName?: string | null;
+  dynamicFormFamilyId?: string | null;
+  dynamicFormVersionNo?: number | null;
+  dynamicFormSchemaHash?: string | null;
   specJson: string;
 
   dataRectR0: number;
@@ -232,6 +377,21 @@ export interface WorkAssignmentReportResponse {
   values1DJson?: string | null;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
+  payloadRevision: number;
+  lifecycleRevision: number;
+  canEditPayload: boolean;
+  canSubmit: boolean;
+  canWithdraw: boolean;
+  lifecycleCommitState?: "COMMITTED" | "COMMITTED_PENDING_PROJECTION" | string | null;
+  lifecycleProjectionPending?: boolean | null;
+  payloadHash?: string | null;
+  payloadSizeBytes?: number | null;
+  payloadStatus?: string | null;
+  payloadUpdatedAtUtc?: string | null;
+  dynamicFlowMappingApplyState?: string | null;
+  dynamicFlowMappingReceiptId?: string | null;
+  dynamicFlowMappingCommandId?: string | null;
+  dynamicFlowMappingResultSemanticHash?: string | null;
   dynamicFlowPermissions?: DynamicFlowPolicyEvaluationResult | null;
   dataOrigin?: WorkReportDataOrigin | string | null;
   cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
@@ -401,6 +561,8 @@ export interface WorkAssignmentReportSearchRequest {
  * ========================= */
 
 export interface SaveWorkAssignmentReportDraftRequest {
+  expectedPayloadRevision: number;
+  commandId: string;
   values1D: Array<string | string[] | number | boolean | null>;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;
@@ -426,6 +588,8 @@ export interface WorkReportTableBlockPatch {
 }
 
 export interface SaveWorkAssignmentReportDraftPatchRequest {
+  expectedPayloadRevision: number;
+  commandId: string;
   values1DLength?: number | null;
   values1DPatch?: WorkReportValuePatchItem[] | null;
   fieldValuesJson?: string | null;
@@ -442,6 +606,8 @@ export interface SaveWorkAssignmentReportDraftPatchRequest {
 }
 
 export interface ApplyDynamicFormAggregateDraftRequest {
+  expectedPayloadRevision: number;
+  commandId: string;
   aggregateRequest: DynamicFormAggregateRequest;
   dataOrigin?: WorkReportDataOrigin | string | null;
   cumulativeContributionMode?: WorkReportCumulativeContributionMode | string | null;
@@ -454,85 +620,18 @@ export interface ApplyDynamicFormAggregateDraftRequest {
   allowSubmittedSources?: boolean | null;
 }
 
-export interface DynamicFlowMappingRuleDto {
-  mappingId: string;
-  mappingVersion: number;
-  sourceStepId?: string | null;
-  sourceStepCode?: string | null;
-  sourceFieldId?: string | null;
-  sourceFieldKey?: string | null;
-  sourceBlockId?: string | null;
-  sourceColumnKey?: string | null;
-  targetStepId?: string | null;
-  targetStepCode?: string | null;
-  targetFieldId?: string | null;
-  targetFieldKey?: string | null;
-  targetBlockId?: string | null;
-  targetColumnKey?: string | null;
-  conceptCode?: string | null;
-  dataType?: string | null;
-  joinKey?: string | null;
-  valueTransform?: string | null;
-  conflictPolicy?: string | null;
-  contributionPolicy?: string | null;
-}
-
-export interface DynamicFlowMappingRequest {
-  sourceMode?: "CHILD_FLOW" | "PREVIOUS_PERIOD" | "EXPLICIT" | string | null;
-  sourceReportIds?: string[] | null;
-  flowTemplateVersionId?: string | null;
-  flowTemplateId?: string | null;
-  flowTemplateVersionNo?: number | null;
-  mappingRulesJson?: string | null;
-  mappingRules?: DynamicFlowMappingRuleDto[] | null;
-  conflictPolicy?: string | null;
-  contributionPolicy?: string | null;
-  requireSourceReport?: boolean | null;
-}
-
-export interface DynamicFlowMappingSourceReportDto {
-  reportId: string;
-  workAssignmentId: string;
-  flowStepId?: string | null;
-  flowStepCode?: string | null;
-  periodInstanceKey: string;
-}
-
-export interface DynamicFlowMappingChangeDto {
-  mappingId: string;
-  mappingVersion: number;
-  targetKind: string;
-  targetKey: string;
-  sourceReportId?: string | null;
-  sourceKey?: string | null;
-  previousValueJson?: string | null;
-  nextValueJson?: string | null;
-  status: string;
-  reason?: string | null;
-  conceptCode?: string | null;
-  contributionPolicy?: string | null;
-}
-
-export interface DynamicFlowMappingPreviewResponse {
-  targetReportId: string;
-  targetAssignmentId: string;
-  dataOrigin: WorkReportDataOrigin | string;
-  cumulativeContributionMode: WorkReportCumulativeContributionMode | string;
-  cumulativeContributionPolicyJson?: string | null;
-  summarySourceJson?: string | null;
-  fieldValuesJson?: string | null;
-  tableValuesJson?: string | null;
-  sourceReports: DynamicFlowMappingSourceReportDto[];
-  changes: DynamicFlowMappingChangeDto[];
-  hasBlockingConflicts: boolean;
-}
-
 export interface ReturnWorkAssignmentReportRequest {
+  expectedPayloadRevision: number;
+  expectedLifecycleRevision: number;
+  commandId: string;
   returnReason: string;
   reviewerComment?: string | null;
 }
 
 export interface SubmitWorkAssignmentReportRequest {
+  expectedPayloadRevision: number;
+  expectedLifecycleRevision: number;
+  commandId: string;
   values1D?: Array<string | string[] | number | boolean | null>;
   fieldValuesJson?: string | null;
   tableValuesJson?: string | null;

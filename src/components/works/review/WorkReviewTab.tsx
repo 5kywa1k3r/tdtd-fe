@@ -56,6 +56,7 @@ import type {
 import { WorkAssignmentReportStatus } from "../../../types/reportStatus";
 import WorkReportEditorPage from "../../../pages/works/report/WorkReportEditorPage";
 import { UITextKey, uiText } from '../../../constants/uiText';
+import { normalizeApiError } from "../../../utils/apiError";
 
 type Props = {
   workId: string;
@@ -63,6 +64,11 @@ type Props = {
 };
 
 type ReviewActionKind = "return" | "recallApproved" | "deactivate" | "reactivate";
+type ReviewLifecycleActionKind = "approve" | ReviewActionKind;
+type PendingLifecycleCommand = {
+  key: string;
+  commandId: string;
+};
 type SummaryDialogState = {
   open: boolean;
   title: string;
@@ -439,6 +445,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
 
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "" });
   const selectedSummaryRef = React.useRef<SummaryViewRow | null>(null);
+  const pendingLifecycleCommandRef = React.useRef<PendingLifecycleCommand | null>(null);
 
   React.useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -447,6 +454,52 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
   const showMessage = React.useCallback((message: string) => {
     setSnackbar({ open: true, message });
   }, []);
+
+  const getLifecycleRequestMeta = React.useCallback((
+    row: ReviewReportFlatRowDto,
+    action: ReviewLifecycleActionKind,
+    requestFingerprint: string,
+  ) => {
+    const expectedPayloadRevision = row.payloadRevision;
+    const expectedLifecycleRevision = row.lifecycleRevision;
+    if (
+      !Number.isInteger(expectedPayloadRevision) ||
+      Number(expectedPayloadRevision) < 0 ||
+      !Number.isInteger(expectedLifecycleRevision) ||
+      Number(expectedLifecycleRevision) < 0
+    ) {
+      showMessage("Thiếu phiên bản báo cáo hiện tại. Hãy làm mới danh sách trước khi thao tác.");
+      return null;
+    }
+
+    const key = [
+      action,
+      row.reportId,
+      expectedPayloadRevision,
+      expectedLifecycleRevision,
+      requestFingerprint,
+    ].join("|");
+    let pending = pendingLifecycleCommandRef.current;
+    if (!pending || pending.key !== key) {
+      pending = { key, commandId: globalThis.crypto.randomUUID() };
+      pendingLifecycleCommandRef.current = pending;
+    }
+
+    return {
+      expectedPayloadRevision: Number(expectedPayloadRevision),
+      expectedLifecycleRevision: Number(expectedLifecycleRevision),
+      commandId: pending.commandId,
+    };
+  }, [showMessage]);
+
+  const showLifecycleMutationError = React.useCallback((error: unknown, fallback: string) => {
+    const normalized = normalizeApiError(error);
+    showMessage(
+      normalized.status === 409
+        ? "Báo cáo đã được thay đổi ở nơi khác. Nội dung đang nhập vẫn được giữ; hãy làm mới danh sách và kiểm tra trước khi thử lại."
+        : normalized.message || fallback,
+    );
+  }, [showMessage]);
 
   const closeActionDialog = React.useCallback(() => {
     setActionDialogOpen(false);
@@ -664,15 +717,27 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
       return;
     }
 
-    const data: ApproveReportRequest = { comment: null, confirmHistoricalDataApproval };
+    const requestMeta = getLifecycleRequestMeta(
+      row,
+      "approve",
+      JSON.stringify({ comment: null, confirmHistoricalDataApproval }),
+    );
+    if (!requestMeta) return;
+
+    const data: ApproveReportRequest = {
+      ...requestMeta,
+      comment: null,
+      confirmHistoricalDataApproval,
+    };
 
     try {
       await approveReviewReport({ reportId: row.reportId, data }).unwrap();
+      pendingLifecycleCommandRef.current = null;
       showMessage("Đã duyệt báo cáo.");
       setHistoricalApproveTarget(null);
       await refreshCurrentPopup();
-    } catch (err: any) {
-      showMessage(err?.data?.message || err?.message || "Duyệt báo cáo thất bại.");
+    } catch (err: unknown) {
+      showLifecycleMutationError(err, "Duyệt báo cáo thất bại.");
     }
   };
 
@@ -717,8 +782,15 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
 
     try {
       if (actionKind === "deactivate") {
-        const data: ReportActiveRequest = { comment: comment || null };
+        const requestMeta = getLifecycleRequestMeta(
+          actionTarget,
+          actionKind,
+          JSON.stringify({ comment: comment || null }),
+        );
+        if (!requestMeta) return;
+        const data: ReportActiveRequest = { ...requestMeta, comment: comment || null };
         await deactivateReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
+        pendingLifecycleCommandRef.current = null;
         showMessage("Đã ẩn báo cáo và cập nhật thống kê.");
         closeActionDialog();
         await refreshCurrentPopup();
@@ -726,8 +798,15 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
       }
 
       if (actionKind === "reactivate") {
-        const data: ReportActiveRequest = { comment: comment || null };
+        const requestMeta = getLifecycleRequestMeta(
+          actionTarget,
+          actionKind,
+          JSON.stringify({ comment: comment || null }),
+        );
+        if (!requestMeta) return;
+        const data: ReportActiveRequest = { ...requestMeta, comment: comment || null };
         await reactivateReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
+        pendingLifecycleCommandRef.current = null;
         showMessage("Đã kích hoạt lại báo cáo và cập nhật thống kê.");
         closeActionDialog();
         await refreshCurrentPopup();
@@ -735,19 +814,32 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
       }
 
       if (actionKind === "recallApproved") {
-        const data: RecallApprovedReportRequest = { comment };
+        const requestMeta = getLifecycleRequestMeta(
+          actionTarget,
+          actionKind,
+          JSON.stringify({ comment }),
+        );
+        if (!requestMeta) return;
+        const data: RecallApprovedReportRequest = { ...requestMeta, comment };
         await recallApprovedReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
         showMessage("Đã thu hồi duyệt báo cáo.");
       } else {
-        const data: ReturnReportRequest = { comment };
+        const requestMeta = getLifecycleRequestMeta(
+          actionTarget,
+          actionKind,
+          JSON.stringify({ comment }),
+        );
+        if (!requestMeta) return;
+        const data: ReturnReportRequest = { ...requestMeta, comment };
         await returnReviewReport({ reportId: actionTarget.reportId, data }).unwrap();
         showMessage("Đã trả lại báo cáo.");
       }
 
+      pendingLifecycleCommandRef.current = null;
       closeActionDialog();
       await refreshCurrentPopup();
-    } catch (err: any) {
-      showMessage(err?.data?.message || err?.message || "Thao tác thất bại.");
+    } catch (err: unknown) {
+      showLifecycleMutationError(err, "Thao tác thất bại.");
     }
   };
 
@@ -895,6 +987,9 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
             <Tooltip title={uiText(UITextKey.TextDuyetBaoCao)}>
               <span>
                 <IconButton
+                  aria-label={`${uiText(UITextKey.TextDuyetBaoCao)}${row.reportId ? ` (${row.reportId})` : ""}`}
+                  data-testid="review-report-approve-button"
+                  data-report-id={row.reportId || undefined}
                   size="small"
                   color="success"
                   onClick={() => void handleApprove(row)}
@@ -908,6 +1003,9 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
             <Tooltip title={uiText(UITextKey.TextTraLaiBaoCao)}>
               <span>
                 <IconButton
+                  aria-label={`${uiText(UITextKey.TextTraLaiBaoCao)}${row.reportId ? ` (${row.reportId})` : ""}`}
+                  data-testid="review-report-return-button"
+                  data-report-id={row.reportId || undefined}
                   size="small"
                   color="warning"
                   onClick={() => openActionDialog("return", row)}
@@ -921,6 +1019,9 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
             <Tooltip title={uiText(UITextKey.TextThuHoiDuyet)}>
               <span>
                 <IconButton
+                  aria-label={`${uiText(UITextKey.TextThuHoiDuyet)}${row.reportId ? ` (${row.reportId})` : ""}`}
+                  data-testid="review-report-recall-approved-button"
+                  data-report-id={row.reportId || undefined}
                   size="small"
                   color="secondary"
                   onClick={() => openActionDialog("recallApproved", row)}
@@ -934,6 +1035,9 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
             <Tooltip title={uiText(UITextKey.TextAnBaoCao)}>
               <span>
                 <IconButton
+                  aria-label={`${uiText(UITextKey.TextAnBaoCao)}${row.reportId ? ` (${row.reportId})` : ""}`}
+                  data-testid="review-report-deactivate-button"
+                  data-report-id={row.reportId || undefined}
                   size="small"
                   color="error"
                   onClick={() => openActionDialog("deactivate", row)}
@@ -947,6 +1051,9 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
             <Tooltip title={uiText(UITextKey.TextKichHoatLai)}>
               <span>
                 <IconButton
+                  aria-label={`${uiText(UITextKey.TextKichHoatLai)}${row.reportId ? ` (${row.reportId})` : ""}`}
+                  data-testid="review-report-reactivate-button"
+                  data-report-id={row.reportId || undefined}
                   size="small"
                   color="primary"
                   onClick={() => openActionDialog("reactivate", row)}
@@ -1203,7 +1310,7 @@ const WorkReviewTab: React.FC<Props> = ({ workId, scopeAssignmentId = null }) =>
               </Stack>
 
               <Button onClick={() => void refreshCurrentPopup()} disabled={detailLoading}>
-                Refresh popup
+                Làm mới cửa sổ
               </Button>
             </Stack>
 

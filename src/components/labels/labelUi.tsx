@@ -70,8 +70,8 @@ export const LABEL_VALUE_SOURCE_OPTIONS: Array<{ value: LabelValueSourceType; la
   },
   {
     value: "ENUM_CATALOG",
-    label: "Danh mục enum riêng",
-    description: "Chọn danh mục enum do MU/ML quản lý, có phân quyền theo phạm vi.",
+    label: "Danh mục lựa chọn riêng",
+    description: "Chọn danh mục lựa chọn do MU/ML quản lý, có phân quyền theo phạm vi.",
   },
   {
     value: "SYSTEM_UNIT",
@@ -105,7 +105,7 @@ export const LABEL_USAGE_OPTIONS: Array<{
     value: "CLASSIFICATION",
     label: "Thẻ phân loại",
     description:
-      "Dùng để gắn tag cho biểu mẫu, phần hoặc block bảng. Chỉ phục vụ tìm kiếm/nhóm/gợi ý mapping, không tạo số liệu thống kê và không cần kiểu dữ liệu.",
+      "Dùng để gắn thẻ cho biểu mẫu, phần hoặc khối bảng. Chỉ phục vụ tìm kiếm, phân nhóm và gợi ý ánh xạ; không tạo số liệu thống kê và không cần kiểu dữ liệu.",
     usesDataType: false,
   },
   {
@@ -158,7 +158,7 @@ export function formatLabelValueSourceType(value?: string | null) {
 export function formatLabelUsageDescription(usage?: string | null) {
   return (
     LABEL_USAGE_OPTIONS.find((item) => item.value === usage)?.description ??
-    "Chọn nhãn theo đúng nơi sẽ sử dụng để hệ thống lọc picker và kiểm tra dữ liệu chính xác."
+    "Chọn nhãn theo đúng nơi sẽ sử dụng để hệ thống lọc danh sách và kiểm tra dữ liệu chính xác."
   );
 }
 
@@ -221,7 +221,7 @@ export function LabelValueSourceEditor({
         disabled={disabled || !labelValueSourceApplies(dataType)}
         helperText={
           labelValueSourceApplies(dataType)
-            ? "Nếu chọn nguồn hệ thống, người báo cáo bắt buộc chọn từ select box."
+            ? "Nếu chọn nguồn hệ thống, người báo cáo bắt buộc chọn từ ô chọn một."
             : "Nguồn giá trị chỉ áp dụng cho nhãn kiểu nội dung."
         }
         onChange={(event) => onSourceTypeChange(event.target.value as LabelValueSourceType)}
@@ -237,7 +237,7 @@ export function LabelValueSourceEditor({
       {valueSourceType === "FIXED_ENUM" && labelValueSourceApplies(dataType) && (
         <Stack spacing={0.75}>
           <Typography variant="caption" color="text.secondary">
-            Danh sách mã cố định dùng để lưu thống kê; tên hiển thị dùng cho UI.
+            Danh sách mã cố định dùng để lưu thống kê; tên hiển thị dùng cho giao diện.
           </Typography>
           {options.map((option, index) => (
             <Box
@@ -314,7 +314,7 @@ export function LabelEnumCatalogSelect({
   value,
   selectedName,
   disabled,
-  helperText = "Chỉ hiển thị danh mục enum trong phạm vi tài khoản được phép sử dụng.",
+  helperText = "Chỉ hiển thị danh mục lựa chọn trong phạm vi tài khoản được phép sử dụng.",
   onChange,
 }: {
   value?: string | null;
@@ -366,7 +366,7 @@ export function LabelEnumCatalogSelect({
     <Stack spacing={0.75}>
       <TextField
         size="small"
-        label="Tìm danh mục enum"
+        label="Tìm danh mục lựa chọn"
         value={q}
         disabled={disabled}
         placeholder="Nhập mã hoặc tên danh mục"
@@ -375,7 +375,7 @@ export function LabelEnumCatalogSelect({
       <TextField
         select
         size="small"
-        label="Danh mục enum"
+        label="Danh mục lựa chọn"
         value={value ?? ""}
         disabled={disabled || searchState.isLoading}
         helperText={helperText}
@@ -385,7 +385,7 @@ export function LabelEnumCatalogSelect({
         }}
         InputLabelProps={{ shrink: true }}
       >
-        <MenuItem value="">Chưa chọn danh mục enum</MenuItem>
+        <MenuItem value="">Chưa chọn danh mục lựa chọn</MenuItem>
         {options.map((row) => (
           <MenuItem key={row.id} value={row.id}>
             {row.name} ({row.code || row.id})

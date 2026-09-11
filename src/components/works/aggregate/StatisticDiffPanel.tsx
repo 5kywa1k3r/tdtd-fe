@@ -98,6 +98,7 @@ function cleanTarget(
     dynamicFormTemplateId: normalizeText(target.dynamicFormTemplateId) ?? normalizeText(dynamicFormTemplateId),
     fieldId: normalizeText(target.fieldId),
     fieldKey: normalizeText(target.fieldKey),
+    statisticLabelCode: normalizeText(target.statisticLabelCode)?.toLowerCase() ?? null,
     blockId: normalizeText(target.blockId),
     metricKey: normalizeText(target.metricKey),
     metricLabelCode: normalizeText(target.metricLabelCode),
@@ -128,6 +129,7 @@ function targetHasSelector(target: StatisticDiffTarget) {
   return Boolean(
     normalizeText(target.fieldId) ||
     normalizeText(target.fieldKey) ||
+    normalizeText(target.statisticLabelCode) ||
     normalizeText(target.conceptCode),
   );
 }
@@ -142,6 +144,24 @@ function formatValue(value?: StatisticDiffRunResponse["rows"][number]["current"]
 function formatNumber(value?: number | null) {
   if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(value);
+}
+
+function formatDataCategory(value?: string | null) {
+  const labels: Record<string, string> = {
+    NUMBER: "Số",
+    BOOLEAN: "Đúng hoặc sai",
+    DATE: "Ngày",
+    BUCKET: "Nhóm giá trị",
+    TEXT: "Văn bản",
+  };
+  const key = String(value ?? "").trim().toUpperCase();
+  return key ? labels[key] ?? value ?? "-" : "-";
+}
+
+function formatMissingSide(value?: string | null) {
+  if (value === "CURRENT") return "nguồn hiện tại";
+  if (value === "COMPARISON") return "nguồn đối chiếu";
+  return value ?? "";
 }
 
 function applyConfigToTarget(configTarget: StatisticDiffTarget): StatisticDiffTarget {
@@ -417,7 +437,7 @@ const StatisticDiffPanel: React.FC<Props> = ({
                 onChange={(event) => setRequireSameConcept(event.target.checked)}
               />
             }
-            label="Cùng concept"
+            label="Cùng mã khái niệm"
           />
           <Box sx={{ flex: 1 }} />
           <Button
@@ -462,11 +482,11 @@ const StatisticDiffPanel: React.FC<Props> = ({
                   <TableRow>
                     <TableCell>Khóa</TableCell>
                     <TableCell>Kỳ</TableCell>
-                    <TableCell>Concept</TableCell>
+                    <TableCell>Khái niệm</TableCell>
                     <TableCell>Loại</TableCell>
                     <TableCell align="right">Hiện tại</TableCell>
                     <TableCell align="right">Đối chiếu</TableCell>
-                    <TableCell align="right">Delta</TableCell>
+                    <TableCell align="right">Chênh lệch</TableCell>
                     <TableCell>Kết quả</TableCell>
                   </TableRow>
                 </TableHead>
@@ -478,7 +498,7 @@ const StatisticDiffPanel: React.FC<Props> = ({
                         {formatDayKeyLabel(row.currentPeriodKey)} / {formatDayKeyLabel(row.comparisonPeriodKey)}
                       </TableCell>
                       <TableCell>{row.conceptCode ?? "-"}</TableCell>
-                      <TableCell>{row.dataCategory ?? "-"}</TableCell>
+                      <TableCell>{formatDataCategory(row.dataCategory)}</TableCell>
                       <TableCell align="right">{formatValue(row.current)}</TableCell>
                       <TableCell align="right">{formatValue(row.comparison)}</TableCell>
                       <TableCell align="right">{formatNumber(row.delta)}</TableCell>
@@ -487,7 +507,7 @@ const StatisticDiffPanel: React.FC<Props> = ({
                           size="small"
                           color={row.matchesOperator ? "primary" : "default"}
                           variant={row.matchesOperator ? "filled" : "outlined"}
-                          label={row.missingSide ? `Thiếu ${row.missingSide}` : row.changed ? "Khác" : "Giống"}
+                          label={row.missingSide ? `Thiếu ${formatMissingSide(row.missingSide)}` : row.changed ? "Khác" : "Giống"}
                         />
                       </TableCell>
                     </TableRow>
@@ -576,20 +596,28 @@ const DiffTargetEditor: React.FC<TargetEditorProps> = ({
         </Stack>
 
         {sourceKind === "FIELD" ? (
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <Stack spacing={1}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <TextField
+                size="small"
+                label="Khóa trường"
+                value={value.fieldKey ?? ""}
+                onChange={(event) => patch({ fieldKey: event.target.value })}
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                size="small"
+                label="Mã định danh trường"
+                value={value.fieldId ?? ""}
+                onChange={(event) => patch({ fieldId: event.target.value })}
+                sx={{ flex: 1 }}
+              />
+            </Stack>
             <TextField
               size="small"
-              label="Field key"
-              value={value.fieldKey ?? ""}
-              onChange={(event) => patch({ fieldKey: event.target.value })}
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              size="small"
-              label="Field id"
-              value={value.fieldId ?? ""}
-              onChange={(event) => patch({ fieldId: event.target.value })}
-              sx={{ flex: 1 }}
+              label="Nhãn thống kê"
+              value={value.statisticLabelCode ?? ""}
+              onChange={(event) => patch({ statisticLabelCode: event.target.value })}
             />
           </Stack>
         ) : (
@@ -597,14 +625,14 @@ const DiffTargetEditor: React.FC<TargetEditorProps> = ({
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <TextField
                 size="small"
-                label="Block"
+                label="Mã khối bảng"
                 value={value.blockId ?? ""}
                 onChange={(event) => patch({ blockId: event.target.value })}
                 sx={{ flex: 1 }}
               />
               <TextField
                 size="small"
-                label="Metric"
+                label="Khóa chỉ tiêu"
                 value={value.metricKey ?? ""}
                 onChange={(event) => patch({ metricKey: event.target.value })}
                 sx={{ flex: 1 }}
@@ -613,14 +641,21 @@ const DiffTargetEditor: React.FC<TargetEditorProps> = ({
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <TextField
                 size="small"
-                label="Row key"
+                label="Nhãn chỉ tiêu"
+                value={value.metricLabelCode ?? ""}
+                onChange={(event) => patch({ metricLabelCode: event.target.value })}
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                size="small"
+                label="Khóa dòng"
                 value={value.rowKey ?? ""}
                 onChange={(event) => patch({ rowKey: event.target.value })}
                 sx={{ flex: 1 }}
               />
               <TextField
                 size="small"
-                label="Column key"
+                label="Khóa cột"
                 value={value.columnKey ?? ""}
                 onChange={(event) => patch({ columnKey: event.target.value })}
                 sx={{ flex: 1 }}
@@ -632,14 +667,14 @@ const DiffTargetEditor: React.FC<TargetEditorProps> = ({
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
           <TextField
             size="small"
-            label="Concept"
+            label="Mã khái niệm"
             value={value.conceptCode ?? ""}
             onChange={(event) => patch({ conceptCode: event.target.value })}
             sx={{ flex: 1 }}
           />
           <TextField
             size="small"
-            label="Bucket"
+            label="Khóa nhóm giá trị"
             value={value.bucketKey ?? ""}
             onChange={(event) => patch({ bucketKey: event.target.value })}
             sx={{ flex: 1 }}

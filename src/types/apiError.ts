@@ -7,6 +7,7 @@ export type ApiErrorPayload = {
   details?: unknown;
   traceId?: string;
   error?: string;
+  code?: string;
 };
 
 export type ApiError = {

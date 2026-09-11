@@ -38,8 +38,9 @@ export function StatusPieChart({
           nameKey="label"
           label
           onClick={(entry) => {
+            const item = entry as unknown as StatusPieItem;
             if (onSelect) {
-              onSelect(entry.status as WorkStatusCore);
+              onSelect(item.status as WorkStatusCore);
             }
           }}
         >

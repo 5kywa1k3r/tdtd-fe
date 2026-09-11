@@ -168,7 +168,7 @@ const AggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
     sourceSlot ??
     (
       <TextField
-        label="Template"
+        label="Biểu mẫu"
         size="small"
         value={lockDynamicExcel ? selectedTemplateLabel || value.dynamicExcelId : value.dynamicExcelId}
         onChange={(event) => setField("dynamicExcelId", event.target.value)}
@@ -195,7 +195,7 @@ const AggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
   return (
     <AggregateDataControls
       title="Tập hợp dữ liệu"
-      subtitle="Chọn khoảng thời gian, đơn vị và template/vùng; table metric và field có nhãn thống kê sẽ được lấy tự động."
+      subtitle="Chọn khoảng thời gian, đơn vị và biểu mẫu/vùng; chỉ tiêu bảng và trường có nhãn thống kê sẽ được lấy tự động."
       dateFrom={value.periodDateFrom}
       dateTo={value.periodDateTo}
       onDateFromChange={(next) => setField("periodDateFrom", next)}
@@ -212,11 +212,11 @@ const AggregateFilterBar: React.FC<AggregateFilterBarProps> = ({
         metricSummaryText ??
         (showMetricFilter
           ? `${metricOptions.length} chỉ tiêu bảng tự động`
-          : "Theo cấu hình template")
+          : "Theo cấu hình biểu mẫu")
       }
       metricHelperText={
         metricHelperText ??
-        "Tự động lấy table metric hợp lệ và field có nhãn thống kê. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, short text/single select đếm theo nhóm, multi select list + đếm."
+        "Tự động lấy chỉ tiêu bảng hợp lệ và trường có nhãn thống kê. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, văn bản ngắn/chọn một đếm theo nhóm, danh sách chọn nhiều + đếm."
       }
       sourceSlot={templateSlot}
       targetSlot={targetSlot}

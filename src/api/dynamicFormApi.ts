@@ -1,6 +1,43 @@
 import { baseApi } from "./base/baseApi";
 import { type PagedResult } from "../types/pagedResult";
 import type { UserRefDTO } from "../types/userRefDto";
+import type { DynamicFormSchema } from "./contracts/dynamicFormSchemaContract";
+
+export {
+  buildDynamicFormSchemaPayload,
+} from "./contracts/dynamicFormSchemaContract";
+export type {
+  DynamicFormLegacySchemaPayload,
+  DynamicFormSchema,
+  DynamicFormSchemaBlock,
+  DynamicFormSchemaField,
+  DynamicFormSchemaFieldType,
+  DynamicFormSchemaOption,
+  DynamicFormSchemaSection,
+  DynamicFormSchemaTableMode,
+  DynamicFormSchemaValueSource,
+  DynamicFormSchemaValueSourceType,
+} from "./contracts/dynamicFormSchemaContract";
+
+export type DynamicFormLineageStatus =
+  | "ROOT"
+  | "VERSION"
+  | "CLONE"
+  | "WRAPPED"
+  | "LEGACY"
+  | (string & {});
+
+export type DynamicFormActionCapabilities = {
+  canRead: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canPublish: boolean;
+  canCreateVersion: boolean;
+  canViewHistory: boolean;
+  canClone: boolean;
+  canImport: boolean;
+  canUpdateStatistics: boolean;
+};
 
 export type DynamicFormRow = {
   id: string;
@@ -10,6 +47,11 @@ export type DynamicFormRow = {
   tagCodes: string[];
   schemaVersion: number;
   versionNo: number;
+  familyId: string;
+  previousVersionId?: string | null;
+  clonedFromVersionId?: string | null;
+  lineageStatus: DynamicFormLineageStatus;
+  revision: number;
   isActive: boolean;
   isPublished: boolean;
   createdByUserId?: string | null;
@@ -18,19 +60,39 @@ export type DynamicFormRow = {
   canMutate?: boolean;
   canClone?: boolean;
   canViewByCloneGrant?: boolean;
+  publishedSchemaHash?: string | null;
+  actions: DynamicFormActionCapabilities;
 };
 
 export type DynamicFormDetail = DynamicFormRow & {
   updatedAtUtc: string;
   publishedAtUtc?: string | null;
+  schema: DynamicFormSchema;
+  /** @deprecated Use schema.sections. */
   sectionsJson: string;
+  /** @deprecated Use schema.fields. */
   fieldsJson: string;
+  /** @deprecated Use schema.blocks[0]. */
   excelBlockJson?: string | null;
+  /** @deprecated Use schema.blocks. */
   blocksJson?: string | null;
   excelBlockDynamicExcelTemplateId?: string | null;
   statisticConfigUpdatedAtUtc?: string | null;
   statisticConfigUpdatedByUserId?: string | null;
   statisticConfigUpdateMonthKey?: string | null;
+  publishedSchemaSnapshotJson?: string | null;
+};
+
+export type DynamicFormVersionHistoryResp = {
+  familyId: string;
+  code: string;
+  versions: DynamicFormRow[];
+};
+
+export type CreateDynamicFormVersionReq = {
+  expectedRevision: number;
+  name?: string | null;
+  description?: string | null;
 };
 
 export type DynamicFormCloneRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -83,9 +145,14 @@ export type SaveDynamicFormReq = {
   description?: string | null;
   tagCodes?: string[] | null;
   schemaVersion?: number | null;
+  schema?: DynamicFormSchema | null;
+  /** @deprecated Use schema.sections. */
   sectionsJson?: string | null;
+  /** @deprecated Use schema.fields. */
   fieldsJson?: string | null;
+  /** @deprecated Use schema.blocks[0]. */
   excelBlockJson?: string | null;
+  /** @deprecated Use schema.blocks. */
   blocksJson?: string | null;
   isActive?: boolean;
 };
@@ -94,24 +161,10 @@ export type CreateDynamicFormReq = SaveDynamicFormReq & {
   code?: string | null;
 };
 
-export type UpdateDynamicFormReq = SaveDynamicFormReq;
-
-export type UpdateDynamicFormStatisticConfigReq = {
-  fieldsJson?: string | null;
-  excelBlockJson?: string | null;
-  blocksJson?: string | null;
+export type UpdateDynamicFormReq = SaveDynamicFormReq & {
+  expectedRevision: number;
 };
 
-export type DynamicFormStatisticConfigUpdateResp = {
-  template: DynamicFormDetail;
-  statisticRebuildJobId: string;
-  queuedReportCount: number;
-  statisticRebuildScheduledAtUtc?: string | null;
-  statisticRebuildRunsImmediately: boolean;
-  statisticConfigUpdatedAtUtc?: string | null;
-  statisticConfigUpdatedByUserId?: string | null;
-  statisticConfigUpdateMonthKey?: string | null;
-};
 
 export type CloneDynamicFormReq = {
   code?: string | null;
@@ -129,6 +182,7 @@ export type WrapDynamicExcelAsFormReq = {
 export type ImportDynamicExcelBlockReq = {
   dynamicExcelTemplateId: string;
   sectionId?: string | null;
+  expectedRevision: number;
 };
 
 export const dynamicFormApi = baseApi.injectEndpoints({
@@ -148,6 +202,32 @@ export const dynamicFormApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       providesTags: (_r, _e, arg) => [{ type: "DynamicForm", id: arg.id }],
+    }),
+
+    getDynamicFormVersionHistory: b.query<DynamicFormVersionHistoryResp, { id: string }>({
+      query: ({ id }) => ({
+        url: `/dynamic-forms/${id}/versions`,
+        method: "GET",
+      }),
+      providesTags: (result, _error, arg) => [
+        { type: "DynamicForm", id: `VERSIONS:${result?.familyId ?? arg.id}` },
+      ],
+    }),
+
+    createDynamicFormVersion: b.mutation<
+      DynamicFormDetail,
+      { id: string; body: CreateDynamicFormVersionReq }
+    >({
+      query: ({ id, body }) => ({
+        url: `/dynamic-forms/${id}/versions`,
+        method: "POST",
+        data: body,
+      }),
+      invalidatesTags: (result, _error, arg) => [
+        { type: "DynamicForm", id: "SEARCH" },
+        { type: "DynamicForm", id: arg.id },
+        { type: "DynamicForm", id: `VERSIONS:${result?.familyId ?? arg.id}` },
+      ],
     }),
 
     nextDynamicFormCode: b.query<NextCodeResp, { year?: number }>({
@@ -173,36 +253,31 @@ export const dynamicFormApi = baseApi.injectEndpoints({
         method: "PUT",
         data: body,
       }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "DynamicForm", id: "SEARCH" },
-        { type: "DynamicForm", id: arg.id },
-      ],
+      invalidatesTags: (result, _e, arg) => result
+        ? [
+            { type: "DynamicForm", id: "SEARCH" },
+            { type: "DynamicForm", id: arg.id },
+            { type: "DynamicForm", id: `VERSIONS:${result.familyId}` },
+          ]
+        : [],
     }),
 
-    updateDynamicFormStatisticConfig: b.mutation<
-      DynamicFormStatisticConfigUpdateResp,
-      { id: string; body: UpdateDynamicFormStatisticConfigReq }
+    publishDynamicForm: b.mutation<
+      DynamicFormDetail,
+      { id: string; expectedRevision: number }
     >({
-      query: ({ id, body }) => ({
-        url: `/dynamic-forms/${id}/statistics`,
-        method: "PATCH",
-        data: body,
-      }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "DynamicForm", id: "SEARCH" },
-        { type: "DynamicForm", id: arg.id },
-      ],
-    }),
-
-    publishDynamicForm: b.mutation<DynamicFormDetail, { id: string }>({
-      query: ({ id }) => ({
+      query: ({ id, expectedRevision }) => ({
         url: `/dynamic-forms/${id}/publish`,
         method: "POST",
+        data: { expectedRevision },
       }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "DynamicForm", id: "SEARCH" },
-        { type: "DynamicForm", id: arg.id },
-      ],
+      invalidatesTags: (result, _e, arg) => result
+        ? [
+            { type: "DynamicForm", id: "SEARCH" },
+            { type: "DynamicForm", id: arg.id },
+            { type: "DynamicForm", id: `VERSIONS:${result.familyId}` },
+          ]
+        : [],
     }),
 
     cloneDynamicForm: b.mutation<DynamicFormDetail, { id: string; body: CloneDynamicFormReq }>({
@@ -232,16 +307,20 @@ export const dynamicFormApi = baseApi.injectEndpoints({
         method: "POST",
         data: body,
       }),
-      invalidatesTags: (_r, _e, arg) => [
-        { type: "DynamicForm", id: "SEARCH" },
-        { type: "DynamicForm", id: arg.id },
-      ],
+      invalidatesTags: (result, _e, arg) => result
+        ? [
+            { type: "DynamicForm", id: "SEARCH" },
+            { type: "DynamicForm", id: arg.id },
+            { type: "DynamicForm", id: `VERSIONS:${result.familyId}` },
+          ]
+        : [],
     }),
 
-    deleteDynamicForm: b.mutation<void, { id: string }>({
-      query: ({ id }) => ({
+    deleteDynamicForm: b.mutation<void, { id: string; expectedRevision: number }>({
+      query: ({ id, expectedRevision }) => ({
         url: `/dynamic-forms/${id}`,
         method: "DELETE",
+        params: { expectedRevision },
       }),
       invalidatesTags: [{ type: "DynamicForm", id: "SEARCH" }],
     }),
@@ -314,10 +393,12 @@ export const dynamicFormApi = baseApi.injectEndpoints({
 export const {
   useSearchDynamicFormsMutation,
   useGetDynamicFormQuery,
+  useLazyGetDynamicFormQuery,
+  useGetDynamicFormVersionHistoryQuery,
+  useCreateDynamicFormVersionMutation,
   useNextDynamicFormCodeQuery,
   useCreateDynamicFormMutation,
   useUpdateDynamicFormMutation,
-  useUpdateDynamicFormStatisticConfigMutation,
   usePublishDynamicFormMutation,
   useCloneDynamicFormMutation,
   useWrapDynamicExcelAsFormMutation,

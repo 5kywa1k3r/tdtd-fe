@@ -15,6 +15,12 @@ function isApiErrorPayload(value: unknown): value is ApiErrorPayload {
   return isObject(value);
 }
 
+function payloadErrorCode(data: ApiErrorPayload): string | undefined {
+  if (typeof data.errorCode === 'string') return data.errorCode;
+  if (typeof data.error === 'string') return data.error;
+  return typeof data.code === 'string' ? data.code : undefined;
+}
+
 function messageFor(errorCode: string | undefined, payloadMessage: string | undefined): string {
   if (errorCode === ApiErrorCode.CommonValidationFailed && payloadMessage) {
     return payloadMessage;
@@ -100,7 +106,7 @@ export function normalizeApiError(error: unknown): ApiError {
 
   if (isAxiosLikeError(error)) {
     if (isApiErrorPayload(data)) {
-      const errorCode = typeof data.errorCode === 'string' ? data.errorCode : typeof data.error === 'string' ? data.error : undefined;
+      const errorCode = payloadErrorCode(data);
       const payloadMessage = typeof data.message === 'string' ? data.message : undefined;
       return {
         status,
@@ -129,11 +135,15 @@ export function normalizeApiError(error: unknown): ApiError {
   }
 
   if (isObject(error) && typeof error.message === 'string') {
+    const errorCode = typeof error.errorCode === 'string' ? error.errorCode : undefined;
     return {
       status: typeof error.status === 'number' ? error.status : undefined,
-      errorCode: typeof error.errorCode === 'string' ? error.errorCode : undefined,
+      errorCode,
       service: typeof error.service === 'string' ? error.service : undefined,
-      message: error.message,
+      // RTK Query unwrap() rejects with the already-normalized, plain ApiError
+      // returned by axiosBaseQuery. Re-apply the catalog here so known codes do
+      // not regress to an arbitrary backend message at the page boundary.
+      message: messageFor(errorCode, error.message),
       details: toSerializableValue(error.details),
       traceId: typeof error.traceId === 'string' ? error.traceId : undefined,
       raw: toSerializableValue(error.raw ?? error),
@@ -141,7 +151,7 @@ export function normalizeApiError(error: unknown): ApiError {
   }
 
   if (isApiErrorPayload(data)) {
-    const errorCode = typeof data.errorCode === 'string' ? data.errorCode : typeof data.error === 'string' ? data.error : undefined;
+    const errorCode = payloadErrorCode(data);
     const payloadMessage = typeof data.message === 'string' ? data.message : undefined;
     return {
       status,

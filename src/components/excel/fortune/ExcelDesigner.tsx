@@ -1408,7 +1408,7 @@ export default function ExcelDesigner(props: ExcelDesignerProps) {
 
           {tableStatisticsDisabled && (
             <Alert severity="warning" sx={{ py: 0.75 }}>
-              Bảng có {inputCellCount} ô nhập, vượt ngưỡng {DESIGNER_LIMITS.MAX_TABLE_STATISTIC_INPUT_CELLS}. Hệ thống vẫn lưu dữ liệu nhưng không thống kê nền từng ô; thống kê cơ bản vẫn có thể tổng hợp trực tiếp nếu không vượt {DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô input.
+              Bảng có {inputCellCount} ô nhập, vượt ngưỡng {DESIGNER_LIMITS.MAX_TABLE_STATISTIC_INPUT_CELLS}. Hệ thống vẫn lưu dữ liệu nhưng không thống kê nền từng ô; thống kê cơ bản vẫn có thể tổng hợp trực tiếp nếu không vượt {DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô nhập.
             </Alert>
           )}
 
@@ -2062,7 +2062,7 @@ function ExcelImportPreviewDialog({
             )}
           </Stack>
           <Alert severity="info" variant="outlined" sx={{ mt: 1, py: 0.5 }}>
-            Trong vùng dữ liệu: ô có công thức Excel dạng =... sẽ là Công thức; ô có chữ/text sẽ là Tiêu đề; ô nền vàng hoặc chữ TR sẽ là Bỏ trống không nhập. Kiểu dữ liệu phức tạp như text nhập liệu hoặc list enum chỉnh sau trong web app.
+            Trong vùng dữ liệu: ô có công thức Excel dạng =... sẽ là Công thức; ô có chữ sẽ là Tiêu đề; ô nền vàng hoặc chữ TR sẽ là Bỏ trống không nhập. Kiểu dữ liệu phức tạp như văn bản nhập liệu hoặc danh sách lựa chọn được chỉnh sau trên ứng dụng web.
           </Alert>
           {rangeIssue && (
             <Alert severity={selectedRange ? "warning" : "info"} sx={{ mt: 1, py: 0.5 }}>
@@ -3400,7 +3400,7 @@ function StringListOptionsField({
         catalogName: catalog.name,
       });
     } catch {
-      setCatalogError("Không tạo được danh mục enum từ danh sách hiện tại.");
+      setCatalogError("Không tạo được danh mục lựa chọn từ danh sách hiện tại.");
     }
   };
 
@@ -3409,7 +3409,7 @@ function StringListOptionsField({
       <TextField
         select
         size="small"
-        label="Nhãn UI / nguồn dữ liệu"
+        label="Nhãn hiển thị / nguồn dữ liệu"
         value={sourceType}
         disabled={disabled}
         helperText="Chọn danh mục hệ thống nếu ô này phải chiếu sang dữ liệu đơn vị, người dùng, chức vụ hoặc loại đơn vị."
@@ -3431,7 +3431,7 @@ function StringListOptionsField({
         }}
       >
         <MenuItem value="FIXED_ENUM">Danh sách cố định</MenuItem>
-        <MenuItem value="ENUM_CATALOG">Danh mục enum riêng</MenuItem>
+        <MenuItem value="ENUM_CATALOG">Danh mục lựa chọn riêng</MenuItem>
         <MenuItem value="SYSTEM_UNIT">Danh mục đơn vị</MenuItem>
         <MenuItem value="SYSTEM_USER">Danh mục người dùng</MenuItem>
         <MenuItem value="SYSTEM_POSITION">Danh mục chức vụ</MenuItem>
@@ -3441,8 +3441,8 @@ function StringListOptionsField({
       {!usesFixedEnum && (
         <Alert severity="info" variant="outlined">
           {usesEnumCatalog
-            ? "Người báo cáo sẽ chọn từ danh mục cố định riêng được phân quyền; hệ thống lưu mã để thống kê, không nhập text tự do."
-            : "Người báo cáo sẽ chọn từ select box/multiselect của danh mục hệ thống; hệ thống lưu mã để thống kê, không nhập text tự do."}
+            ? "Người báo cáo sẽ chọn từ danh mục cố định riêng được phân quyền; hệ thống lưu mã để thống kê, không nhập văn bản tự do."
+            : "Người báo cáo sẽ chọn từ ô chọn một/chọn nhiều của danh mục hệ thống; hệ thống lưu mã để thống kê, không nhập văn bản tự do."}
         </Alert>
       )}
 
@@ -3493,10 +3493,10 @@ function StringListOptionsField({
         >
           <TextField
             size="small"
-            label="Tên danh mục enum mới"
+            label="Tên danh mục lựa chọn mới"
             value={catalogDraftName}
             disabled={disabled || quickCreateState.isLoading}
-            helperText="Tạo nhanh danh mục enum riêng từ danh sách đang cấu hình."
+            helperText="Tạo nhanh danh mục lựa chọn riêng từ danh sách đang cấu hình."
             onFocus={onFocus}
             onChange={(event) => setCatalogDraftName(event.target.value)}
             sx={{ flex: 1 }}
@@ -3513,7 +3513,7 @@ function StringListOptionsField({
             onClick={createEnumCatalogFromOptions}
             sx={{ minHeight: 40 }}
           >
-            Tạo enum
+            Tạo danh mục
           </Button>
         </Stack>
       )}
@@ -3522,7 +3522,7 @@ function StringListOptionsField({
 
       {usesFixedEnum && draftOptions.length === 0 ? (
         <Alert severity="warning">
-          Cần thêm ít nhất một {optionNoun} trước khi lưu kiểu enum cố định.
+          Cần thêm ít nhất một {optionNoun} trước khi lưu danh sách cố định.
         </Alert>
       ) : null}
 

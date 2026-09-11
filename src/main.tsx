@@ -2,9 +2,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
-// React Router
-import { BrowserRouter } from 'react-router-dom';
-
 // Redux
 import { Provider } from 'react-redux';
 import { store } from './stores/store';
@@ -31,12 +28,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <Provider store={store}>
       <MantineProvider defaultColorScheme="light">
         <DatesProvider settings={{ locale: 'vi', firstDayOfWeek: 1 }}>
-          <BrowserRouter>
-            <ThemeProviderCustom>
-              <CssBaseline />
-              <App />
-            </ThemeProviderCustom>
-          </BrowserRouter>
+          <ThemeProviderCustom>
+            <CssBaseline />
+            <App />
+          </ThemeProviderCustom>
         </DatesProvider>
       </MantineProvider>
     </Provider>

@@ -32,6 +32,7 @@ import {
 export type DynamicFormPreviewProps = {
   detail: DynamicFormDetail;
   dense?: boolean;
+  interactive?: boolean;
 };
 
 type BlockPreview = {
@@ -47,7 +48,11 @@ type BlockPreview = {
   dataRectValue?: { r0: number; c0: number; r1: number; c1: number } | null;
 };
 
-export default function DynamicFormPreview({ detail, dense = false }: DynamicFormPreviewProps) {
+export default function DynamicFormPreview({
+  detail,
+  dense = false,
+  interactive = false,
+}: DynamicFormPreviewProps) {
   const value = React.useMemo(
     () =>
       buildEditorValue({
@@ -187,6 +192,7 @@ export default function DynamicFormPreview({ detail, dense = false }: DynamicFor
             fields={selectedSectionItem.fields}
             blocks={selectedSectionItem.blocks}
             dense={dense}
+            interactive={interactive}
           />
         </Box>
       )}
@@ -200,11 +206,13 @@ function SectionPreview({
   fields,
   blocks,
   dense,
+  interactive,
 }: {
   section: DynamicFormSection;
   fields: DynamicFormField[];
   blocks: BlockPreview[];
   dense: boolean;
+  interactive: boolean;
 }) {
   return (
     <Card variant="outlined" sx={{ borderRadius: 1 }}>
@@ -232,7 +240,7 @@ function SectionPreview({
           <Grid container spacing={1.5}>
             {fields.map((field) => (
               <Grid key={field.id} size={{ xs: 12, sm: field.colSpan }}>
-                <FieldPreviewCard field={field} />
+                <FieldPreviewCard field={field} interactive={interactive} />
               </Grid>
             ))}
           </Grid>
@@ -263,7 +271,13 @@ function SectionPreview({
   );
 }
 
-function FieldPreviewCard({ field }: { field: DynamicFormField }) {
+function FieldPreviewCard({
+  field,
+  interactive,
+}: {
+  field: DynamicFormField;
+  interactive: boolean;
+}) {
   const displayName = getDynamicFormFieldDisplayName(field);
 
   return (
@@ -286,14 +300,150 @@ function FieldPreviewCard({ field }: { field: DynamicFormField }) {
           <Chip size="small" label={fieldTypeLabels[field.type]} variant="outlined" />
         </Stack>
 
-        <FieldControlPreview field={field} />
+        <FieldControlPreview field={field} interactive={interactive} />
       </Stack>
     </Paper>
   );
 }
 
-function FieldControlPreview({ field }: { field: DynamicFormField }) {
+function FieldControlPreview({
+  field,
+  interactive,
+}: {
+  field: DynamicFormField;
+  interactive: boolean;
+}) {
   const displayName = getDynamicFormFieldDisplayName(field);
+  const [value, setValue] = React.useState<unknown>(
+    field.type === "multiSelect" ? [] : field.type === "boolean" ? false : "",
+  );
+
+  if (field.type === "boolean") {
+    return (
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={Boolean(value)}
+            disabled={!interactive}
+            onChange={(event) => setValue(event.target.checked)}
+          />
+        }
+        label={displayName}
+      />
+    );
+  }
+
+  if (field.type === "singleSelect") {
+    return (
+      <Select
+        size="small"
+        fullWidth
+        value={typeof value === "string" ? value : ""}
+        disabled={!interactive}
+        displayEmpty
+        onChange={(event) => setValue(event.target.value)}
+        renderValue={(selected) =>
+          selected ? (
+            field.options?.find((option) => option.code === selected)?.label ?? String(selected)
+          ) : (
+            <Typography component="span" color="text.secondary">
+              Chưa chọn
+            </Typography>
+          )
+        }
+      >
+        <MenuItem value="">Chưa chọn</MenuItem>
+        {(field.options ?? []).map((option) => (
+          <MenuItem key={option.code} value={option.code}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    );
+  }
+
+  if (field.type === "multiSelect") {
+    return (
+      <Select
+        size="small"
+        fullWidth
+        multiple
+        value={Array.isArray(value) ? value : []}
+        disabled={!interactive}
+        displayEmpty
+        onChange={(event) =>
+          setValue(
+            Array.isArray(event.target.value)
+              ? event.target.value
+              : String(event.target.value).split(","),
+          )
+        }
+        renderValue={(selected) =>
+          Array.isArray(selected) && selected.length > 0 ? (
+            selected
+              .map((code) => field.options?.find((option) => option.code === code)?.label ?? code)
+              .join(", ")
+          ) : (
+            <Typography component="span" color="text.secondary">
+              Chưa chọn
+            </Typography>
+          )
+        }
+      >
+        {(field.options ?? []).map((option) => (
+          <MenuItem key={option.code} value={option.code}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    );
+  }
+
+  if (field.type === "richText") {
+    return (
+      <Paper
+        variant="outlined"
+        sx={{
+          minHeight: Math.max(180, field.minHeight ?? 180),
+          p: 1.25,
+          borderRadius: 1,
+          bgcolor: "background.paper",
+        }}
+      >
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            <Chip size="small" variant="outlined" label="B" />
+            <Chip size="small" variant="outlined" label="I" />
+            <Chip size="small" variant="outlined" label="Bảng" />
+          </Stack>
+          <TextField
+            fullWidth
+            size="small"
+            multiline
+            minRows={4}
+            value={typeof value === "string" ? value : ""}
+            disabled={!interactive}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </Stack>
+      </Paper>
+    );
+  }
+
+  return (
+    <TextField
+      fullWidth
+      size="small"
+      type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+      multiline={field.type === "longText" || field.type === "stringList"}
+      minRows={field.type === "longText" || field.type === "stringList" ? 3 : undefined}
+      label={displayName}
+      disabled={!interactive}
+      value={typeof value === "string" || typeof value === "number" ? value : ""}
+      onChange={(event) => setValue(event.target.value)}
+      InputLabelProps={field.type === "date" ? { shrink: true } : undefined}
+    />
+  );
 
   if (field.type === "boolean") {
     return <FormControlLabel control={<Checkbox disabled />} label={displayName} />;

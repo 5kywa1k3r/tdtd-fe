@@ -1,4 +1,5 @@
 ﻿import React from "react";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Accordion,
   AccordionDetails,
@@ -131,6 +132,7 @@ import type {
 } from "../../../types/aggregateTypes";
 import { UITextKey, uiText } from '../../../constants/uiText';
 import WorkReportEditorPage from "../report/WorkReportEditorPage";
+import { statisticsConfigurationPath } from "../statistics/statisticsConfigurationModel";
 
 type Props = {
   workId?: string | null;
@@ -257,8 +259,8 @@ const STACK_IDENTITY_COLUMN_OPTIONS: Array<{ value: string; label: string; descr
   { value: "unitShortName", label: "Đơn vị", description: "Tên ngắn của đơn vị gửi báo cáo." },
   { value: "fullName", label: "Người báo cáo", description: "Họ tên người lập hoặc gửi báo cáo." },
   { value: "userName", label: "Tài khoản", description: "Tài khoản người báo cáo, dùng khi cần truy vết." },
-  { value: "workAssignmentId", label: "Công việc con", description: "Id công việc con chứa báo cáo đã duyệt." },
-  { value: "reportId", label: "Báo cáo", description: "Id báo cáo để mở và kiểm chứng dữ liệu." },
+  { value: "workAssignmentId", label: "Công việc con", description: "Mã công việc con chứa báo cáo đã duyệt." },
+  { value: "reportId", label: "Báo cáo", description: "Mã báo cáo để mở và kiểm chứng dữ liệu." },
   { value: "approvedAtUtc", label: "Thời điểm duyệt", description: "Thời điểm báo cáo được duyệt." },
   { value: "sourceReportCount", label: "Số báo cáo", description: "Số báo cáo đã được gom vào dòng này khi chọn khoảng kỳ, lũy kế hoặc toàn bộ kỳ." },
 ];
@@ -335,10 +337,10 @@ const BASIC_SUMMARY_BASE_SOURCE_SCOPE_OPTIONS: BasicSummarySourceScopeOption[] =
 ];
 
 const BASIC_SUMMARY_FLOW_SOURCE_SCOPE_OPTIONS: BasicSummarySourceScopeOption[] = [
-  { value: "FLOW_BRANCH", label: "Nhánh flow này" },
-  { value: "FLOW_STEP", label: "Bước flow này" },
-  { value: "FLOW_EFFECTIVE_PATH", label: "Dữ liệu flow hiệu lực" },
-  { value: "FLOW_FINAL", label: "Kết quả cuối flow" },
+  { value: "FLOW_BRANCH", label: "Nhánh quy trình này" },
+  { value: "FLOW_STEP", label: "Bước quy trình này" },
+  { value: "FLOW_EFFECTIVE_PATH", label: "Dữ liệu quy trình còn hiệu lực" },
+  { value: "FLOW_FINAL", label: "Kết quả cuối quy trình" },
 ];
 
 function buildBasicSummarySourceScopeOptions(
@@ -624,7 +626,7 @@ function getOptionalNonNegativeInt(value: unknown): number | null {
 }
 
 function getLargeTableStatisticMessage(inputCellCount: number, limit: number) {
-  return `Bảng có ${inputCellCount} ô nhập, vượt ngưỡng thống kê nền ${limit}; hệ thống không ghi projection từng ô, nhưng thống kê cơ bản vẫn tổng hợp trực tiếp từ báo cáo đã duyệt nếu không vượt ${DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô input.`;
+  return `Bảng có ${inputCellCount} ô nhập, vượt ngưỡng thống kê nền ${limit}; hệ thống không ghi dữ liệu đọc nền từng ô, nhưng thống kê cơ bản vẫn tổng hợp trực tiếp từ báo cáo đã duyệt nếu không vượt ${DESIGNER_LIMITS.MAX_DIRECT_AGGREGATE_INPUT_CELLS} ô nhập.`;
 }
 
 function resolveBlockStatisticState(block: DynamicFormExcelBlockLike) {
@@ -711,16 +713,16 @@ function buildStatisticHeaderSpec(
 
 function formatBlockMetricSummary(block: DynamicFormExcelBlockResolution) {
   return block.statisticsDisabled
-    ? "Bảng lớn: theo template reporter"
+    ? "Bảng lớn: theo biểu mẫu báo cáo viên"
     : `${block.metricOptions.length} chỉ tiêu bảng tự động`;
 }
 
 function formatBlockMetricHelper(block?: DynamicFormExcelBlockResolution | null) {
   if (block?.statisticsDisabled) {
-    return "Bảng lớn không ghi thống kê nền từng ô; màn này vẫn dùng template reporter và đọc trực tiếp từ báo cáo đã duyệt khi chạy tổng hợp.";
+    return "Bảng lớn không ghi thống kê nền từng ô; màn này vẫn dùng biểu mẫu báo cáo viên và đọc trực tiếp từ báo cáo đã duyệt khi chạy tổng hợp.";
   }
 
-  return "Tự động lấy table metric hợp lệ và field có nhãn thống kê. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, short text/single select đếm theo nhóm, multi select list + đếm.";
+  return "Tự động lấy chỉ tiêu bảng hợp lệ và trường có nhãn thống kê. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, văn bản ngắn/chọn một đếm theo nhóm, danh sách chọn nhiều + đếm.";
 }
 
 function parseExcelOrdinalCell(rowKey?: string | null, columnKey?: string | null) {
@@ -1318,10 +1320,10 @@ function formatScopeModeLabel(scopeMode?: string | null) {
   if (scopeMode === "DIRECT_CHILDREN_OR_SELF") return "Cấp con hoặc chính nó";
   if (scopeMode === "DIRECT_CHILDREN") return "Cấp con trực tiếp";
   if (scopeMode === "SELF") return "Chính công việc này";
-  if (scopeMode === "FLOW_BRANCH") return "Nhánh flow này";
-  if (scopeMode === "FLOW_STEP") return "Bước flow này";
-  if (scopeMode === "FLOW_EFFECTIVE_PATH") return "Dữ liệu flow hiệu lực";
-  if (scopeMode === "FLOW_FINAL") return "Kết quả cuối flow";
+  if (scopeMode === "FLOW_BRANCH") return "Nhánh quy trình này";
+  if (scopeMode === "FLOW_STEP") return "Bước quy trình này";
+  if (scopeMode === "FLOW_EFFECTIVE_PATH") return "Dữ liệu quy trình còn hiệu lực";
+  if (scopeMode === "FLOW_FINAL") return "Kết quả cuối quy trình";
   if (scopeMode === "SUBTREE") return "Cấp con trực tiếp";
   return scopeMode || "-";
 }
@@ -1614,8 +1616,8 @@ function DynamicFormAggregatePreviewPanel({
               ) : (
                 <Alert severity={block.statisticsDisabled ? "info" : "warning"} sx={{ py: 0.75 }}>
                   {block.statisticsDisabled
-                    ? "Bảng lớn đang khóa thống kê nền từng ô. Template reporter vẫn là bề mặt chính; nếu cần ghi dữ liệu vào báo cáo đích, dùng luồng Gán dữ liệu tổng hợp riêng."
-                    : "Bảng này chưa cấu hình chỉ tiêu thống kê. Hãy gắn label/chỉ tiêu cho ô, dòng, cột hoặc vùng cần tổng hợp trong biểu mẫu động."}
+                    ? "Bảng lớn đang khóa thống kê nền từng ô. Biểu mẫu báo cáo viên vẫn là bề mặt chính; nếu cần ghi dữ liệu vào báo cáo đích, dùng luồng Gán dữ liệu tổng hợp riêng."
+                    : "Bảng này chưa cấu hình chỉ tiêu thống kê. Hãy gắn nhãn chỉ tiêu cho ô, dòng, cột hoặc vùng cần tổng hợp trong biểu mẫu động."}
                 </Alert>
               )}
             </Box>
@@ -1733,7 +1735,7 @@ function StackIdentityPreviewDialogContent({
         previewHighlights={previewHighlights}
         loading={loading}
         title="Xem trước bảng Excel nguồn"
-        description="Preview dùng cùng cách hiển thị với các bảng khác: vùng dữ liệu và các chỉ tiêu đang chọn được tô màu trực tiếp trên bảng Excel nguồn."
+        description="Bản xem trước dùng cùng cách hiển thị với các bảng khác: vùng dữ liệu và các chỉ tiêu đang chọn được tô màu trực tiếp trên bảng Excel nguồn."
       />
 
       <Box>
@@ -2071,7 +2073,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   if (data && typeof data === "object" && "message" in data) {
     const code = readApiErrorCode(data);
     if (code === "DYNAMIC_FORM_BLOCK_NOT_FOUND") {
-      return "Template/vùng đã chọn không còn thuộc biểu mẫu động đang tổng hợp. Hãy mở đúng công việc có biểu mẫu đó, hoặc lưu lại cấu hình tổng hợp sau khi biểu mẫu động thay đổi.";
+      return "Biểu mẫu/vùng đã chọn không còn thuộc biểu mẫu động đang tổng hợp. Hãy mở đúng công việc có biểu mẫu đó, hoặc lưu lại cấu hình tổng hợp sau khi biểu mẫu động thay đổi.";
     }
 
     const message = (data as { message?: unknown }).message;
@@ -2433,7 +2435,7 @@ async function downloadDynamicFormAggregateXlsx(
   ];
   [
     ["Biểu mẫu", result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId],
-    ["Id biểu mẫu", result.meta.dynamicFormTemplateId],
+    ["Mã biểu mẫu", result.meta.dynamicFormTemplateId],
     ["Mã đại diện biểu mẫu", result.meta.dynamicFormTemplateCode],
     ["Tên biểu mẫu", result.meta.dynamicFormTemplateName],
     ["Phần bảng", result.meta.blockId],
@@ -2608,7 +2610,7 @@ async function downloadSummaryTemplateWorkbookXlsx(
   ];
   [
     ["Biểu mẫu", result.meta.dynamicFormTemplateName || result.meta.dynamicFormTemplateId],
-    ["Id biểu mẫu", result.meta.dynamicFormTemplateId],
+    ["Mã biểu mẫu", result.meta.dynamicFormTemplateId],
     ["Mã đại diện biểu mẫu", result.meta.dynamicFormTemplateCode],
     ["Tên biểu mẫu", result.meta.dynamicFormTemplateName],
     ["Phần bảng", result.meta.blockId],
@@ -3637,7 +3639,7 @@ const WorkAggregationTab: React.FC<Props> = ({
       setFieldTextConcatRequest(request);
       setFieldTextConcatResult(response);
     } catch (err: unknown) {
-      showMessage(getErrorMessage(err, "Không tải được text concat."));
+      showMessage(getErrorMessage(err, "Không tải được nội dung ghép."));
     }
   }, [
     effectiveParentAssignmentId,
@@ -3650,7 +3652,7 @@ const WorkAggregationTab: React.FC<Props> = ({
 
   const handleExportFieldTextConcatCsv = React.useCallback(async () => {
     if (!fieldTextConcatRequest) {
-      showMessage("Chưa có truy vấn text concat để export.");
+      showMessage("Chưa có truy vấn ghép nội dung để xuất dữ liệu.");
       return;
     }
 
@@ -3834,8 +3836,8 @@ const WorkAggregationTab: React.FC<Props> = ({
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Template / vùng dữ liệu"
-          helperText="Block hoặc template cần cấu hình trong biểu mẫu động."
+          label="Mẫu bảng / vùng dữ liệu"
+          helperText="Khối bảng hoặc mẫu bảng cần được cấu hình trong biểu mẫu động."
         />
       )}
     />
@@ -3851,9 +3853,25 @@ const WorkAggregationTab: React.FC<Props> = ({
           <Typography variant="body2" sx={{ opacity: 0.72 }}>
             {selectedScopeIsRoot
               ? "Công việc gốc dùng màn này để xem trước và xuất bảng tổng hợp từ các công việc con; muốn ghi dữ liệu thì mở báo cáo đích và dùng Gán dữ liệu tổng hợp."
-              : "Màn này dùng để tập hợp dữ liệu, xem trước snapshot và lưu cấu hình tổng hợp; muốn ghi vào báo cáo thì mở báo cáo đích và dùng Gán dữ liệu tổng hợp."}
+              : "Màn này dùng để tập hợp dữ liệu, xem trước bản chụp và lưu cấu hình tổng hợp; muốn ghi vào báo cáo thì mở báo cáo đích và dùng Gán dữ liệu tổng hợp."}
           </Typography>
         </Stack>
+        {workId && effectiveParentAssignmentId ? (
+          <Alert
+            severity="info"
+            data-testid="p8-stat-config-entry"
+            action={(
+              <Button
+                component={RouterLink}
+                to={statisticsConfigurationPath(workId, effectiveParentAssignmentId, "overview")}
+              >
+                Mở cấu hình thống kê
+              </Button>
+            )}
+          >
+            Basic, Advanced, Diff, label và readiness canonical được quản lý tại workspace cấu hình riêng. Khu vực bên dưới chỉ dành cho xem và thao tác kết quả theo phase được máy chủ cho phép.
+          </Alert>
+        ) : null}
 
         {!effectiveParentAssignmentId && !scopeOptionsQuery.isFetching && (
           <Alert severity="info">
@@ -3988,8 +4006,8 @@ const WorkAggregationTab: React.FC<Props> = ({
               selectedTemplateLabel={selectedTemplateLabel}
               previewHighlights={dynamicFormPreviewHighlights}
               loading={templateQuery.isFetching}
-              title="Template reporter"
-              description="Bảng bên dưới dùng cùng layout với người nhập báo cáo. Vùng dữ liệu và ô/chỉ tiêu đang đọc được tô màu trực tiếp trên template."
+              title="Mẫu bảng cho người báo cáo"
+              description="Bảng bên dưới dùng cùng bố cục với màn nhập báo cáo. Vùng dữ liệu và ô hoặc chỉ tiêu đang đọc được tô màu trực tiếp trên mẫu bảng."
             />
           )}
 
@@ -4128,8 +4146,8 @@ const WorkAggregationTab: React.FC<Props> = ({
                 ? [
                     {
                       key: "field-statistics",
-                      label: "Thống kê trường Dynamic Form",
-                      tooltip: "Xem thống kê các trường Dynamic Form theo cùng khoảng thời gian và đơn vị",
+                      label: "Thống kê trường biểu mẫu động",
+                      tooltip: "Xem thống kê các trường biểu mẫu động theo cùng khoảng thời gian và đơn vị",
                       icon: CalculateOutlinedIcon,
                       onClick: () => void handleRunFieldStatistics(),
                       disabled: fieldStatisticState.isLoading,
@@ -4168,7 +4186,7 @@ const WorkAggregationTab: React.FC<Props> = ({
             <Stack spacing={1.5}>
               <Stack spacing={0.25}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Thống kê trường Dynamic Form
+                  Thống kê trường biểu mẫu động
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.72 }}>
                   Kết quả dùng cùng khoảng thời gian, đơn vị và phạm vi đã chọn ở bộ lọc tập hợp.
@@ -4187,7 +4205,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                       variant="outlined"
                     />
                     <Chip
-                      label={`Báo cáo: ${fieldStatisticResult.totalReportCount}`}
+                      label={`Lượt báo cáo: ${fieldStatisticResult.totalReportCount}`}
                       variant="outlined"
                     />
                     <Chip
@@ -4201,6 +4219,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                       <TableHead>
                         <TableRow>
                           <TableCell>{uiText(UITextKey.TextField)}</TableCell>
+                          <TableCell>Nhãn thống kê</TableCell>
                           <TableCell>{uiText(UITextKey.TextType)}</TableCell>
                           <TableCell>{uiText(UITextKey.TextBucket)}</TableCell>
                           <TableCell>{uiText(UITextKey.TextPeriod)}</TableCell>
@@ -4223,6 +4242,17 @@ const WorkAggregationTab: React.FC<Props> = ({
                                 </Typography>
                               </Stack>
                             </TableCell>
+                            <TableCell>
+                              {row.statisticLabelCodes?.length ? (
+                                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                                  {row.statisticLabelCodes.map((code) => (
+                                    <Chip key={code} size="small" variant="outlined" label={code} />
+                                  ))}
+                                </Stack>
+                              ) : (
+                                "-"
+                              )}
+                            </TableCell>
                             <TableCell>{getFieldTypeDisplayLabel(row.fieldType)}</TableCell>
                             <TableCell>{row.bucketLabel ?? row.bucketKey ?? "-"}</TableCell>
                             <TableCell>{formatDayKeyLabel(row.periodKey)}</TableCell>
@@ -4237,7 +4267,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                                   onClick={() => void handleRunFieldTextConcat(row)}
                                   disabled={fieldTextConcatState.isLoading}
                                 >
-                                  {isTextFieldStatisticRow(row) ? "Xem text" : "Xem list"}
+                                  {isTextFieldStatisticRow(row) ? "Xem nội dung" : "Xem danh sách"}
                                 </Button>
                               ) : (
                                 "-"
@@ -4247,7 +4277,7 @@ const WorkAggregationTab: React.FC<Props> = ({
                         ))}
                         {fieldStatisticResult.rows.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={8}>
+                            <TableCell colSpan={9}>
                               <Typography variant="body2" sx={{ opacity: 0.7 }}>
                                 Chưa có thống kê trường dữ liệu phù hợp với bộ lọc hiện tại.
                               </Typography>
@@ -4343,16 +4373,16 @@ const WorkAggregationTab: React.FC<Props> = ({
             ))}
 
             <Alert severity="info">
-              Phần tổng hợp dùng các chỉ số đã cấu hình trong biểu mẫu. Bản xem trước đọc dữ liệu từ template/vùng đã chọn.
+              Phần tổng hợp dùng các chỉ số đã cấu hình trong biểu mẫu. Bản xem trước đọc dữ liệu từ biểu mẫu/vùng đã chọn.
             </Alert>
 
             <Alert severity="info">
-              Tab tổng hợp chỉ lưu cấu hình và xem trước snapshot. Muốn ghi dữ liệu vào báo cáo, mở báo cáo đích rồi dùng <b>Gán dữ liệu tổng hợp</b> để chọn template, vùng đích và khoảng ngày.
+              Tab tổng hợp chỉ lưu cấu hình và xem trước bản chụp. Muốn ghi dữ liệu vào báo cáo, mở báo cáo đích rồi dùng <b>Gán dữ liệu tổng hợp</b> để chọn biểu mẫu, vùng đích và khoảng ngày.
             </Alert>
 
             {dynamicFormAggregateWorkbookPreview && (
               <AggregateWorkbookPreview
-                title="Report tổng hợp theo template reporter"
+                title="Báo cáo tổng hợp theo biểu mẫu báo cáo viên"
                 workbook={dynamicFormAggregateWorkbookPreview.workbook}
                 previewRect={dynamicFormAggregateWorkbookPreview.previewRect}
                 spec={templateSpec}
@@ -4532,7 +4562,7 @@ const WorkAggregationTab: React.FC<Props> = ({
             />
           ) : (
             <Alert severity="warning">
-              Chưa xác định được template/vùng của biểu mẫu động để xem trước định danh.
+              Chưa xác định được biểu mẫu/vùng của biểu mẫu động để xem trước định danh.
             </Alert>
           )}
         </DialogContent>

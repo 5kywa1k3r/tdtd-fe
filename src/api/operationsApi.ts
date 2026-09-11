@@ -242,8 +242,10 @@ export type FlowStatisticProjectionDiagnosticRow = {
   payloadHash?: string | null;
   fieldProjectionRows: number;
   tableProjectionRows: number;
+  labelProjectionRows: number;
   fieldProjectionFresh: boolean;
   tableProjectionFresh: boolean;
+  labelProjectionFresh: boolean;
   flowMetadataMatches: boolean;
   issueTypes: string[];
 };
@@ -261,6 +263,7 @@ export type FlowStatisticProjectionDiagnosticsResponse = {
   scannedReportCount: number;
   fieldProjectionRowCount: number;
   tableProjectionRowCount: number;
+  labelProjectionRowCount: number;
   noProjectionReportCount: number;
   staleProjectionReportCount: number;
   flowMetadataMismatchReportCount: number;

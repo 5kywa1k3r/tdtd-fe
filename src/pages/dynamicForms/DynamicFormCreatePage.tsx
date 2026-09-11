@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { DYNAMIC_FORM_LIST_PATH } from "../../routes/dynamicFormRoutes";
 
 import {
+  buildDynamicFormSchemaPayload,
   useCreateDynamicFormMutation,
   useNextDynamicFormCodeQuery,
 } from "../../api/dynamicFormApi";
@@ -41,7 +43,7 @@ export default function DynamicFormCreatePage() {
       mode="create"
       initialValue={initialValue}
       busy={createState.isLoading}
-      onBack={() => navigate("/dynamic-forms")}
+      onBack={() => navigate(DYNAMIC_FORM_LIST_PATH)}
       onBuildDynamicExcelBlock={async (dynamicExcelTemplateId, sectionId) => {
         const detail = await loadDynamicExcel({ id: dynamicExcelTemplateId }).unwrap();
         return buildDynamicExcelBlockJson(detail, sectionId);
@@ -53,13 +55,9 @@ export default function DynamicFormCreatePage() {
           description: payload.description,
           tagCodes: payload.tagCodes,
           schemaVersion: payload.schemaVersion,
-          sectionsJson: payload.sectionsJson,
-          fieldsJson: payload.fieldsJson,
-          excelBlockJson: payload.excelBlockJson,
-          blocksJson: payload.blocksJson,
+          schema: buildDynamicFormSchemaPayload(payload),
           isActive: payload.isActive,
         }).unwrap();
-        navigate("/dynamic-forms");
       }}
     />
   );

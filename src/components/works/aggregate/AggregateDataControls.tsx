@@ -150,7 +150,7 @@ export default function AggregateDataControls(props: AggregateDataControlsProps)
     hideMetricSelector = false,
     metricSectionTitle = "Cách tổng hợp",
     metricSummaryText = "Tự động lấy tất cả dữ liệu hợp lệ.",
-    metricHelperText = "Table metric và field có nhãn thống kê được lấy tự động. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, text/list xem chi tiết theo lazy load.",
+    metricHelperText = "Chỉ tiêu bảng và trường có nhãn thống kê được lấy tự động. Mặc định: số lấy tổng, ngày lấy giá trị muộn nhất, văn bản/danh sách chỉ tải chi tiết khi mở.",
     sourceSlot,
     targetSlot,
     metricExtraSlot,

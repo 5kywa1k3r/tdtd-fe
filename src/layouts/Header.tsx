@@ -25,8 +25,7 @@ import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import { useNavigate } from 'react-router-dom';
 
 import { useAppTheme } from '../theme/ThemeProviderCustom';
-import { useAppDispatch } from '../hooks';
-import { logout } from '../stores/authSlice';
+import { performLogout } from '../utils/AuthEvents';
 
 import { getMeSnapshot, type MeSnapshot } from '../stores/authStorage';
 import { Role, isManagerUnitRole } from '../constants/roles';
@@ -119,7 +118,6 @@ export const Header = () => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [openMeDialog, setOpenMeDialog] = React.useState(false);
 
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { setThemeName } = useAppTheme();
 
@@ -149,8 +147,7 @@ export const Header = () => {
 
   const handleLogout = () => {
     handleCloseMenu();
-    dispatch(logout());
-    navigate('/login');
+    performLogout();
   };
 
   return (
@@ -164,9 +161,33 @@ export const Header = () => {
           borderRadius: 0,
         })}
       >
-        <Toolbar>
-          <Typography variant="h5" sx={{ flexGrow: 1 }}>
-            PHẦN MỀM THEO DÕI TIẾN ĐỘ NHIỆM VỤ, CHỈ TIÊU
+        <Toolbar
+          sx={{
+            minHeight: '64px !important',
+            height: 64,
+            gap: { xs: 0.5, sm: 1 },
+          }}
+        >
+          <Typography
+            component="div"
+            aria-label="Phần mềm theo dõi tiến độ nhiệm vụ, chỉ tiêu"
+            sx={{
+              flexGrow: 1,
+              minWidth: 0,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              fontSize: { xs: '1rem', md: '1.5rem' },
+            }}
+          >
+            <Box component="span" sx={{ display: { xs: 'inline', md: 'none' } }}>
+              TDTD
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
+              PHẦN MỀM THEO DÕI TIẾN ĐỘ NHIỆM VỤ, CHỈ TIÊU
+            </Box>
           </Typography>
 
           <NotificationBell />
@@ -177,22 +198,50 @@ export const Header = () => {
             alignItems="center"
             spacing={0.75}
             sx={{
-              px: 1,
+              minWidth: 0,
+              maxWidth: { xs: 152, sm: 260 },
+              px: { xs: 0.25, sm: 1 },
               py: 0.5,
               borderRadius: 999,
               '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
             }}
           >
-            <IconButton color="inherit" onClick={handleUserClick} sx={{ p: 0.75 }}>
+            <IconButton
+              aria-label="Mở menu tài khoản"
+              color="inherit"
+              onClick={handleUserClick}
+              sx={{ p: 0.75 }}
+            >
               <AccountCircleIcon />
             </IconButton>
 
-            <Box sx={{ lineHeight: 1.05 }}>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            <Box sx={{ lineHeight: 1.05, minWidth: 0 }}>
+              <Typography
+                variant="body2"
+                title={displayLine1}
+                sx={{
+                  maxWidth: { xs: 92, sm: 190 },
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 {displayLine1}
               </Typography>
               {displayLine2 && (
-                <Typography variant="caption" sx={{ opacity: 0.85 }}>
+                <Typography
+                  variant="caption"
+                  title={displayLine2}
+                  sx={{
+                    display: { xs: 'none', sm: 'block' },
+                    maxWidth: 190,
+                    opacity: 0.85,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
                   {displayLine2}
                 </Typography>
               )}

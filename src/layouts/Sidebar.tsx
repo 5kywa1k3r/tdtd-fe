@@ -12,13 +12,17 @@ import {
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import DynamicFormIcon from "@mui/icons-material/DynamicForm";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import TableChartOutlinedIcon from "@mui/icons-material/TableChartOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useGetMeQuery } from "../api/base/meApi";
 import { Role, isManagerUnitRole } from "../constants/roles";
+import { DYNAMIC_FORM_LIST_PATH } from "../routes/dynamicFormRoutes";
+import { DYNAMIC_FLOW_LIST_PATH } from "../routes/dynamicFlowRoutes";
 
 export const drawerWidth = 260;
 
@@ -79,6 +83,35 @@ export const Sidebar = () => {
       <List
         subheader={(
           <ListSubheader component="div">
+            Thiết kế
+          </ListSubheader>
+        )}
+      >
+        <ListItemButton
+          selected={isActive(DYNAMIC_FORM_LIST_PATH)}
+          onClick={() => navigate(DYNAMIC_FORM_LIST_PATH)}
+        >
+          <ListItemIcon>
+            <DynamicFormIcon />
+          </ListItemIcon>
+          <ListItemText primary="Biểu mẫu động" />
+        </ListItemButton>
+        <ListItemButton
+          selected={isActive(DYNAMIC_FLOW_LIST_PATH)}
+          onClick={() => navigate(DYNAMIC_FLOW_LIST_PATH)}
+        >
+          <ListItemIcon>
+            <AccountTreeOutlinedIcon />
+          </ListItemIcon>
+          <ListItemText primary="Quy trình động" />
+        </ListItemButton>
+      </List>
+
+      <Divider />
+
+      <List
+        subheader={(
+          <ListSubheader component="div">
             Công cụ
           </ListSubheader>
         )}
@@ -93,13 +126,13 @@ export const Sidebar = () => {
           <ListItemText primary="Bảng biểu động" />
         </ListItemButton>
         <ListItemButton
-          selected={isActive("/dynamic-forms")}
-          onClick={() => navigate("/dynamic-forms")}
+          selected={isActive("/nq57-text-aggregation")}
+          onClick={() => navigate("/nq57-text-aggregation")}
         >
           <ListItemIcon>
-            <DynamicFormIcon />
+            <ArticleOutlinedIcon />
           </ListItemIcon>
-          <ListItemText primary="Biểu mẫu động" />
+          <ListItemText primary="Tổng hợp NQ57" />
         </ListItemButton>
         {canManageLabels && (
           <ListItemButton

@@ -64,6 +64,7 @@ import WorkAssignmentNotificationTab from "./WorkAssignmentNotificationTab";
 import WorkAssignmentSourceRulesDialog from "./WorkAssignmentSourceRulesDialog";
 import WorkAssignmentAutoApproveConditionDialog from "./WorkAssignmentAutoApproveConditionDialog";
 import WorkTaskActionCenterPage from "../../../pages/works/actions/WorkTaskActionCenterPage";
+import DynamicFlowRuntimeEntryPanel from "../flowRuntime/DynamicFlowRuntimeEntryPanel";
 
 import type { WorkAssignmentListResponse, WorkAssignmentResponse } from "../../../types/workAssignment";
 import { toAssignmentDraft } from "../../../types/workAssignment";
@@ -82,6 +83,18 @@ type Props = {
   onOpenAggregation?: (row: AssignmentTableRow) => void;
   onOpenReports?: () => void;
   onOpenReview?: () => void;
+  onOpenFlowInstance?: (
+    instanceId: string,
+    tab?: "overview" | "work-to-do" | "timeline",
+    targetWorkId?: string,
+    identity?: {
+      stepInstanceId?: string | null;
+      branchId?: string | null;
+      attemptNo?: number | null;
+      assignmentId?: string | null;
+      reportId?: string | null;
+    },
+  ) => void;
   selectedBranch?: AssignmentTableRow | null;
   branchRows?: AssignmentTableRow[];
   branchLoading?: boolean;
@@ -90,6 +103,16 @@ type Props = {
 
 type AssignSection = "LIST" | "ACTIONS" | "NOTIFICATIONS" | "HANDOVER";
 const ENABLE_DIRECT_HANDOVER_SECTION = false;
+const FLOW_RUNTIME_LEGACY_MUTATION_REASON =
+  "Assignment do Flow runtime sở hữu; legacy mutation bị khóa và quyền chỉ lấy từ canonical Flow route.";
+const FLOW_RUNTIME_P7_REASON = "Mapping/source chỉ mở tại canonical runtime owner theo capability máy chủ.";
+const FLOW_RUNTIME_P8_REASON = "Statistics/aggregation chỉ mở tại canonical statistics owner theo capability máy chủ.";
+
+function isFlowRuntimeOwnedAssignment(
+  row: Pick<AssignmentTableRow, "flowInstanceId"> | null | undefined,
+) {
+  return Boolean(row?.flowInstanceId?.trim());
+}
 
 const defaultAssignmentFilterValue = (): WorkAssignmentFilterValue => ({
   q: "",
@@ -393,6 +416,7 @@ const WorkAssignTab: React.FC<Props> = ({
   onOpenAggregation,
   onOpenReports,
   onOpenReview,
+  onOpenFlowInstance,
   selectedBranch = null,
   branchRows = [],
   branchLoading = false,
@@ -463,6 +487,7 @@ const WorkAssignTab: React.FC<Props> = ({
     () => ((data ?? []) as WorkAssignmentListResponse[]).map(toAssignmentRow),
     [data]
   );
+  const hasFlowRuntimeOwnership = rows.some(isFlowRuntimeOwnedAssignment);
   const currentParent = selectedBranch ?? null;
   const isDrillView = Boolean(currentParent);
 
@@ -508,6 +533,17 @@ const WorkAssignTab: React.FC<Props> = ({
   const openAssignmentDetail = React.useCallback(
     (assignmentId: string) => {
       if (!assignmentId) return;
+      const runtimeRow = rows.find(
+        (row) => row.id === assignmentId && isFlowRuntimeOwnedAssignment(row),
+      );
+      if (runtimeRow?.flowInstanceId) {
+        onOpenFlowInstance?.(
+          runtimeRow.flowInstanceId,
+          "overview",
+          workId,
+        );
+        return;
+      }
       setDetailId(assignmentId);
       setSection("LIST");
       const nextParams = new URLSearchParams(searchParams);
@@ -516,7 +552,7 @@ const WorkAssignTab: React.FC<Props> = ({
       nextParams.set("detailAssignmentId", assignmentId);
       setSearchParams(nextParams, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [onOpenFlowInstance, rows, searchParams, setSearchParams, workId]
   );
 
   const closeAssignmentDetail = React.useCallback(() => {
@@ -708,16 +744,24 @@ const WorkAssignTab: React.FC<Props> = ({
 
   const openCreateRoot = React.useCallback(() => {
     if (blockDrillMutation()) return;
+    if (hasFlowRuntimeOwnership) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+      return;
+    }
     setCreateValue({
       ...defaultAssignmentCreateValue(),
       createMode: isWorkOwner ? "root" : "child",
       parentAssignmentId: null,
     });
     setCreateOpen(true);
-  }, [blockDrillMutation, isWorkOwner]);
+  }, [blockDrillMutation, hasFlowRuntimeOwnership, isWorkOwner, showMessage]);
 
   const handleSubmitCreate = async (nextValue?: AssignmentCreateValue) => {
     if (blockDrillMutation()) return;
+    if (hasFlowRuntimeOwnership) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+      return;
+    }
 
     const submitValue = nextValue ?? createValue;
     const mustChooseParent = !isWorkOwner || submitValue.createMode === "child";
@@ -864,6 +908,10 @@ const WorkAssignTab: React.FC<Props> = ({
 
   const handleToggleActive = async (row: AssignmentTableRow) => {
     if (blockDrillMutation()) return;
+    if (isFlowRuntimeOwnedAssignment(row)) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+      return;
+    }
 
     try {
       if (row.isActive) {
@@ -884,15 +932,23 @@ const WorkAssignTab: React.FC<Props> = ({
 
   const handleOpenComplete = React.useCallback((row: AssignmentTableRow) => {
     if (blockDrillMutation()) return;
+    if (isFlowRuntimeOwnedAssignment(row)) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+      return;
+    }
 
     setCompleteTarget(row);
     setCompleteDate(toDayKey(row.completedDate) || toDayKey(new Date().toISOString()));
     setCompleteNote("");
-  }, [blockDrillMutation]);
+  }, [blockDrillMutation, showMessage]);
 
   const handleSubmitComplete = async () => {
     if (blockDrillMutation()) return;
     if (!completeTarget) return;
+    if (isFlowRuntimeOwnedAssignment(completeTarget)) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+      return;
+    }
     if (!completeDate) {
       showMessage("Bắt buộc nhập ngày hoàn thành.");
       return;
@@ -919,6 +975,10 @@ const WorkAssignTab: React.FC<Props> = ({
 
   const handleOpenAggregate = React.useCallback(
     (row: AssignmentTableRow) => {
+      if (isFlowRuntimeOwnedAssignment(row)) {
+        showMessage(FLOW_RUNTIME_P8_REASON);
+        return;
+      }
       if (!row.dynamicFormTemplateId) {
         showMessage("Công việc chưa có biểu mẫu để tổng hợp.");
         return;
@@ -932,6 +992,10 @@ const WorkAssignTab: React.FC<Props> = ({
   const handleOpenSourceRules = React.useCallback(
     (row: AssignmentTableRow) => {
       if (blockDrillMutation()) return;
+      if (isFlowRuntimeOwnedAssignment(row)) {
+        showMessage(FLOW_RUNTIME_P7_REASON);
+        return;
+      }
 
       if (!row.dynamicFormTemplateId) {
         showMessage("Công việc chưa có biểu mẫu động để cấu hình nguồn dữ liệu.");
@@ -970,6 +1034,10 @@ const WorkAssignTab: React.FC<Props> = ({
   const handleOpenAutoApprove = React.useCallback(
     (row: AssignmentTableRow) => {
       if (blockDrillMutation()) return;
+      if (isFlowRuntimeOwnedAssignment(row)) {
+        showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+        return;
+      }
 
       if (!row.dynamicFormTemplateId) {
         showMessage("Công việc chưa có biểu mẫu động để cấu hình tự duyệt.");
@@ -1008,6 +1076,10 @@ const WorkAssignTab: React.FC<Props> = ({
   const handleOpenEvaluate = React.useCallback(
     (row: AssignmentTableRow) => {
       if (blockDrillMutation()) return;
+      if (isFlowRuntimeOwnedAssignment(row)) {
+        showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+        return;
+      }
 
       if (!row.evaluationTemplateId) {
         showMessage("Công việc chưa được gắn bộ tiêu chí đánh giá.");
@@ -1024,6 +1096,10 @@ const WorkAssignTab: React.FC<Props> = ({
 
     if (!selectedHandoverAssignment) {
       showMessage("Chưa chọn công việc để bàn giao.");
+      return;
+    }
+    if (isFlowRuntimeOwnedAssignment(selectedHandoverAssignment)) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
       return;
     }
     if (!fromAssigneeUserId) {
@@ -1045,6 +1121,10 @@ const WorkAssignTab: React.FC<Props> = ({
   const handleConfirmHandover = async () => {
     if (blockDrillMutation()) return;
     if (!selectedHandoverAssignment || !fromAssigneeUserId || !toAssigneeUserIds[0]) return;
+    if (isFlowRuntimeOwnedAssignment(selectedHandoverAssignment)) {
+      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+      return;
+    }
 
     try {
       const rs = await handoverWorkAssignment({
@@ -1202,6 +1282,20 @@ const WorkAssignTab: React.FC<Props> = ({
 
         {section === "LIST" ? (
           <>
+            {!isDrillView && onOpenFlowInstance ? (
+              <DynamicFlowRuntimeEntryPanel
+                workId={workId}
+                onOpenInstance={onOpenFlowInstance}
+              />
+            ) : null}
+            {hasFlowRuntimeOwnership ? (
+              <Alert severity="info">
+                Assignment của Flow runtime là readonly tại bảng legacy. Mapping/source và
+                statistics/aggregation có canonical owner riêng; mọi thao tác phải đi qua capability
+                máy chủ tại đúng route sở hữu.
+              </Alert>
+            ) : null}
+
             <Stack
               direction={{ xs: "column", md: "row" }}
               justifyContent="space-between"
@@ -1259,7 +1353,15 @@ const WorkAssignTab: React.FC<Props> = ({
                     variant="outlined"
                     startIcon={<TableViewOutlinedIcon />}
                     onClick={() => currentParent && handleOpenAggregate(currentParent)}
-                    disabled={!currentParent?.dynamicFormTemplateId}
+                    disabled={
+                      !currentParent?.dynamicFormTemplateId ||
+                      isFlowRuntimeOwnedAssignment(currentParent)
+                    }
+                    title={
+                      isFlowRuntimeOwnedAssignment(currentParent)
+                        ? FLOW_RUNTIME_P8_REASON
+                        : undefined
+                    }
                     sx={{ borderRadius: "8px", bgcolor: "#fff" }}
                   >
                     Tổng hợp nhánh
@@ -1271,6 +1373,12 @@ const WorkAssignTab: React.FC<Props> = ({
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={openCreateRoot}
+                disabled={hasFlowRuntimeOwnership}
+                title={
+                  hasFlowRuntimeOwnership
+                    ? FLOW_RUNTIME_LEGACY_MUTATION_REASON
+                    : undefined
+                }
                 sx={{
                   display: isDrillView ? "none" : "inline-flex",
                   borderRadius: "8px",
@@ -1356,6 +1464,10 @@ const WorkAssignTab: React.FC<Props> = ({
                   readOnly={isDrillView}
                   onViewDetail={(row) => openAssignmentDetail(row.id)}
                   onPreviewTemplate={(row) => {
+                    if (isFlowRuntimeOwnedAssignment(row)) {
+                      showMessage(FLOW_RUNTIME_LEGACY_MUTATION_REASON);
+                      return;
+                    }
                     if (!row.dynamicFormTemplateId) {
                       showMessage("Công việc chưa có biểu mẫu động để xem trước.");
                       return;

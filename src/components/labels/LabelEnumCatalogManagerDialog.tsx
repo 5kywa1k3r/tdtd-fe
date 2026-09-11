@@ -221,7 +221,7 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
         }).unwrap();
       }
       setFormOpen(false);
-      setSnackbar("Đã lưu danh mục enum.");
+      setSnackbar("Đã lưu danh mục lựa chọn.");
       runSearch();
     } catch (error) {
       setSnackbar(getApiErrorMessage(error));
@@ -229,11 +229,11 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
   };
 
   const removeCatalog = async (row: LabelEnumCatalogRow) => {
-    const ok = window.confirm(`Xóa danh mục enum "${row.name}"?`);
+    const ok = window.confirm(`Xóa danh mục lựa chọn "${row.name}"?`);
     if (!ok) return;
     try {
       await deleteCatalog({ id: row.id }).unwrap();
-      setSnackbar("Đã xóa danh mục enum.");
+      setSnackbar("Đã xóa danh mục lựa chọn.");
       runSearch();
     } catch (error) {
       setSnackbar(getApiErrorMessage(error));
@@ -243,11 +243,11 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
   return (
     <>
       <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="lg">
-        <DialogTitle>Quản lý danh mục enum riêng</DialogTitle>
+        <DialogTitle>Quản lý danh mục lựa chọn riêng</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <Alert severity="info" variant="outlined">
-              Danh mục enum riêng dùng lại cho Dynamic Form và Dynamic Excel. Hệ thống lưu mã lựa chọn để thống kê, tên hiển thị chỉ dùng cho giao diện nhập liệu.
+              Danh mục lựa chọn riêng dùng lại cho biểu mẫu động và Excel động. Hệ thống lưu mã lựa chọn để thống kê, tên hiển thị chỉ dùng cho giao diện nhập liệu.
             </Alert>
             <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
               <TextField
@@ -302,14 +302,14 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
                   {rows.map((row) => (
                     <TableRow key={row.id} hover>
                       <TableCell>
-                        <Tooltip title="Sửa danh mục enum">
+                        <Tooltip title="Sửa danh mục lựa chọn">
                           <span>
                             <IconButton size="small" disabled={!row.canManage} onClick={() => openEdit(row)}>
                               <EditOutlinedIcon fontSize="small" />
                             </IconButton>
                           </span>
                         </Tooltip>
-                        <Tooltip title="Xóa danh mục enum">
+                        <Tooltip title="Xóa danh mục lựa chọn">
                           <span>
                             <IconButton size="small" color="error" disabled={!row.canManage} onClick={() => removeCatalog(row)}>
                               <DeleteOutlineIcon fontSize="small" />
@@ -340,7 +340,7 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
                     <TableRow>
                       <TableCell colSpan={6}>
                         <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
-                          Chưa có danh mục enum phù hợp.
+                          Chưa có danh mục lựa chọn phù hợp.
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -370,10 +370,10 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
       </Dialog>
 
       <Dialog open={formOpen} onClose={() => !busy && setFormOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>{form.id ? "Sửa danh mục enum" : "Tạo danh mục enum"}</DialogTitle>
+        <DialogTitle>{form.id ? "Sửa danh mục lựa chọn" : "Tạo danh mục lựa chọn"}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
-            {detailQuery.isFetching && form.id && <Alert severity="info">Đang tải chi tiết danh mục enum...</Alert>}
+            {detailQuery.isFetching && form.id && <Alert severity="info">Đang tải chi tiết danh mục lựa chọn...</Alert>}
             <TextField
               size="small"
               label="Mã danh mục"
@@ -412,7 +412,7 @@ export default function LabelEnumCatalogManagerDialog({ open, onClose }: Props) 
 
             <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
               <Box>
-                <Typography variant="subtitle2" fontWeight={800}>Lựa chọn trong enum</Typography>
+                <Typography variant="subtitle2" fontWeight={800}>Các lựa chọn trong danh mục</Typography>
                 <Typography variant="caption" color="text.secondary">
                   Mã lựa chọn được lưu vào báo cáo; không đổi mã nếu lựa chọn đã phát sinh dữ liệu.
                 </Typography>

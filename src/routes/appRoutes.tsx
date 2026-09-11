@@ -1,8 +1,11 @@
 // src/routes/appRoutes.tsx
 import { lazy, Suspense, type ReactNode } from "react";
 import type { RouteObject } from "react-router-dom";
-import { Navigate } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 
+import { AuthListener } from "./AuthListener";
+import { LegacyDynamicFormsRedirect } from "./dynamicFormRoutes";
+import { LegacyDynamicFlowsRedirect } from "./dynamicFlowRoutes";
 import { RequireAuth } from "./RequireAuth";
 import { RequireRole } from "./RequireRole";
 import RouteFallback from "./RouteFallback";
@@ -19,6 +22,37 @@ const DashboardPage = lazy(() => import("../pages/dashboard/DashboardPage"));
 const WorkLayout = lazy(() => import("../pages/works/WorkLayoutPage"));
 const WorkListPage = lazy(() => import("../pages/works/WorkListPage"));
 const WorkDetailPage = lazy(() => import("../pages/works/WorkDetailPage"));
+const StatisticsConfigurationPage = lazy(
+  () => import("../pages/works/statistics/StatisticsConfigurationPage"),
+);
+const StatisticsRunsPage = lazy(() =>
+  import('../pages/works/statisticsRun/StatisticsRunPages').then((module) => ({
+    default: module.StatisticsRunsPage,
+  })),
+);
+const StatisticsRunDetailPage = lazy(() =>
+  import('../pages/works/statisticsRun/StatisticsRunPages').then((module) => ({
+    default: module.StatisticsRunDetailPage,
+  })),
+);
+const StatisticsResultPage = lazy(() =>
+  import('../pages/works/statisticsRun/StatisticsRunPages').then((module) => ({
+    default: module.StatisticsResultPage,
+  })),
+);
+const StatisticsReconciliationsPage = lazy(() =>
+  import('../pages/works/reconciliation/ReconciliationPages').then((module) => ({
+    default: module.StatisticsReconciliationsPage,
+  })),
+);
+const StatisticsReconciliationDetailPage = lazy(() =>
+  import('../pages/works/reconciliation/ReconciliationPages').then((module) => ({
+    default: module.StatisticsReconciliationDetailPage,
+  })),
+);
+const DynamicFlowRuntimePage = lazy(
+  () => import("../pages/works/flowRuntime/DynamicFlowRuntimePage"),
+);
 const DynamicExcelListPage = lazy(() => import("../pages/excel/DynamicExcelListPage"));
 const DynamicExcelCreatePage = lazy(() => import("../pages/excel/DynamicExcelCreatePage"));
 const DynamicExcelViewPage = lazy(() => import("../pages/excel/DynamicExcelViewPage"));
@@ -27,6 +61,9 @@ const DynamicFormListPage = lazy(() => import("../pages/dynamicForms/DynamicForm
 const DynamicFormCreatePage = lazy(() => import("../pages/dynamicForms/DynamicFormCreatePage"));
 const DynamicFormViewPage = lazy(() => import("../pages/dynamicForms/DynamicFormViewPage"));
 const DynamicFormEditPage = lazy(() => import("../pages/dynamicForms/DynamicFormEditPage"));
+const DynamicFlowFamilyListPage = lazy(() => import("../pages/dynamicFlows/DynamicFlowFamilyListPage"));
+const DynamicFlowVersionWorkspacePage = lazy(() => import("../pages/dynamicFlows/DynamicFlowVersionWorkspacePage"));
+const Nq57TextAggregationPage = lazy(() => import("../pages/nq57/Nq57TextAggregationPage"));
 const LabelListPage = lazy(() => import("../pages/labels/LabelListPage"));
 const AdminAccountsPage = lazy(() => import("../pages/admin/AdminAccountPages"));
 const OperationsPage = lazy(() => import("../pages/operations/OperationsPage"));
@@ -43,7 +80,16 @@ function protectedLayout() {
   );
 }
 
-export const appRoutes: RouteObject[] = [
+export function AuthEventBoundary() {
+  return (
+    <>
+      <AuthListener />
+      <Outlet />
+    </>
+  );
+}
+
+const routedPages: RouteObject[] = [
   {
     path: "/login",
     element: withSuspense(<LoginPage />),
@@ -65,6 +111,34 @@ export const appRoutes: RouteObject[] = [
         ),
         children: [
           { index: true, element: withSuspense(<WorkListPage />) },
+          {
+            path: ":workId/flow-instances/:instanceId/:tab?",
+            element: withSuspense(<DynamicFlowRuntimePage />),
+          },
+          {
+            path: ":workId/statistics/:scopeAssignmentId/config/:tab?",
+            element: withSuspense(<StatisticsConfigurationPage />),
+          },
+          {
+            path: ':workId/statistics/:scopeAssignmentId/runs',
+            element: withSuspense(<StatisticsRunsPage />),
+          },
+          {
+            path: ':workId/statistics/:scopeAssignmentId/runs/:runId',
+            element: withSuspense(<StatisticsRunDetailPage />),
+          },
+          {
+            path: ':workId/statistics/:scopeAssignmentId/results/:resultKind/:resultId',
+            element: withSuspense(<StatisticsResultPage />),
+          },
+          {
+            path: ':workId/statistics/:scopeAssignmentId/reconciliations',
+            element: withSuspense(<StatisticsReconciliationsPage />),
+          },
+          {
+            path: ':workId/statistics/:scopeAssignmentId/reconciliations/:reconciliationId',
+            element: withSuspense(<StatisticsReconciliationDetailPage />),
+          },
           { path: ":id", element: withSuspense(<WorkDetailPage />) },
         ],
       },
@@ -106,13 +180,35 @@ export const appRoutes: RouteObject[] = [
         ],
       },
       {
-        path: "dynamic-forms",
+        path: "design/forms",
         children: [
           { index: true, element: withSuspense(<DynamicFormListPage />) },
           { path: "create", element: withSuspense(<DynamicFormCreatePage />) },
           { path: ":id", element: withSuspense(<DynamicFormViewPage />) },
           { path: ":id/edit", element: withSuspense(<DynamicFormEditPage />) },
         ],
+      },
+      {
+        path: "dynamic-forms/*",
+        element: <LegacyDynamicFormsRedirect />,
+      },
+      {
+        path: "design/flows",
+        children: [
+          { index: true, element: withSuspense(<DynamicFlowFamilyListPage />) },
+          {
+            path: ":familyId/versions/:versionId/:tab?",
+            element: withSuspense(<DynamicFlowVersionWorkspacePage />),
+          },
+        ],
+      },
+      {
+        path: "dynamic-flows/*",
+        element: <LegacyDynamicFlowsRedirect />,
+      },
+      {
+        path: "nq57-text-aggregation",
+        element: withSuspense(<Nq57TextAggregationPage />),
       },
       {
         path: "labels",
@@ -147,5 +243,12 @@ export const appRoutes: RouteObject[] = [
   {
     path: "*",
     element: <Navigate to="/" replace />,
+  },
+];
+
+export const appRoutes: RouteObject[] = [
+  {
+    element: <AuthEventBoundary />,
+    children: routedPages,
   },
 ];

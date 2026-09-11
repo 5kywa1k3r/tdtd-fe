@@ -39,7 +39,7 @@ export default function DynamicFormSectionSelect({
   items,
   value,
   onChange,
-  label = "Section",
+  label = "Phần",
   dense = false,
   disabled = false,
   sx,
@@ -113,7 +113,7 @@ export default function DynamicFormSectionSelect({
           );
         }}
         renderOption={(props, item, state) => (
-          <Box component="li" {...props} key={item.section.id}>
+          <Box component="li" {...props} key={item.section.id} data-runtime-section-id={item.section.id}>
             <Stack spacing={0.5} sx={{ minWidth: 0, width: "100%", py: 0.25 }}>
               <Typography variant="body2" fontWeight={700} noWrap>
                 {state.index + 1}. {getSectionTitle(item)}
@@ -136,10 +136,10 @@ export default function DynamicFormSectionSelect({
           <TextField
             {...params}
             label={label}
-            placeholder="Lọc section"
+            placeholder="Lọc phần"
           />
         )}
-        noOptionsText="Không có section phù hợp"
+        noOptionsText="Không có phần phù hợp"
       />
     </Box>
   );
